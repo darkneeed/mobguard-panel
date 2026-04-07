@@ -1,4 +1,4 @@
-from .asn_sources import extract_asn_fields, resolve_asn_source
+from .asn_sources import detect_asn_source, extract_asn_fields, resolve_asn_source
 from .auth import verify_telegram_auth
 from .models import DecisionBundle, DecisionReason, ReviewCaseSummary
 from .policy import derive_punitive_eligibility, review_reason_for_bundle, should_warning_only
@@ -8,6 +8,7 @@ from .store import PlatformStore, validate_live_rules_patch
 __all__ = [
     "DecisionBundle",
     "DecisionReason",
+    "detect_asn_source",
     "extract_asn_fields",
     "normalize_runtime_bound_settings",
     "PlatformStore",

@@ -92,6 +92,11 @@ function getSettingInputValue(meta: RuleSettingFieldMeta, value: RuleSettingValu
   return value === undefined || value === null ? "" : String(value);
 }
 
+function formatUpdatedBy(value: string | undefined): string {
+  if (!value || value === "bootstrap") return "system";
+  return value;
+}
+
 export function RulesPage() {
   const [state, setState] = useState<RulesState | null>(null);
   const [draft, setDraft] = useState<RulesDraft | null>(null);
@@ -189,7 +194,7 @@ export function RulesPage() {
         <div className="panel queue-footer">
           <span>Revision {state.revision}</span>
           <span>Updated at {state.updated_at || "n/a"}</span>
-          <span>Updated by {state.updated_by || "n/a"}</span>
+          <span>Updated by {formatUpdatedBy(state.updated_by)}</span>
         </div>
       ) : null}
       {!draft ? <div className="panel">Loading…</div> : null}

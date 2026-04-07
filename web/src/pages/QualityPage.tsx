@@ -45,6 +45,11 @@ type QualityPayload = {
   live_rules_updated_by: string;
   top_noisy_asns: Array<{ asn_key: string; cnt: number }>;
   top_patterns: PromotedPattern[];
+  asn_source: {
+    type: string;
+    label: string;
+    files: string[];
+  };
   learning: {
     thresholds: {
       asn_min_support: number;
@@ -65,6 +70,11 @@ type QualityPayload = {
     };
   };
 };
+
+function formatUpdatedBy(value: string): string {
+  if (!value || value === "bootstrap") return "system";
+  return value;
+}
 
 export function QualityPage() {
   const [data, setData] = useState<QualityPayload | null>(null);
@@ -118,7 +128,17 @@ export function QualityPage() {
           <div className="panel queue-footer">
             <span>Rules revision {data.live_rules_revision}</span>
             <span>Updated {data.live_rules_updated_at}</span>
-            <span>By {data.live_rules_updated_by}</span>
+            <span>By {formatUpdatedBy(data.live_rules_updated_by)}</span>
+          </div>
+          <div className="panel">
+            <h2>ASN source</h2>
+            <ul className="reason-list">
+              <li>
+                <strong>{data.asn_source.label}</strong>
+                <span>{data.asn_source.type}</span>
+                <span>{data.asn_source.files.length > 0 ? data.asn_source.files.join(", ") : "No ASN source available"}</span>
+              </li>
+            </ul>
           </div>
           <div className="panel">
             <h2>Top noisy ASN</h2>

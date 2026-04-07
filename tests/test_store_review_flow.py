@@ -13,7 +13,9 @@ class StoreReviewFlowTests(unittest.TestCase):
     def setUp(self):
         self.temp_dir = tempfile.mkdtemp(prefix="mobguard-store-")
         self.db_path = os.path.join(self.temp_dir, "test.sqlite3")
-        self.config_path = os.path.join(self.temp_dir, "config.json")
+        self.runtime_dir = os.path.join(self.temp_dir, "runtime")
+        os.makedirs(self.runtime_dir, exist_ok=True)
+        self.config_path = os.path.join(self.runtime_dir, "config.json")
         self.base_config = {
             "mixed_asns": [12345],
             "allowed_isp_keywords": ["mobile"],
@@ -101,6 +103,8 @@ class StoreReviewFlowTests(unittest.TestCase):
         self.assertEqual(payload["_meta"]["revision"], updated["revision"])
         self.assertEqual(payload["settings"]["log_file"], "/var/log/remnanode/access.log")
         self.assertEqual(payload["mobile_tags"], ["TAG"])
+        self.assertEqual(payload["settings"]["db_file"], "runtime/bans.db")
+        self.assertEqual(payload["settings"]["geoip_db"], "runtime/GeoLite2-ASN.mmdb")
 
     def test_legacy_threshold_alias_is_normalized_in_saved_rules(self):
         updated = self.store.update_live_rules(
@@ -208,12 +212,27 @@ class StoreReviewFlowTests(unittest.TestCase):
         self.assertEqual(metrics["learning"]["legacy"]["total_patterns"], 1)
         self.assertEqual(metrics["learning"]["legacy"]["total_confidence"], 7)
         self.assertEqual(metrics["learning"]["thresholds"]["asn_min_support"], 1)
+        self.assertEqual(metrics["asn_source"]["type"], "missing")
 
     def test_build_review_url_falls_back_to_base_config_when_live_rules_are_empty(self):
         self.assertEqual(
             self.store.build_review_url(7),
             "https://mobguard.example.com/reviews/7",
         )
+
+    def test_bootstrap_updated_by_is_normalized_to_system(self):
+        with open(self.config_path, "w", encoding="utf-8") as handle:
+            json.dump(
+                {
+                    "admin_tg_ids": [1001],
+                    "settings": {"threshold_mobile": 60},
+                    "_meta": {"revision": 1, "updated_at": "", "updated_by": "bootstrap"},
+                },
+                handle,
+                ensure_ascii=False,
+            )
+        state = self.store.get_live_rules_state()
+        self.assertEqual(state["updated_by"], "system")
 
     def test_init_schema_migrates_legacy_tables_before_creating_system_id_indexes(self):
         legacy_db_path = os.path.join(self.temp_dir, "legacy.sqlite3")

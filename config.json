@@ -60,8 +60,8 @@
     "warning_timeout": 900,
     "debug_level": "FULL",
     "log_file": "/var/log/remnanode/access.log",
-    "geoip_db": "/opt/mobguard/runtime/GeoLite2-ASN.mmdb",
-    "db_file": "/opt/mobguard/runtime/bans.db",
+    "geoip_db": "runtime/GeoLite2-ASN.mmdb",
+    "db_file": "runtime/bans.db",
     "panel_url": "https://admpanel.mwnd.ru",
     "report_time": "06:00",
     "dry_run": true,
@@ -107,6 +107,6 @@
   "_meta": {
     "revision": 1,
     "updated_at": "",
-    "updated_by": "bootstrap"
+    "updated_by": "system"
   }
 }

@@ -10,6 +10,8 @@ from typing import Any, Optional
 
 from .auth import issue_session_token
 from .models import DecisionBundle, ReviewCaseSummary
+from .asn_sources import detect_asn_source
+from .runtime_paths import canonicalize_runtime_bound_settings
 
 
 EDITABLE_TOP_LEVEL_KEYS = {
@@ -248,7 +250,9 @@ class PlatformStore:
             rules = self._normalize_rules(raw_payload)
             meta.setdefault("revision", 1)
             meta.setdefault("updated_at", "")
-            meta.setdefault("updated_by", "bootstrap")
+            meta.setdefault("updated_by", "system")
+            if meta.get("updated_by") == "bootstrap":
+                meta["updated_by"] = "system"
             self._rules_cache = copy.deepcopy(rules)
             self._rules_cache_meta = copy.deepcopy(meta)
             self._rules_cache_mtime = current_mtime
@@ -257,7 +261,7 @@ class PlatformStore:
         return self.build_seed_rules(), {
             "revision": 1,
             "updated_at": "",
-            "updated_by": "bootstrap",
+            "updated_by": "system",
         }
 
     def _write_rules_to_file(self, rules: dict[str, Any], meta: dict[str, Any]) -> None:
@@ -281,10 +285,11 @@ class PlatformStore:
         for key in EDITABLE_TOP_LEVEL_KEYS:
             payload[key] = list(copy.deepcopy(rules.get(key, [])))
         payload["settings"] = settings_payload
+        payload = canonicalize_runtime_bound_settings(payload, os.path.dirname(self.config_path))
         payload["_meta"] = {
             "revision": int(meta.get("revision", 1)),
             "updated_at": meta.get("updated_at", ""),
-            "updated_by": meta.get("updated_by", "unknown"),
+            "updated_by": "system" if meta.get("updated_by") == "bootstrap" else meta.get("updated_by", "system"),
         }
         tmp_path = f"{self.config_path}.tmp"
         with open(tmp_path, "w", encoding="utf-8") as handle:
@@ -310,7 +315,7 @@ class PlatformStore:
                     json.dumps(rules, ensure_ascii=False),
                     int(meta.get("revision", 1)),
                     meta.get("updated_at", ""),
-                    meta.get("updated_by", "bootstrap"),
+                    "system" if meta.get("updated_by") == "bootstrap" else meta.get("updated_by", "system"),
                 ),
             )
             conn.commit()
@@ -556,7 +561,7 @@ class PlatformStore:
                     INSERT INTO live_rules (id, rules_json, revision, updated_at, updated_by)
                     VALUES (1, ?, 1, ?, ?)
                     """,
-                    (json.dumps(seed_rules, ensure_ascii=False), _utcnow(), "bootstrap"),
+                    (json.dumps(seed_rules, ensure_ascii=False), _utcnow(), "system"),
                 )
             conn.commit()
 
@@ -1193,6 +1198,8 @@ class PlatformStore:
 
     def get_quality_metrics(self) -> dict[str, Any]:
         live_rules_state = self.get_live_rules_state()
+        runtime_dir = os.path.dirname(self.config_path) if self.config_path else os.path.dirname(self.db_path)
+        asn_source = detect_asn_source(runtime_dir, self.base_config.get("settings", {}).get("geoip_db"))
         learning_thresholds = {
             "asn_min_support": int(
                 live_rules_state["rules"].get("settings", {}).get("learning_promote_asn_min_support", 10)
@@ -1296,6 +1303,7 @@ class PlatformStore:
             "live_rules_updated_at": live_rules_state["updated_at"],
             "live_rules_updated_by": live_rules_state["updated_by"],
             "active_sessions": active_sessions,
+            "asn_source": asn_source,
             "learning": {
                 "thresholds": learning_thresholds,
                 "promoted": {

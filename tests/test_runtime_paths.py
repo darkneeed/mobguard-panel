@@ -2,7 +2,11 @@ import os
 import tempfile
 import unittest
 
-from mobguard_platform.runtime_paths import normalize_runtime_bound_settings, resolve_runtime_dir
+from mobguard_platform.runtime_paths import (
+    canonicalize_runtime_bound_settings,
+    normalize_runtime_bound_settings,
+    resolve_runtime_dir,
+)
 
 
 class RuntimePathTests(unittest.TestCase):
@@ -28,6 +32,16 @@ class RuntimePathTests(unittest.TestCase):
 
         self.assertEqual(normalized["settings"]["db_file"], "/opt/ban_system/bans.db")
         self.assertEqual(normalized["settings"]["geoip_db"], "/opt/ban_system/GeoLite2-ASN.mmdb")
+
+    def test_canonicalize_runtime_bound_settings_uses_relative_project_paths(self):
+        canonical = canonicalize_runtime_bound_settings({}, "/opt/mobguard/runtime")
+        self.assertEqual(canonical["settings"]["db_file"], "runtime/bans.db")
+        self.assertEqual(canonical["settings"]["geoip_db"], "runtime/GeoLite2-ASN.mmdb")
+
+    def test_canonicalize_runtime_bound_settings_keeps_legacy_runtime_relative(self):
+        canonical = canonicalize_runtime_bound_settings({}, "/opt/ban_system")
+        self.assertEqual(canonical["settings"]["db_file"], "bans.db")
+        self.assertEqual(canonical["settings"]["geoip_db"], "GeoLite2-ASN.mmdb")
 
     def test_resolve_runtime_dir_prefers_workspace_runtime(self):
         with tempfile.TemporaryDirectory(prefix="mobguard-runtime-") as temp_dir:

@@ -5,6 +5,8 @@ import json
 import os
 from typing import Any
 
+from .runtime_paths import canonicalize_runtime_bound_settings
+
 
 def read_json_file(path: str) -> dict[str, Any]:
     if not os.path.exists(path):
@@ -19,6 +21,7 @@ def read_json_file(path: str) -> dict[str, Any]:
 def update_json_file(path: str, updates: dict[str, Any]) -> dict[str, Any]:
     payload = read_json_file(path)
     merged = deep_merge(payload, updates)
+    merged = canonicalize_runtime_bound_settings(merged, os.path.dirname(path))
     tmp_path = f"{path}.tmp"
     with open(tmp_path, "w", encoding="utf-8") as handle:
         json.dump(merged, handle, ensure_ascii=False, indent=2)

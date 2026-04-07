@@ -90,6 +90,13 @@ textarea {
   color: var(--ink);
 }
 
+:root[data-theme="dark"] input,
+:root[data-theme="dark"] select,
+:root[data-theme="dark"] textarea {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--ink);
+}
+
 textarea {
   min-height: 140px;
   resize: vertical;
@@ -156,6 +163,10 @@ textarea {
   top: 0;
   height: 100vh;
   overflow-y: auto;
+}
+
+:root[data-theme="dark"] .sidebar {
+  background: rgba(12, 17, 22, 0.95);
 }
 
 .brand {
@@ -264,9 +275,14 @@ textarea {
   flex-wrap: wrap;
 }
 
+.search-strip input {
+  flex: 1 1 320px;
+}
+
 .panel {
   border-radius: 24px;
   padding: 1.25rem;
+  min-width: 0;
 }
 
 .queue-grid,
@@ -287,6 +303,7 @@ textarea {
   flex-direction: column;
   gap: 0.85rem;
   transition: transform 180ms ease, box-shadow 180ms ease;
+  min-width: 0;
 }
 
 .queue-card:hover {
@@ -301,6 +318,7 @@ textarea {
   justify-content: space-between;
   gap: 0.75rem;
   align-items: center;
+  flex-wrap: wrap;
 }
 
 .queue-card-identifiers,
@@ -314,12 +332,22 @@ textarea {
 .queue-card-identifiers {
   color: var(--muted);
   font-size: 0.88rem;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .queue-card-stack {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
+}
+
+.queue-card-meta strong,
+.queue-card-bottom span,
+.queue-card p {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  min-width: 0;
 }
 
 .queue-card-tags {
@@ -381,11 +409,24 @@ textarea {
 }
 
 .detail-list div {
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(120px, 150px) minmax(0, 1fr);
   gap: 1rem;
   padding-bottom: 0.75rem;
   border-bottom: 1px solid var(--line);
+  align-items: start;
+}
+
+.detail-list dt,
+.detail-list dd {
+  min-width: 0;
+}
+
+.detail-list dd {
+  margin: 0;
+  text-align: right;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .reason-list {
@@ -401,6 +442,9 @@ textarea {
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .log-box,
@@ -410,6 +454,14 @@ textarea {
   border: 1px solid var(--line);
   background: rgba(21, 33, 26, 0.05);
   padding: 1rem;
+}
+
+.log-box {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  overflow: auto;
+  max-height: 28rem;
 }
 
 .note-box.tall {
@@ -432,10 +484,20 @@ textarea {
   display: flex;
   flex-direction: column;
   gap: 0.85rem;
+  min-width: 0;
 }
 
 .rule-copy p {
   margin: 0;
+}
+
+.rule-copy,
+.rule-copy span,
+.rule-copy strong,
+.rule-field,
+.panel-heading {
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .login-methods {
@@ -460,6 +522,7 @@ textarea {
 
 .icon-button {
   min-width: 52px;
+  flex: 0 0 auto;
 }
 
 .stats-grid {

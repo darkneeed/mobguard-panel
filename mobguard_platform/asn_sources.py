@@ -212,6 +212,22 @@ def resolve_asn_source(runtime_dir: str, single_mmdb_path: Optional[str] = None)
     return NullASNSource()
 
 
+def detect_asn_source(runtime_dir: str, single_mmdb_path: Optional[str] = None) -> dict[str, object]:
+    single_path = single_mmdb_path or runtime_geoip_db_path(runtime_dir)
+    ipv4_path = os.path.join(runtime_dir, SPLIT_IPV4_MMDB_FILENAME)
+    ipv6_path = os.path.join(runtime_dir, SPLIT_IPV6_MMDB_FILENAME)
+    iptoasn_path = os.path.join(runtime_dir, IPTOASN_TSV_FILENAME)
+
+    if os.path.exists(single_path):
+        return {"type": "single_mmdb", "label": "Single ASN MMDB", "files": [single_path]}
+    if os.path.exists(ipv4_path) or os.path.exists(ipv6_path):
+        files = [path for path in (ipv4_path, ipv6_path) if os.path.exists(path)]
+        return {"type": "split_mmdb", "label": "Split IPv4/IPv6 ASN MMDB", "files": files}
+    if os.path.exists(iptoasn_path):
+        return {"type": "iptoasn_tsv", "label": "IPtoASN TSV", "files": [iptoasn_path]}
+    return {"type": "missing", "label": "ASN source missing", "files": []}
+
+
 def extract_asn_fields(data: object) -> Tuple[Optional[int], str]:
     if not isinstance(data, dict):
         return None, "unknown"

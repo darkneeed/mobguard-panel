@@ -6,27 +6,40 @@ type EnforcementPayload = {
   settings: Record<string, string | number | boolean | string[]>;
 };
 
-const BOOLEAN_FIELDS = [
-  "warning_only_mode",
-  "manual_review_mixed_home_enabled",
-  "manual_ban_approval_enabled",
-  "dry_run"
+type EnforcementField = {
+  key: string;
+  label: string;
+  description: string;
+  type: "number" | "boolean";
+};
+
+type EnforcementTemplateField = {
+  key: string;
+  label: string;
+  description: string;
+};
+
+const BOOLEAN_FIELDS: EnforcementField[] = [
+  { key: "warning_only_mode", label: "Only warnings mode", description: "Never escalate to bans automatically.", type: "boolean" },
+  { key: "manual_review_mixed_home_enabled", label: "Review mixed HOME cases manually", description: "Send mixed HOME outcomes to manual review before action.", type: "boolean" },
+  { key: "manual_ban_approval_enabled", label: "Require admin approval for bans", description: "Pause ban execution until admin approves it.", type: "boolean" },
+  { key: "dry_run", label: "Dry run", description: "Analyze and notify without applying remote disable actions.", type: "boolean" }
 ];
 
-const NUMBER_FIELDS = [
-  "usage_time_threshold",
-  "warning_timeout_seconds",
-  "warnings_before_ban"
+const NUMBER_FIELDS: EnforcementField[] = [
+  { key: "usage_time_threshold", label: "Minimum suspicious usage time (sec)", description: "How long a suspicious session must stay active before enforcement starts.", type: "number" },
+  { key: "warning_timeout_seconds", label: "Warning cooldown (sec)", description: "Minimum delay before the next warning can be sent.", type: "number" },
+  { key: "warnings_before_ban", label: "Warnings before first ban", description: "How many warning events are required before the first ban.", type: "number" }
 ];
 
-const TEXTAREA_FIELDS = [
-  "user_warning_only_template",
-  "user_warning_template",
-  "user_ban_template",
-  "admin_warning_only_template",
-  "admin_warning_template",
-  "admin_ban_template",
-  "admin_review_template"
+const TEXTAREA_FIELDS: EnforcementTemplateField[] = [
+  { key: "user_warning_only_template", label: "User warning-only message", description: "User-facing message when the case is warning-only and does not escalate." },
+  { key: "user_warning_template", label: "User warning message", description: "User-facing message for standard warnings before a ban." },
+  { key: "user_ban_template", label: "User ban message", description: "User-facing message sent when a ban is applied." },
+  { key: "admin_warning_only_template", label: "Admin warning-only message", description: "Admin notification text for warning-only cases." },
+  { key: "admin_warning_template", label: "Admin warning message", description: "Admin notification text for warning events." },
+  { key: "admin_ban_template", label: "Admin ban message", description: "Admin notification text for ban events." },
+  { key: "admin_review_template", label: "Admin review message", description: "Admin notification text for review/manual moderation cases." }
 ];
 
 export function EnforcementPage() {
@@ -56,17 +69,16 @@ export function EnforcementPage() {
   async function save() {
     try {
       const settingsPayload: Record<string, unknown> = {};
-      for (const key of NUMBER_FIELDS) {
-        const parsed = Number(draft[key]);
+      for (const field of NUMBER_FIELDS) {
+        const parsed = Number(draft[field.key]);
         if (!Number.isFinite(parsed)) {
-          throw new Error(`${key}: invalid number`);
+          throw new Error(`${field.label}: invalid number`);
         }
-        settingsPayload[key] = parsed;
+        settingsPayload[field.key] = parsed;
       }
-      for (const key of BOOLEAN_FIELDS) {
-        settingsPayload[key] = draft[key] === "true";
+      for (const field of BOOLEAN_FIELDS) {
+        settingsPayload[field.key] = draft[field.key] === "true";
       }
-      settingsPayload.report_time = draft.report_time;
       settingsPayload.ban_durations_minutes = draft.ban_durations_minutes
         .split("\n")
         .map((item) => item.trim())
@@ -78,8 +90,8 @@ export function EnforcementPage() {
           }
           return parsed;
         });
-      for (const key of TEXTAREA_FIELDS) {
-        settingsPayload[key] = draft[key];
+      for (const field of TEXTAREA_FIELDS) {
+        settingsPayload[field.key] = draft[field.key];
       }
 
       const response = (await api.updateEnforcementSettings({
@@ -127,7 +139,8 @@ export function EnforcementPage() {
             </div>
             <div className="form-grid">
               <div className="rule-field">
-                <strong>Usage time threshold</strong>
+                <strong>{NUMBER_FIELDS[0].label}</strong>
+                <span className="muted">{NUMBER_FIELDS[0].description}</span>
                 <input
                   type="number"
                   value={draft.usage_time_threshold}
@@ -135,7 +148,8 @@ export function EnforcementPage() {
                 />
               </div>
               <div className="rule-field">
-                <strong>Warning timeout (sec)</strong>
+                <strong>{NUMBER_FIELDS[1].label}</strong>
+                <span className="muted">{NUMBER_FIELDS[1].description}</span>
                 <input
                   type="number"
                   value={draft.warning_timeout_seconds}
@@ -143,26 +157,21 @@ export function EnforcementPage() {
                 />
               </div>
               <div className="rule-field">
-                <strong>Warnings before ban</strong>
+                <strong>{NUMBER_FIELDS[2].label}</strong>
+                <span className="muted">{NUMBER_FIELDS[2].description}</span>
                 <input
                   type="number"
                   value={draft.warnings_before_ban}
                   onChange={(event) => setDraft((prev) => ({ ...prev, warnings_before_ban: event.target.value }))}
                 />
               </div>
-              <div className="rule-field">
-                <strong>Report time</strong>
-                <input
-                  value={draft.report_time}
-                  onChange={(event) => setDraft((prev) => ({ ...prev, report_time: event.target.value }))}
-                />
-              </div>
-              {BOOLEAN_FIELDS.map((key) => (
-                <div className="rule-field" key={key}>
-                  <strong>{key}</strong>
+              {BOOLEAN_FIELDS.map((field) => (
+                <div className="rule-field" key={field.key}>
+                  <strong>{field.label}</strong>
+                  <span className="muted">{field.description}</span>
                   <select
-                    value={draft[key]}
-                    onChange={(event) => setDraft((prev) => ({ ...prev, [key]: event.target.value }))}
+                    value={draft[field.key]}
+                    onChange={(event) => setDraft((prev) => ({ ...prev, [field.key]: event.target.value }))}
                   >
                     <option value="true">true</option>
                     <option value="false">false</option>
@@ -171,6 +180,7 @@ export function EnforcementPage() {
               ))}
               <div className="rule-field">
                 <strong>Ban durations ladder (minutes)</strong>
+                <span className="muted">One duration per line: first ban, second ban, third ban, and so on.</span>
                 <textarea
                   className="note-box tall"
                   value={draft.ban_durations_minutes}
@@ -188,13 +198,14 @@ export function EnforcementPage() {
               </p>
             </div>
             <div className="detail-grid">
-              {TEXTAREA_FIELDS.map((key) => (
-                <div className="rule-field" key={key}>
-                  <strong>{key}</strong>
+              {TEXTAREA_FIELDS.map((field) => (
+                <div className="rule-field" key={field.key}>
+                  <strong>{field.label}</strong>
+                  <span className="muted">{field.description}</span>
                   <textarea
                     className="note-box tall"
-                    value={draft[key]}
-                    onChange={(event) => setDraft((prev) => ({ ...prev, [key]: event.target.value }))}
+                    value={draft[field.key]}
+                    onChange={(event) => setDraft((prev) => ({ ...prev, [field.key]: event.target.value }))}
                   />
                 </div>
               ))}

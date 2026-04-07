@@ -23,7 +23,7 @@ type ReviewFilters = {
 };
 
 function formatIdentifier(label: string, value: string | number | null | undefined) {
-  return `${label}: ${value ?? "N/A"}`;
+  return `${label}: ${value === null || value === undefined || value === "" ? "N/A" : value}`;
 }
 
 export function ReviewQueuePage() {
@@ -102,13 +102,8 @@ export function ReviewQueuePage() {
           <span className="eyebrow">Review Queue</span>
           <h1>Спорные решения и ручная модерация</h1>
         </div>
-        <div className="action-row">
-          <button className="ghost icon-button" onClick={() => setShowFilters((prev) => !prev)} title="Toggle filters">
-            ⚲
-          </button>
-          <div className="chip">
-            {list.count} cases · page {list.page}
-          </div>
+        <div className="chip">
+          {list.count} cases · page {list.page}
         </div>
       </div>
 
@@ -118,6 +113,9 @@ export function ReviewQueuePage() {
           value={filters.q}
           onChange={(event) => setFilters((prev) => ({ ...prev, q: event.target.value, page: 1 }))}
         />
+        <button className="ghost icon-button" onClick={() => setShowFilters((prev) => !prev)} title="Toggle filters">
+          ⚲
+        </button>
       </div>
 
       {showFilters ? (
