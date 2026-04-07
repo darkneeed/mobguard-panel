@@ -4,6 +4,7 @@ import logging
 import os
 import re
 import sqlite3
+import shutil
 import maxminddb
 import aiohttp
 import sys
@@ -49,6 +50,20 @@ def _resolve_runtime_dir() -> str:
 
 BAN_SYSTEM_DIR = _resolve_runtime_dir()
 ENV_PATH = os.getenv("MOBGUARD_ENV_FILE", os.path.join(os.path.dirname(BAN_SYSTEM_DIR), ".env"))
+TEMPLATE_CONFIG_PATH = os.path.join(BASE_DIR, "config.json")
+
+def _ensure_runtime_layout() -> None:
+    os.makedirs(BAN_SYSTEM_DIR, exist_ok=True)
+    os.makedirs(os.path.join(BAN_SYSTEM_DIR, "health"), exist_ok=True)
+    config_path = os.path.join(BAN_SYSTEM_DIR, "config.json")
+    if not os.path.exists(config_path) and os.path.exists(TEMPLATE_CONFIG_PATH):
+        shutil.copyfile(TEMPLATE_CONFIG_PATH, config_path)
+    db_path = os.path.join(BAN_SYSTEM_DIR, "bans.db")
+    if not os.path.exists(db_path):
+        with open(db_path, "a", encoding="utf-8"):
+            pass
+
+_ensure_runtime_layout()
 
 load_dotenv(ENV_PATH)
 CONFIG_PATH = os.path.join(BAN_SYSTEM_DIR, 'config.json')

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 from pathlib import Path
 from typing import Any, Optional
 
@@ -32,6 +33,17 @@ def _resolve_runtime_dir() -> Path:
 
 BAN_SYSTEM_DIR = _resolve_runtime_dir()
 ENV_PATH = Path(os.getenv("MOBGUARD_ENV_FILE", str(BAN_SYSTEM_DIR.parent / ".env")))
+TEMPLATE_CONFIG_PATH = ROOT_DIR / "config.json"
+
+def _ensure_runtime_layout() -> None:
+    BAN_SYSTEM_DIR.mkdir(parents=True, exist_ok=True)
+    (BAN_SYSTEM_DIR / "health").mkdir(parents=True, exist_ok=True)
+    if not (BAN_SYSTEM_DIR / "config.json").exists() and TEMPLATE_CONFIG_PATH.exists():
+        shutil.copyfile(TEMPLATE_CONFIG_PATH, BAN_SYSTEM_DIR / "config.json")
+    if not (BAN_SYSTEM_DIR / "bans.db").exists():
+        (BAN_SYSTEM_DIR / "bans.db").touch()
+
+_ensure_runtime_layout()
 load_dotenv(ENV_PATH)
 
 CONFIG_PATH = BAN_SYSTEM_DIR / "config.json"

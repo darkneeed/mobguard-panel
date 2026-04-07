@@ -238,27 +238,27 @@ ls -la /opt/mobguard
 Если проект уже лежит в `/opt/mobguard`, используйте:
 
 ```bash
-chmod +x /opt/mobguard/scripts/bootstrap-runtime.sh
+chmod +x /opt/mobguard/install.sh
 ```
 
 #### Вариант Б. В каталоге пока только один скрипт
 
-Если вы загрузили только один bootstrap-скрипт в пустую папку `/opt/mobguard`, то он должен быть исполняемым:
+Если вы загрузили только один `install.sh` в пустую папку `/opt/mobguard`, то он должен быть исполняемым:
 
 ```bash
-chmod +x /opt/mobguard/bootstrap-runtime.sh
+chmod +x /opt/mobguard/install.sh
 ```
 
 И запускаться с URL репозитория:
 
 ```bash
-MOBGUARD_REPO_URL='https://<TOKEN>@github.com/darkneeed/mobguard.git' /opt/mobguard/bootstrap-runtime.sh
+MOBGUARD_REPO_URL='https://<TOKEN>@github.com/darkneeed/mobguard.git' /opt/mobguard/install.sh
 ```
 
 или:
 
 ```bash
-/opt/mobguard/bootstrap-runtime.sh 'https://<TOKEN>@github.com/darkneeed/mobguard.git'
+/opt/mobguard/install.sh 'https://<TOKEN>@github.com/darkneeed/mobguard.git'
 ```
 
 Что считается правильным результатом:
@@ -277,7 +277,7 @@ ls -la /opt/mobguard
 - `docker-compose.yml`
 - `mobguard.py`
 - `README.md`
-- каталог `scripts/`
+- `install.sh`
 
 ### Шаг 4. Запустите install/bootstrap script в первый раз
 
@@ -285,14 +285,7 @@ ls -la /opt/mobguard
 
 ```bash
 cd /opt/mobguard
-./scripts/bootstrap-runtime.sh
-```
-
-Если у вас standalone-скрипт в корне:
-
-```bash
-cd /opt/mobguard
-./bootstrap-runtime.sh
+./install.sh
 ```
 
 Что должен сделать скрипт:
@@ -401,14 +394,7 @@ cat /opt/mobguard/runtime/config.json
 
 ```bash
 cd /opt/mobguard
-./scripts/bootstrap-runtime.sh
-```
-
-Если используется standalone-скрипт:
-
-```bash
-cd /opt/mobguard
-./bootstrap-runtime.sh
+./install.sh
 ```
 
 Теперь скрипт должен:
@@ -833,15 +819,15 @@ sudo mkdir -p /opt/mobguard
 sudo chown -R $USER:$USER /opt/mobguard
 cd /opt/mobguard
 
-# поместить сюда проект или один bootstrap-скрипт
+# поместить сюда проект или один install-скрипт
 
-chmod +x scripts/bootstrap-runtime.sh
-./scripts/bootstrap-runtime.sh
+chmod +x install.sh
+./install.sh
 
 nano .env
 nano runtime/config.json
 
-./scripts/bootstrap-runtime.sh
+./install.sh
 
 docker compose ps
 curl http://127.0.0.1:8080/api/health
