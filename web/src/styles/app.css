@@ -152,6 +152,10 @@ textarea {
   padding: 2rem 1.2rem;
   border-right: 1px solid var(--line);
   background: rgba(250, 244, 234, 0.72);
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
 }
 
 .brand {
@@ -252,6 +256,14 @@ textarea {
   gap: 0.85rem;
 }
 
+.search-strip,
+.tab-row {
+  display: flex;
+  gap: 0.85rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
 .panel {
   border-radius: 24px;
   padding: 1.25rem;
@@ -302,6 +314,12 @@ textarea {
 .queue-card-identifiers {
   color: var(--muted);
   font-size: 0.88rem;
+}
+
+.queue-card-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
 }
 
 .queue-card-tags {
@@ -420,6 +438,30 @@ textarea {
   margin: 0;
 }
 
+.login-methods {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1rem;
+  margin-top: 1.5rem;
+}
+
+.login-method,
+.local-login {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.inline-check {
+  display: flex;
+  gap: 0.6rem;
+  align-items: center;
+}
+
+.icon-button {
+  min-width: 52px;
+}
+
 .stats-grid {
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
 }
@@ -459,6 +501,9 @@ textarea {
   }
 
   .sidebar {
+    position: static;
+    height: auto;
+    overflow: visible;
     border-right: 0;
     border-bottom: 1px solid var(--line);
   }

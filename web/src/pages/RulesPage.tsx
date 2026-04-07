@@ -10,7 +10,9 @@ import {
   RulesDraft
 } from "../rulesMeta";
 
-const LIST_SECTIONS = Array.from(new Set(RULE_LIST_FIELDS.map((field) => field.section)));
+const LIST_SECTIONS = Array.from(
+  new Set(RULE_LIST_FIELDS.filter((field) => field.section !== "Access").map((field) => field.section))
+);
 const SETTING_SECTIONS = Array.from(new Set(RULE_SETTING_FIELDS.map((field) => field.section)));
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -99,10 +101,11 @@ export function RulesPage() {
 
   useEffect(() => {
     api
-      .getRules()
+      .getDetectionSettings()
       .then((payload) => {
-        const normalized = normalizeRulesDraft(payload.rules);
-        setState(payload);
+        const typed = payload as RulesState;
+        const normalized = normalizeRulesDraft(typed.rules);
+        setState(typed);
         setDraft(normalized);
         setSavedDraft(normalized);
       })
@@ -127,11 +130,11 @@ export function RulesPage() {
         };
       }
 
-      const updated = await api.updateRules({
+      const updated = (await api.updateDetectionSettings({
         rules: payload,
         revision: state.revision,
         updated_at: state.updated_at
-      });
+      })) as RulesState;
       const normalized = normalizeRulesDraft(updated.rules);
       setState(updated);
       setDraft(normalized);

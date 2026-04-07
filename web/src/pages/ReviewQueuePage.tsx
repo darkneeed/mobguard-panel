@@ -34,6 +34,7 @@ export function ReviewQueuePage() {
     page_size: 25
   });
   const [error, setError] = useState("");
+  const [showFilters, setShowFilters] = useState(false);
   const [filters, setFilters] = useState<ReviewFilters>({
     status: "OPEN",
     confidence_band: "",
@@ -101,17 +102,26 @@ export function ReviewQueuePage() {
           <span className="eyebrow">Review Queue</span>
           <h1>Спорные решения и ручная модерация</h1>
         </div>
-        <div className="chip">
-          {list.count} cases · page {list.page}
+        <div className="action-row">
+          <button className="ghost icon-button" onClick={() => setShowFilters((prev) => !prev)} title="Toggle filters">
+            ⚲
+          </button>
+          <div className="chip">
+            {list.count} cases · page {list.page}
+          </div>
         </div>
       </div>
 
-      <div className="panel filters">
+      <div className="panel search-strip">
         <input
           placeholder="Быстрый поиск по IP / username / ISP / UUID / IDs"
           value={filters.q}
           onChange={(event) => setFilters((prev) => ({ ...prev, q: event.target.value, page: 1 }))}
         />
+      </div>
+
+      {showFilters ? (
+        <div className="panel filters">
         <input
           placeholder="Username"
           value={String(filters.username ?? "")}
@@ -226,7 +236,8 @@ export function ReviewQueuePage() {
           <option value="repeat_desc">repeat desc</option>
           <option value="updated_asc">updated asc</option>
         </select>
-      </div>
+        </div>
+      ) : null}
 
       {error ? <div className="error-box">{error}</div> : null}
 
@@ -242,10 +253,19 @@ export function ReviewQueuePage() {
               <span>{formatIdentifier("TG", item.telegram_id)}</span>
               <span>{formatIdentifier("UUID", item.uuid)}</span>
             </div>
-            <div className="queue-card-meta">
-              <span>{item.ip}</span>
-              <span>AS{item.asn ?? "?"}</span>
-              <span>{item.confidence_band}</span>
+            <div className="queue-card-stack">
+              <div className="queue-card-meta">
+                <span>IP</span>
+                <strong>{item.ip}</strong>
+              </div>
+              <div className="queue-card-meta">
+                <span>ASN</span>
+                <strong>AS{item.asn ?? "?"}</strong>
+              </div>
+              <div className="queue-card-meta">
+                <span>Decision</span>
+                <strong>{item.verdict} / {item.confidence_band}</strong>
+              </div>
             </div>
             <div className="queue-card-meta">
               <span className={`tag severity-${item.severity}`}>{item.severity}</span>

@@ -22,7 +22,11 @@ export function Layout({ onLogout, username, theme, onThemeChange }: LayoutProps
         </Link>
         <nav className="nav">
           <NavLink to="/">Queue</NavLink>
-          <NavLink to="/rules">Rules</NavLink>
+          <NavLink to="/rules">Detection Rules</NavLink>
+          <NavLink to="/enforcement">Enforcement</NavLink>
+          <NavLink to="/telegram">Telegram</NavLink>
+          <NavLink to="/access">Access</NavLink>
+          <NavLink to="/data">Data</NavLink>
           <NavLink to="/quality">Quality</NavLink>
         </nav>
         <div className="sidebar-footer">

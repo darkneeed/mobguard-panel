@@ -29,6 +29,11 @@ from mobguard_platform import (
     resolve_runtime_dir,
     should_warning_only,
 )
+from mobguard_platform.runtime_admin_defaults import (
+    ENFORCEMENT_SETTINGS_DEFAULTS,
+    ENFORCEMENT_TEMPLATE_DEFAULTS,
+    TELEGRAM_RUNTIME_SETTINGS_DEFAULTS,
+)
 
 # ================= CONFIGURATION & SETUP =================
 
@@ -71,7 +76,7 @@ PANEL_TOKEN = os.getenv("PANEL_TOKEN")
 DEBUG_LEVEL = CONFIG['settings'].get('debug_level', 'OFF').upper()
 DEBUG_MODE = DEBUG_LEVEL != 'OFF'
 DRY_RUN = CONFIG['settings'].get('dry_run', True)
-EXEMPT_UUIDS: Set[str] = set(str(x) for x in CONFIG.get('exempt_ids', []))
+EXEMPT_UUIDS: Set[str] = set(str(x) for x in CONFIG.get('exempt_uuids', []))
 
 # Режимы модерации
 MANUAL_REVIEW_UNSURE = False  # Mixed ASN HOME → ручная проверка
@@ -94,7 +99,7 @@ PROCESSING_LOCK: Set[str] = set()
 # Telegram flood control - FIX БАГ #2
 TG_MESSAGE_QUEUE: asyncio.Queue = None
 TG_LAST_MESSAGE_TIME = datetime.now()
-TG_MIN_INTERVAL = 1.0
+TG_MIN_INTERVAL = float(CONFIG['settings'].get('telegram_message_min_interval_seconds', 1.0))
 
 # Regex Compilation
 REGEX_UUID = re.compile(r'email: (\S+)')
@@ -1034,9 +1039,99 @@ network_analyzer = NetworkAnalyzer()
 
 # ================= TELEGRAM HANDLERS =================
 
-bot = Bot(token=TG_ADMIN_BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+bot = Bot(token=TG_ADMIN_BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML)) if TG_ADMIN_BOT_TOKEN else None
 main_bot = Bot(token=TG_MAIN_BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML)) if TG_MAIN_BOT_TOKEN else None
 dp = Dispatcher()
+
+
+def settings() -> Dict[str, Any]:
+    return CONFIG.setdefault("settings", {})
+
+
+def config_flag(key: str, default: bool) -> bool:
+    return bool(settings().get(key, default))
+
+
+def config_value(key: str, default: Any) -> Any:
+    return settings().get(key, default)
+
+
+def enforcement_value(key: str) -> Any:
+    defaults = dict(ENFORCEMENT_SETTINGS_DEFAULTS)
+    if key == "warning_timeout_seconds":
+        if key in settings():
+            return settings()[key]
+        return settings().get("warning_timeout", defaults[key])
+    return settings().get(key, defaults[key])
+
+
+def enforcement_template(key: str) -> str:
+    return str(settings().get(key, ENFORCEMENT_TEMPLATE_DEFAULTS[key]))
+
+
+def telegram_setting(key: str) -> Any:
+    return settings().get(key, TELEGRAM_RUNTIME_SETTINGS_DEFAULTS[key])
+
+
+def admin_bot_available() -> bool:
+    return bot is not None
+
+
+def main_bot_available() -> bool:
+    return main_bot is not None
+
+
+def admin_notifications_enabled() -> bool:
+    return admin_bot_available() and config_flag("telegram_admin_notifications_enabled", True)
+
+
+def user_notifications_enabled() -> bool:
+    return main_bot_available() and config_flag("telegram_user_notifications_enabled", True)
+
+
+def admin_commands_enabled() -> bool:
+    return admin_bot_available() and config_flag("telegram_admin_commands_enabled", True)
+
+
+def format_duration_text(minutes: int) -> str:
+    if minutes % 10080 == 0:
+        weeks = minutes // 10080
+        return f"{weeks} нед." if weeks > 1 else "1 неделя"
+    if minutes % 1440 == 0:
+        days = minutes // 1440
+        return f"{days} дн." if days > 1 else "24 часа"
+    if minutes % 60 == 0:
+        hours = minutes // 60
+        return f"{hours} ч." if hours > 1 else "1 час"
+    return f"{minutes} мин."
+
+
+def render_runtime_template(template_key: str, context: Dict[str, Any]) -> str:
+    rendered = enforcement_template(template_key)
+    for key, value in context.items():
+        rendered = rendered.replace(f"{{{{{key}}}}}", escape_html(value) if value is not None else "")
+    return rendered
+
+
+def refresh_runtime_state_from_config() -> None:
+    global CONFIG, TG_ADMIN_CHAT_ID, TG_TOPIC_ID, DEBUG_LEVEL, DEBUG_MODE, DRY_RUN, EXEMPT_UUIDS, TG_MIN_INTERVAL
+
+    with open(CONFIG_PATH, 'r', encoding='utf-8') as handle:
+        file_config = normalize_runtime_bound_settings(json.load(handle), BAN_SYSTEM_DIR)
+
+    platform_store.sync_runtime_config(file_config)
+    CONFIG.clear()
+    CONFIG.update(file_config)
+    ipinfo_api.set_config(CONFIG)
+    panel.base_url = settings().get('panel_url', panel.base_url)
+    network_analyzer.db_path = CONFIG['settings']['geoip_db']
+    TG_ADMIN_CHAT_ID = str(settings().get('tg_admin_chat_id', "-1003304969829"))
+    TG_TOPIC_ID = int(settings().get('tg_topic_id', 58) or 0)
+    DEBUG_LEVEL = str(settings().get('debug_level', 'OFF')).upper()
+    DEBUG_MODE = DEBUG_LEVEL != 'OFF'
+    DRY_RUN = config_flag('dry_run', True)
+    EXEMPT_UUIDS = set(str(x) for x in CONFIG.get('exempt_uuids', []))
+    TG_MIN_INTERVAL = float(telegram_setting('telegram_message_min_interval_seconds'))
 
 def is_admin(user_id: int) -> bool: 
     return user_id in CONFIG.get('admin_tg_ids', [])
@@ -1046,27 +1141,34 @@ async def resolve_target(target: str):
 
 async def notify_admin(text: str, reply_markup=None):
     global TG_MESSAGE_QUEUE
+    if not admin_notifications_enabled():
+        return
     if TG_MESSAGE_QUEUE:
         await TG_MESSAGE_QUEUE.put(('admin', text, reply_markup))
     else:
         try: 
-            await bot.send_message(TG_ADMIN_CHAT_ID, text, message_thread_id=TG_TOPIC_ID, reply_markup=reply_markup)
+            if bot and TG_ADMIN_CHAT_ID:
+                await bot.send_message(TG_ADMIN_CHAT_ID, text, message_thread_id=TG_TOPIC_ID or None, reply_markup=reply_markup)
         except Exception as e:
             logger.error(f"TG Error: {e}")
             await notify_error(f"Ошибка отправки в админ-чат: {e}")
 
 async def notify_user(tg_id: int, text: str):
     global TG_MESSAGE_QUEUE
-    if DRY_RUN or not main_bot: return
+    if DRY_RUN or not user_notifications_enabled():
+        return
     if TG_MESSAGE_QUEUE:
         await TG_MESSAGE_QUEUE.put(('user', tg_id, text))
     else:
         try: 
-            await main_bot.send_message(tg_id, text)
+            if main_bot:
+                await main_bot.send_message(tg_id, text)
         except Exception as e:
             logger.error(f"TG User notify error: {e}")
 
 async def notify_error(error_msg: str):
+    if not admin_notifications_enabled():
+        return
     try:
         msg = (
             f"📶 <b>#mobguard</b>\n"
@@ -1075,7 +1177,8 @@ async def notify_error(error_msg: str):
             f"<code>{escape_html(error_msg)}</code>\n\n"
             f"Время: {datetime.now().strftime('%d.%m %H:%M:%S')}"
         )
-        await bot.send_message(TG_ADMIN_CHAT_ID, msg, message_thread_id=TG_TOPIC_ID)
+        if bot and TG_ADMIN_CHAT_ID:
+            await bot.send_message(TG_ADMIN_CHAT_ID, msg, message_thread_id=TG_TOPIC_ID or None)
     except:
         pass  # Не можем отправить сообщение об ошибке
 
@@ -1084,6 +1187,8 @@ def escape_html(text: str) -> str:
 
 async def send_unsure_notify(user: Dict, bundle: DecisionBundle, tag: str, review_reason: str):
     global UNSURE_NOTIFIED
+    if not config_flag("telegram_notify_review_enabled", True):
+        return
 
     uuid = user.get('uuid')
     notify_key = f"{uuid}:{bundle.ip}:{review_reason}"
@@ -1095,7 +1200,6 @@ async def send_unsure_notify(user: Dict, bundle: DecisionBundle, tag: str, revie
     UNSURE_NOTIFIED.add(notify_key)
 
     tg_id = user.get('telegramId', 'N/A')
-    tg_id_display = f"<code>{tg_id}</code>" if tg_id != 'N/A' else 'N/A'
     review_url = platform_store.build_review_url(bundle.case_id) if bundle.case_id else ""
     title = {
         "unsure": "ТРЕБУЕТСЯ РУЧНАЯ ПРОВЕРКА",
@@ -1104,23 +1208,23 @@ async def send_unsure_notify(user: Dict, bundle: DecisionBundle, tag: str, revie
         "manual_review_mixed_home": "MIXED ASN HOME КЕЙС",
     }.get(review_reason, "ТРЕБУЕТСЯ РУЧНАЯ ПРОВЕРКА")
 
-    msg = (
-        f"📶 <b>#mobguard</b>\n"
-        f"➖➖➖➖➖➖➖➖➖\n"
-        f"🔍 <b>{title}</b>\n"
-        f"<b>Username:</b> {escape_html(user.get('username', 'N/A'))}\n"
-        f"<b>Telegram ID:</b> {tg_id_display}\n"
-        f"<b>IP:</b> <code>{bundle.ip}</code>\n"
-        f"<b>ISP:</b> {escape_html(bundle.isp)}\n"
-        f"<b>Config:</b> {escape_html(tag)}\n"
-        f"<b>Verdict:</b> {bundle.verdict} / {bundle.confidence_band}\n"
-        f"<b>Score:</b> {bundle.score}\n"
+    msg = render_runtime_template(
+        "admin_review_template",
+        {
+            "username": user.get('username', 'N/A'),
+            "uuid": uuid or "N/A",
+            "system_id": user.get('id', 'N/A'),
+            "telegram_id": tg_id,
+            "ip": bundle.ip,
+            "isp": bundle.isp,
+            "tag": tag,
+            "confidence_band": f"{title} / {bundle.verdict} / {bundle.confidence_band}",
+            "review_url": review_url or "N/A",
+        },
     )
     if bundle.case_id:
-        msg += f"<b>Case ID:</b> <code>{bundle.case_id}</code>\n"
-    if review_url:
-        msg += f"<b>Review URL:</b> <code>{escape_html(review_url)}</code>\n"
-    msg += "<b>Основания:</b>\n"
+        msg += f"\n<b>Case ID:</b> <code>{bundle.case_id}</code>\n"
+    msg += "\n<b>Основания:</b>\n"
     for entry in bundle.log:
         msg += f"  • {escape_html(entry)}\n"
 
@@ -1987,7 +2091,7 @@ async def process_log_line(line: str):
                     )
                 return
 
-            if MANUAL_REVIEW_UNSURE and bundle.asn in CONFIG.get('mixed_asns', []):
+            if config_flag('manual_review_mixed_home_enabled', False) and bundle.asn in CONFIG.get('mixed_asns', []):
                 _dbg('IMPORTANT', f"[MANUAL_REVIEW] Mixed ASN {bundle.asn} HOME → sending for manual review")
                 if not review_reason:
                     review_case = await platform_store.async_ensure_review_case(
@@ -2001,7 +2105,8 @@ async def process_log_line(line: str):
                 user_data,
                 tag,
                 bundle,
-                warning_only=CONFIG['settings'].get('shadow_mode', True)
+                warning_only=config_flag('warning_only_mode', False)
+                or CONFIG['settings'].get('shadow_mode', True)
                 or should_warning_only(bundle)
                 or not bundle.punitive_eligible,
             )
@@ -2027,8 +2132,12 @@ async def handle_violation(user: Dict, tag: str, bundle: DecisionBundle, warning
     log = bundle.log
     now = datetime.now()
     tracker_key = f"{uuid}:{ip}"
-    warning_timeout = CONFIG['settings'].get('warning_timeout', 900)
-    usage_threshold = CONFIG['settings']['usage_time_threshold']
+    warning_timeout = int(enforcement_value('warning_timeout_seconds'))
+    usage_threshold = int(enforcement_value('usage_time_threshold'))
+    warnings_before_ban = max(int(enforcement_value('warnings_before_ban')), 1)
+    ban_durations = enforcement_value('ban_durations_minutes')
+    if not isinstance(ban_durations, list) or not ban_durations:
+        ban_durations = ENFORCEMENT_SETTINGS_DEFAULTS['ban_durations_minutes']
     review_url = platform_store.build_review_url(bundle.case_id) if bundle.case_id else ""
 
     _dbg(
@@ -2066,36 +2175,37 @@ async def handle_violation(user: Dict, tag: str, bundle: DecisionBundle, warning
         return
 
     tg_id = user.get('telegramId', 'N/A')
-    tg_id_display = f"<code>{tg_id}</code>" if tg_id != 'N/A' else 'N/A'
+    common_context = {
+        "username": user.get('username', 'N/A'),
+        "uuid": uuid,
+        "system_id": user.get('id', 'N/A'),
+        "telegram_id": tg_id,
+        "ip": ip,
+        "isp": isp,
+        "tag": tag,
+        "confidence_band": bundle.confidence_band,
+        "review_url": review_url or "N/A",
+        "warnings_before_ban": warnings_before_ban,
+        "warning_count": warning_count,
+        "warnings_left": max(warnings_before_ban - warning_count, 0),
+        "ban_minutes": 0,
+        "ban_text": "",
+    }
 
     if warning_only:
-        status_icon = "⚠️" if not DRY_RUN else "[ОТЛАДКА] ⚠️"
-        admin_msg = (
-            f"📶 <b>#mobguard</b>\n"
-            f"➖➖➖➖➖➖➖➖➖\n"
-            f"{status_icon} <b>ПРЕДУПРЕЖДЕНИЕ БЕЗ ЭСКАЛАЦИИ</b>\n"
-            f"<b>Username:</b> {escape_html(user.get('username', 'N/A'))}\n"
-            f"<b>Telegram ID:</b> {tg_id_display}\n"
-            f"<b>IP:</b> <code>{ip}</code>\n"
-            f"<b>ISP:</b> {escape_html(isp)}\n"
-            f"<b>Config:</b> {escape_html(tag)}\n"
-            f"<b>Причина:</b> {escape_html(bundle.confidence_band)} / punitive disabled\n"
-        )
-        if review_url:
-            admin_msg += f"<b>Review URL:</b> <code>{escape_html(review_url)}</code>\n"
-        admin_msg += "<b>Основание:</b>\n"
-        for entry in log:
-            admin_msg += f"  • {escape_html(entry)}\n"
-        await notify_admin(admin_msg)
+        if config_flag("telegram_notify_warning_only_enabled", True):
+            admin_msg = render_runtime_template(
+                "admin_warning_only_template",
+                {**common_context, "confidence_band": f"{bundle.confidence_band} / punitive disabled"},
+            )
+            admin_msg += "\n<b>Основание:</b>\n"
+            for entry in log:
+                admin_msg += f"  • {escape_html(entry)}\n"
+            await notify_admin(admin_msg)
         await db.delete_tracker(tracker_key)
 
-        if not DRY_RUN and user.get('telegramId'):
-            user_msg = (
-                f"⚠️ <b>Предупреждение</b>\n\n"
-                f"Система обнаружила спорные признаки использования конфига <b>«Мобильный интернет»</b> через не-мобильную сеть.\n"
-                f"Доступ сейчас не ограничивается, но кейс отправлен на модерацию.\n\n"
-                f"📱 Пожалуйста, используйте эту конфигурацию только через мобильный интернет.\n"
-            )
+        if not DRY_RUN and user.get('telegramId') and config_flag("telegram_notify_warning_only_enabled", True):
+            user_msg = render_runtime_template("user_warning_only_template", common_context)
             await notify_user(int(user['telegramId']), user_msg)
         return
 
@@ -2106,58 +2216,41 @@ async def handle_violation(user: Dict, tag: str, bundle: DecisionBundle, warning
             return
 
         warning_count += 1
-        if warning_count < 3:
+        if warning_count <= warnings_before_ban:
             await db.execute(
                 "INSERT OR REPLACE INTO violations (uuid, strikes, unban_time, last_strike_time, warning_time, warning_count) VALUES (?, ?, NULL, ?, ?, ?)",
                 (uuid, strikes, now.isoformat(), now.isoformat(), warning_count),
             )
-            admin_msg = (
-                f"📶 <b>#mobguard</b>\n"
-                f"➖➖➖➖➖➖➖➖➖\n"
-                f"{'⚠️' if not DRY_RUN else '[ОТЛАДКА] ⚠️'} <b>ПРЕДУПРЕЖДЕНИЕ {warning_count}/3</b>\n"
-                f"<b>Username:</b> {escape_html(user.get('username', 'N/A'))}\n"
-                f"<b>Telegram ID:</b> {tg_id_display}\n"
-                f"<b>IP:</b> <code>{ip}</code>\n"
-                f"<b>ISP:</b> {escape_html(isp)}\n"
-                f"<b>Config:</b> {escape_html(tag)}\n"
-                f"<b>Left:</b> {3 - warning_count}\n"
-            )
-            if review_url:
-                admin_msg += f"<b>Review URL:</b> <code>{escape_html(review_url)}</code>\n"
-            await notify_admin(admin_msg)
+            if config_flag("telegram_notify_warning_enabled", True):
+                admin_msg = render_runtime_template(
+                    "admin_warning_template",
+                    {
+                        **common_context,
+                        "warning_count": warning_count,
+                        "warnings_left": max(warnings_before_ban - warning_count, 0),
+                    },
+                )
+                await notify_admin(admin_msg)
             await db.delete_tracker(tracker_key)
-            if not DRY_RUN and user.get('telegramId'):
-                user_msg = (
-                    f"⚠️ <b>Предупреждение</b>\n\n"
-                    f"Система анализа выявила признаки использования конфига <b>«Мобильный интернет»</b> через не-мобильную сеть.\n"
-                    f"Это запрещено пунктом 6 правил пользования, <b>доступ к сервису может быть ограничен.</b>\n\n"
-                    f"📱 Пожалуйста, используйте эту конфигурацию только через мобильный интернет.\n"
+            if not DRY_RUN and user.get('telegramId') and config_flag("telegram_notify_warning_enabled", True):
+                user_msg = render_runtime_template(
+                    "user_warning_template",
+                    {
+                        **common_context,
+                        "warning_count": warning_count,
+                        "warnings_left": max(warnings_before_ban - warning_count, 0),
+                    },
                 )
                 await notify_user(int(user['telegramId']), user_msg)
             return
 
         strikes += 1
-        if strikes > 4:
-            strikes = 4
+        if strikes > len(ban_durations):
+            strikes = len(ban_durations)
         await db.delete_tracker(tracker_key)
 
-        if strikes == 1:
-            ban_min = 15
-        elif strikes == 2:
-            ban_min = 60
-        elif strikes == 3:
-            ban_min = 1440
-        else:
-            ban_min = 20160
-
-        if strikes >= 4:
-            ban_text = "2 недели"
-        elif strikes == 3:
-            ban_text = "24 часа"
-        elif strikes == 2:
-            ban_text = "1 час"
-        else:
-            ban_text = "15 минут"
+        ban_min = int(ban_durations[min(strikes - 1, len(ban_durations) - 1)])
+        ban_text = format_duration_text(ban_min)
 
         unban_dt = now + timedelta(minutes=ban_min)
         await db.execute(
@@ -2173,7 +2266,7 @@ async def handle_violation(user: Dict, tag: str, bundle: DecisionBundle, warning
             (uuid, ip, isp, asn, tag, strikes, ban_min, now.isoformat()),
         )
 
-        if MANUAL_REVIEW_ALL_BANS:
+        if config_flag('manual_ban_approval_enabled', False):
             status_icon = "👮 <b>ТРЕБУЕТСЯ УТВЕРЖДЕНИЕ</b>"
             keyboard = InlineKeyboardMarkup(
                 inline_keyboard=[
@@ -2185,76 +2278,75 @@ async def handle_violation(user: Dict, tag: str, bundle: DecisionBundle, warning
             status_icon = "⛔️" if not DRY_RUN else "[ОТЛАДКА] ⛔️"
             keyboard = None
 
-        admin_msg = (
-            f"📶 <b>#mobguard</b>\n"
-            f"➖➖➖➖➖➖➖➖➖\n"
-            f"{status_icon} <b>БЛОКИРОВКА</b>\n"
-            f"<b>Username:</b> {escape_html(user.get('username', 'N/A'))}\n"
-            f"<b>Telegram ID:</b> {tg_id_display}\n"
-            f"<b>IP:</b> <code>{ip}</code>\n"
-            f"<b>ISP:</b> {escape_html(isp)}\n"
-            f"<b>Config:</b> {escape_html(tag)}\n"
-            f"<b>Strike:</b> {strikes} | <b>Ban:</b> {ban_min} мин\n"
-        )
-        if review_url:
-            admin_msg += f"<b>Review URL:</b> <code>{escape_html(review_url)}</code>\n"
-        admin_msg += "<b>Основание:</b>\n"
-        for entry in log:
-            admin_msg += f"  • {escape_html(entry)}\n"
+        if config_flag("telegram_notify_ban_enabled", True):
+            admin_msg = render_runtime_template(
+                "admin_ban_template",
+                {
+                    **common_context,
+                    "warning_count": warning_count,
+                    "warnings_left": 0,
+                    "ban_minutes": ban_min,
+                    "ban_text": ban_text,
+                },
+            )
+            admin_msg = admin_msg.replace("<b>БЛОКИРОВКА</b>", f"{status_icon} <b>БЛОКИРОВКА</b>")
+            admin_msg += "\n<b>Основание:</b>\n"
+            for entry in log:
+                admin_msg += f"  • {escape_html(entry)}\n"
+            if keyboard:
+                await notify_admin(admin_msg, reply_markup=keyboard)
+            else:
+                await notify_admin(admin_msg)
 
-        if keyboard:
-            await notify_admin(admin_msg, reply_markup=keyboard)
-        else:
-            await notify_admin(admin_msg)
-
-        if MANUAL_REVIEW_ALL_BANS:
+        if config_flag('manual_ban_approval_enabled', False):
             _dbg('IMPORTANT', f"[MANUAL_REVIEW] Ban awaiting approval")
             return
 
         if not DRY_RUN:
             await panel.toggle_user(uuid, False)
-            if user.get('telegramId'):
-                user_msg = (
-                    f"⛔️ <b>Доступ временно ограничен</b>\n\n"
-                    f"Вы не отреагировали на предупреждение и продолжили использование конфигурации "
-                    f"<b>«Мобильный интернет»</b> через не-мобильную сеть.\n\n"
-                    f"⏳ <b>Блокировка на {ban_text}.</b>\n"
-                    f"Доступ восстановится автоматически по истечении срока блокировки."
+            if user.get('telegramId') and config_flag("telegram_notify_ban_enabled", True):
+                user_msg = render_runtime_template(
+                    "user_ban_template",
+                    {
+                        **common_context,
+                        "warning_count": warning_count,
+                        "warnings_left": 0,
+                        "ban_minutes": ban_min,
+                        "ban_text": ban_text,
+                    },
                 )
                 await notify_user(int(user['telegramId']), user_msg)
         return
 
     await db.execute(
         """INSERT OR REPLACE INTO violations
-                  (uuid, strikes, unban_time, last_strike_time, warning_time)
-                  VALUES (?, ?, NULL, ?, ?)""",
-        (uuid, strikes, now.isoformat(), now.isoformat()),
+                  (uuid, strikes, unban_time, last_strike_time, warning_time, warning_count)
+                  VALUES (?, ?, NULL, ?, ?, ?)""",
+        (uuid, strikes, now.isoformat(), now.isoformat(), 1),
     )
 
-    admin_msg = (
-        f"📶 <b>#mobguard</b>\n"
-        f"➖➖➖➖➖➖➖➖➖\n"
-        f"{'⚠️' if not DRY_RUN else '[ОТЛАДКА] ⚠️'} <b>ПРЕДУПРЕЖДЕНИЕ</b>\n"
-        f"<b>Username:</b> {escape_html(user.get('username', 'N/A'))}\n"
-        f"<b>Telegram ID:</b> {tg_id_display}\n"
-        f"<b>IP:</b> <code>{ip}</code>\n"
-        f"<b>ISP:</b> {escape_html(isp)}\n"
-        f"<b>Config:</b> {escape_html(tag)}\n"
-        f"<b>Время на отключение:</b> {warning_timeout // 60} минут\n"
-    )
-    if review_url:
-        admin_msg += f"<b>Review URL:</b> <code>{escape_html(review_url)}</code>\n"
-    admin_msg += "<b>Основание:</b>\n"
-    for entry in log:
-        admin_msg += f"  • {escape_html(entry)}\n"
-    await notify_admin(admin_msg)
+    if config_flag("telegram_notify_warning_enabled", True):
+        admin_msg = render_runtime_template(
+            "admin_warning_template",
+            {
+                **common_context,
+                "warning_count": 1,
+                "warnings_left": max(warnings_before_ban - 1, 0),
+            },
+        )
+        admin_msg += "\n<b>Основание:</b>\n"
+        for entry in log:
+            admin_msg += f"  • {escape_html(entry)}\n"
+        await notify_admin(admin_msg)
 
-    if not DRY_RUN and user.get('telegramId'):
-        user_msg = (
-            f"⚠️ <b>Предупреждение</b>\n\n"
-            f"Система анализа выявила признаки использования конфига <b>«Мобильный интернет»</b> через не-мобильную сеть.\n"
-            f"Это запрещено пунктом 6 правил пользования, <b>доступ к сервису может быть ограничен.</b>\n\n"
-            f"📱 Пожалуйста, используйте эту конфигурацию только через мобильный интернет.\n"
+    if not DRY_RUN and user.get('telegramId') and config_flag("telegram_notify_warning_enabled", True):
+        user_msg = render_runtime_template(
+            "user_warning_template",
+            {
+                **common_context,
+                "warning_count": 1,
+                "warnings_left": max(warnings_before_ban - 1, 0),
+            },
         )
         await notify_user(int(user['telegramId']), user_msg)
 
@@ -2278,10 +2370,11 @@ async def telegram_queue_processor():
             try:
                 if msg_type == 'admin':
                     text, reply_markup = args[0], args[1] if len(args) > 1 else None
-                    await bot.send_message(TG_ADMIN_CHAT_ID, text, message_thread_id=TG_TOPIC_ID, reply_markup=reply_markup)
+                    if bot and TG_ADMIN_CHAT_ID and admin_notifications_enabled():
+                        await bot.send_message(TG_ADMIN_CHAT_ID, text, message_thread_id=TG_TOPIC_ID or None, reply_markup=reply_markup)
                 elif msg_type == 'user':
                     tg_id, text = args
-                    if main_bot:
+                    if main_bot and user_notifications_enabled():
                         await main_bot.send_message(tg_id, text)
                 
                 TG_LAST_MESSAGE_TIME = datetime.now()
@@ -2543,8 +2636,7 @@ async def live_rules_refresh_task():
     logger.info("Starting Live Rules Refresh Worker...")
     while True:
         try:
-            await platform_store.async_sync_runtime_config(CONFIG)
-            ipinfo_api.set_config(CONFIG)
+            await asyncio.get_running_loop().run_in_executor(None, refresh_runtime_state_from_config)
         except Exception as e:
             logger.error(f"[LIVE RULES] Refresh failed: {e}")
         await asyncio.sleep(int(CONFIG['settings'].get('live_rules_refresh_seconds', 15)))
@@ -2676,11 +2768,15 @@ def pre_flight_check():
     print("=" * 60)
     
     config_ok = True
-    if not all([TG_MAIN_BOT_TOKEN, TG_ADMIN_BOT_TOKEN, PANEL_TOKEN]):
-        print("❌ ERROR: Missing Tokens (.env)")
+    if not PANEL_TOKEN:
+        print("❌ ERROR: Missing PANEL_TOKEN (.env)")
         config_ok = False
     if not os.getenv("IPINFO_TOKEN"):
         print("⚠️ WARNING: IPINFO_TOKEN missing. ASN/ISP detection will degrade and scores may collapse to 0.")
+    if not TG_ADMIN_BOT_TOKEN:
+        print("⚠️ WARNING: TG_ADMIN_BOT_TOKEN missing. Admin Telegram bot will be disabled.")
+    if not TG_MAIN_BOT_TOKEN:
+        print("⚠️ WARNING: TG_MAIN_BOT_TOKEN missing. User Telegram notifications will be disabled.")
         
     if not os.path.exists(CONFIG['settings']['log_file']):
         print(f"❌ ERROR: Log file not found: {CONFIG['settings']['log_file']}")
@@ -2692,14 +2788,15 @@ def pre_flight_check():
         
     db.init_db()
     platform_store.init_schema()
-    platform_store.sync_runtime_config(CONFIG)
-    ipinfo_api.set_config(CONFIG)
+    refresh_runtime_state_from_config()
     print("✅ System Ready & DB Initialized")
     print(f"   • Debug: {DEBUG_LEVEL}")
     print(f"   • Mode: {'DRY RUN' if DRY_RUN else 'PRODUCTION'}")
     print(f"   • Shadow mode: {'ON' if CONFIG['settings'].get('shadow_mode', True) else 'OFF'}")
     print(f"   • Gray zone threshold: {CONFIG['settings']['gray_zone_threshold']}")
     print(f"   • Telegram rate limiting: {TG_MIN_INTERVAL}s")
+    print(f"   • Admin bot: {'ENABLED' if admin_bot_available() else 'DISABLED'}")
+    print(f"   • User bot: {'ENABLED' if main_bot_available() else 'DISABLED'}")
     print("=" * 60)
 
 async def main():
@@ -2740,8 +2837,11 @@ async def main():
         f"Модель: MOBILE / HOME / UNSURE + ML"
     )
     await notify_admin(admin_msg)
-    
-    await dp.start_polling(bot)
+
+    if admin_commands_enabled() and bot:
+        await dp.start_polling(bot)
+    else:
+        await asyncio.Event().wait()
 
 if __name__ == "__main__":
     try:

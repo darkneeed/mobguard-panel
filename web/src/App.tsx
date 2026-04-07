@@ -3,11 +3,15 @@ import { Navigate, Route, Routes } from "react-router-dom";
 
 import { api, Session } from "./api/client";
 import { Layout } from "./components/Layout";
+import { AccessPage } from "./pages/AccessPage";
+import { DataPage } from "./pages/DataPage";
+import { EnforcementPage } from "./pages/EnforcementPage";
 import { LoginPage } from "./pages/LoginPage";
 import { QualityPage } from "./pages/QualityPage";
 import { ReviewDetailPage } from "./pages/ReviewDetailPage";
 import { ReviewQueuePage } from "./pages/ReviewQueuePage";
 import { RulesPage } from "./pages/RulesPage";
+import { TelegramPage } from "./pages/TelegramPage";
 
 type ThemeMode = "light" | "dark" | "system";
 const THEME_KEY = "mobguard_theme";
@@ -87,6 +91,10 @@ export default function App() {
         <Route path="/" element={<ReviewQueuePage />} />
         <Route path="/reviews/:caseId" element={<ReviewDetailPage />} />
         <Route path="/rules" element={<RulesPage />} />
+        <Route path="/enforcement" element={<EnforcementPage />} />
+        <Route path="/telegram" element={<TelegramPage />} />
+        <Route path="/access" element={<AccessPage />} />
+        <Route path="/data" element={<DataPage />} />
         <Route path="/quality" element={<QualityPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
