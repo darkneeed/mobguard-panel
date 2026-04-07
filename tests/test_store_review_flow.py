@@ -35,6 +35,7 @@ class StoreReviewFlowTests(unittest.TestCase):
                 "learning_promote_combo_min_precision": 1.0,
                 "shadow_mode": True,
                 "log_file": "/var/log/remnanode/access.log",
+                "review_ui_base_url": "https://mobguard.example.com",
             },
         }
         self.store = PlatformStore(self.db_path, self.base_config, self.config_path)
@@ -207,6 +208,12 @@ class StoreReviewFlowTests(unittest.TestCase):
         self.assertEqual(metrics["learning"]["legacy"]["total_patterns"], 1)
         self.assertEqual(metrics["learning"]["legacy"]["total_confidence"], 7)
         self.assertEqual(metrics["learning"]["thresholds"]["asn_min_support"], 1)
+
+    def test_build_review_url_falls_back_to_base_config_when_live_rules_are_empty(self):
+        self.assertEqual(
+            self.store.build_review_url(7),
+            "https://mobguard.example.com/reviews/7",
+        )
 
     def test_init_schema_migrates_legacy_tables_before_creating_system_id_indexes(self):
         legacy_db_path = os.path.join(self.temp_dir, "legacy.sqlite3")

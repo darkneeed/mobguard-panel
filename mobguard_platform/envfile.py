@@ -9,9 +9,12 @@ ENV_LINE_RE = re.compile(r"^\s*([A-Za-z_][A-Za-z0-9_]*)=(.*)$")
 
 
 def read_env_file(path: str) -> dict[str, str]:
+    values: dict[str, str] = {
+        key: str(value)
+        for key, value in os.environ.items()
+    }
     if not os.path.exists(path):
-        return {}
-    values: dict[str, str] = {}
+        return values
     with open(path, "r", encoding="utf-8") as handle:
         for raw_line in handle:
             line = raw_line.rstrip("\n")
@@ -24,6 +27,12 @@ def read_env_file(path: str) -> dict[str, str]:
 
 
 def update_env_file(path: str, updates: dict[str, Any]) -> None:
+    status = get_env_file_status(path)
+    if not status["exists"]:
+        raise ValueError(f"Env file is unavailable for writing: {path}")
+    if not status["writable"]:
+        raise ValueError(f"Env file is read-only: {path}")
+
     lines: list[str] = []
     existing_indexes: dict[str, int] = {}
 
@@ -45,6 +54,16 @@ def update_env_file(path: str, updates: dict[str, Any]) -> None:
 
     with open(path, "w", encoding="utf-8", newline="\n") as handle:
         handle.write("\n".join(lines) + ("\n" if lines else ""))
+
+
+def get_env_file_status(path: str) -> dict[str, Any]:
+    exists = os.path.isfile(path)
+    writable = exists and os.access(path, os.W_OK)
+    return {
+        "path": path,
+        "exists": exists,
+        "writable": writable,
+    }
 
 
 def env_field_payload(key: str, values: dict[str, str], *, masked: bool, restart_required: bool) -> dict[str, Any]:

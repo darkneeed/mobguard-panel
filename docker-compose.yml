@@ -11,6 +11,7 @@ services:
       BAN_SYSTEM_DIR: /opt/mobguard/runtime
       MOBGUARD_ENV_FILE: /opt/mobguard/.env
     volumes:
+      - ./.env:/opt/mobguard/.env
       - ./runtime:/opt/mobguard/runtime
       - ${REMNANODE_ACCESS_LOG:-/var/log/remnanode/access.log}:/var/log/remnanode/access.log:ro
     depends_on:
@@ -29,6 +30,7 @@ services:
       BAN_SYSTEM_DIR: /opt/mobguard/runtime
       MOBGUARD_ENV_FILE: /opt/mobguard/.env
     volumes:
+      - ./.env:/opt/mobguard/.env
       - ./runtime:/opt/mobguard/runtime
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]

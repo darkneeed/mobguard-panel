@@ -13,7 +13,7 @@ from pydantic import BaseModel, Field
 
 from mobguard_platform import PlatformStore, validate_live_rules_patch, verify_telegram_auth
 from mobguard_platform.configfile import read_json_file, update_json_file
-from mobguard_platform.envfile import env_field_payload, read_env_file, update_env_file
+from mobguard_platform.envfile import env_field_payload, get_env_file_status, read_env_file, update_env_file
 from mobguard_platform.panel_client import PanelClient
 from mobguard_platform.runtime_admin_defaults import (
     ENFORCEMENT_SETTINGS_DEFAULTS,
@@ -647,6 +647,7 @@ def put_detection_settings(
 def get_access_settings(_: dict[str, Any] = Depends(get_session)) -> dict[str, Any]:
     state = store.get_live_rules_state()
     env_values = _load_env_values()
+    env_status = get_env_file_status(str(ENV_PATH))
     return {
         "revision": state["revision"],
         "updated_at": state["updated_at"],
@@ -654,6 +655,8 @@ def get_access_settings(_: dict[str, Any] = Depends(get_session)) -> dict[str, A
         "lists": {key: state["rules"].get(key, []) for key in ACCESS_LIST_KEYS},
         "env": _serialize_env_fields(ACCESS_ENV_FIELDS, env_values),
         "auth": _get_auth_capabilities(env_values),
+        "env_file_path": env_status["path"],
+        "env_file_writable": env_status["writable"],
     }
 
 
@@ -677,7 +680,10 @@ def put_access_settings(
 
     env_updates = {key: payload.env.get(key) for key in ACCESS_ENV_FIELDS if key in payload.env}
     if env_updates:
-        update_env_file(str(ENV_PATH), env_updates)
+        try:
+            update_env_file(str(ENV_PATH), env_updates)
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
 
     return get_access_settings(session)
 
@@ -686,6 +692,7 @@ def put_access_settings(
 def get_telegram_settings(_: dict[str, Any] = Depends(get_session)) -> dict[str, Any]:
     runtime_config = _load_runtime_config()
     env_values = _load_env_values()
+    env_status = get_env_file_status(str(ENV_PATH))
     settings = _normalize_runtime_settings(runtime_config, TELEGRAM_RUNTIME_SETTINGS_DEFAULTS)
     return {
         "settings": settings,
@@ -694,6 +701,8 @@ def get_telegram_settings(_: dict[str, Any] = Depends(get_session)) -> dict[str,
             "admin_bot_enabled": bool(env_values.get("TG_ADMIN_BOT_TOKEN") and env_values.get("TG_ADMIN_BOT_USERNAME")),
             "user_bot_enabled": bool(env_values.get("TG_MAIN_BOT_TOKEN")),
         },
+        "env_file_path": env_status["path"],
+        "env_file_writable": env_status["writable"],
     }
 
 
@@ -710,7 +719,10 @@ def put_telegram_settings(
 
     env_updates = {key: payload.env.get(key) for key in TELEGRAM_ENV_FIELDS if key in payload.env}
     if env_updates:
-        update_env_file(str(ENV_PATH), env_updates)
+        try:
+            update_env_file(str(ENV_PATH), env_updates)
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
 
     return get_telegram_settings(_)
 

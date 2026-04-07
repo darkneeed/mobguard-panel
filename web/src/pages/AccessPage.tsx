@@ -9,6 +9,8 @@ type AccessPayload = {
   updated_by: string;
   lists: Record<string, Array<string | number>>;
   env: Record<string, EnvFieldState>;
+  env_file_path: string;
+  env_file_writable: boolean;
   auth: {
     telegram_enabled: boolean;
     local_enabled: boolean;
@@ -153,6 +155,11 @@ export function AccessPage() {
               <h2>Local panel credentials</h2>
               <p className="muted">Хранятся в `.env`, требуют restart после изменения.</p>
             </div>
+            {!data.env_file_writable ? (
+              <div className="error-box">
+                Runtime env is read-only. Values below are visible, but saving secrets requires a writable env file at {data.env_file_path}.
+              </div>
+            ) : null}
             <div className="form-grid">
               {Object.entries(data.env).map(([key, field]) => (
                 <div className="rule-field" key={key}>

@@ -731,6 +731,8 @@ class PlatformStore:
     def build_review_url(self, case_id: int) -> str:
         base_url = str(self.get_live_rules().get("settings", {}).get("review_ui_base_url", "")).rstrip("/")
         if not base_url:
+            base_url = str(self.base_config.get("settings", {}).get("review_ui_base_url", "")).rstrip("/")
+        if not base_url:
             return ""
         return f"{base_url}/reviews/{case_id}"
 

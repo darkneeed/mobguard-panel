@@ -5,6 +5,8 @@ import { api, EnvFieldState } from "../api/client";
 type TelegramPayload = {
   settings: Record<string, string | number | boolean>;
   env: Record<string, EnvFieldState>;
+  env_file_path: string;
+  env_file_writable: boolean;
   capabilities: {
     admin_bot_enabled: boolean;
     user_bot_enabled: boolean;
@@ -155,6 +157,11 @@ export function TelegramPage() {
               <h2>Telegram secrets</h2>
               <p className="muted">`.env` backed, restart required after change.</p>
             </div>
+            {!data.env_file_writable ? (
+              <div className="error-box">
+                Runtime env is read-only. Values are detected from the container environment, but saving requires a writable env file at {data.env_file_path}.
+              </div>
+            ) : null}
             <div className="form-grid">
               {Object.entries(data.env).map(([key, field]) => (
                 <div className="rule-field" key={key}>

@@ -29,6 +29,7 @@ from mobguard_platform import (
     resolve_runtime_dir,
     should_warning_only,
 )
+from mobguard_platform.template_utils import render_optional_template
 from mobguard_platform.runtime_admin_defaults import (
     ENFORCEMENT_SETTINGS_DEFAULTS,
     ENFORCEMENT_TEMPLATE_DEFAULTS,
@@ -1107,10 +1108,7 @@ def format_duration_text(minutes: int) -> str:
 
 
 def render_runtime_template(template_key: str, context: Dict[str, Any]) -> str:
-    rendered = enforcement_template(template_key)
-    for key, value in context.items():
-        rendered = rendered.replace(f"{{{{{key}}}}}", escape_html(value) if value is not None else "")
-    return rendered
+    return render_optional_template(enforcement_template(template_key), context, escape_html)
 
 
 def refresh_runtime_state_from_config() -> None:
@@ -1199,7 +1197,7 @@ async def send_unsure_notify(user: Dict, bundle: DecisionBundle, tag: str, revie
 
     UNSURE_NOTIFIED.add(notify_key)
 
-    tg_id = user.get('telegramId', 'N/A')
+    tg_id = user.get('telegramId') or ""
     review_url = platform_store.build_review_url(bundle.case_id) if bundle.case_id else ""
     title = {
         "unsure": "ТРЕБУЕТСЯ РУЧНАЯ ПРОВЕРКА",
@@ -1213,13 +1211,13 @@ async def send_unsure_notify(user: Dict, bundle: DecisionBundle, tag: str, revie
         {
             "username": user.get('username', 'N/A'),
             "uuid": uuid or "N/A",
-            "system_id": user.get('id', 'N/A'),
+            "system_id": user.get('id') or "",
             "telegram_id": tg_id,
             "ip": bundle.ip,
             "isp": bundle.isp,
             "tag": tag,
             "confidence_band": f"{title} / {bundle.verdict} / {bundle.confidence_band}",
-            "review_url": review_url or "N/A",
+            "review_url": review_url,
         },
     )
     if bundle.case_id:
@@ -2174,17 +2172,17 @@ async def handle_violation(user: Dict, tag: str, bundle: DecisionBundle, warning
     if duration < usage_threshold:
         return
 
-    tg_id = user.get('telegramId', 'N/A')
+    tg_id = user.get('telegramId') or ""
     common_context = {
         "username": user.get('username', 'N/A'),
         "uuid": uuid,
-        "system_id": user.get('id', 'N/A'),
+        "system_id": user.get('id') or "",
         "telegram_id": tg_id,
         "ip": ip,
         "isp": isp,
         "tag": tag,
         "confidence_band": bundle.confidence_band,
-        "review_url": review_url or "N/A",
+        "review_url": review_url,
         "warnings_before_ban": warnings_before_ban,
         "warning_count": warning_count,
         "warnings_left": max(warnings_before_ban - warning_count, 0),
