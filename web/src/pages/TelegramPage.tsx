@@ -16,7 +16,14 @@ type EnvDraftState = {
   clear: boolean;
 };
 
-const TELEGRAM_FIELDS = [
+type TelegramField = {
+  key: string;
+  label: string;
+  type: "text" | "number" | "boolean";
+  step?: number;
+};
+
+const TELEGRAM_FIELDS: TelegramField[] = [
   { key: "tg_admin_chat_id", label: "Admin chat id", type: "text" },
   { key: "tg_topic_id", label: "Admin topic id", type: "number" },
   { key: "telegram_message_min_interval_seconds", label: "Message min interval (sec)", type: "number", step: 0.1 },
@@ -27,7 +34,7 @@ const TELEGRAM_FIELDS = [
   { key: "telegram_notify_warning_only_enabled", label: "Warning-only notifications enabled", type: "boolean" },
   { key: "telegram_notify_warning_enabled", label: "Warning notifications enabled", type: "boolean" },
   { key: "telegram_notify_ban_enabled", label: "Ban notifications enabled", type: "boolean" }
-] as const;
+];
 
 export function TelegramPage() {
   const [data, setData] = useState<TelegramPayload | null>(null);

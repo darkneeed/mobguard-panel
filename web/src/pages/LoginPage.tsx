@@ -1,3 +1,4 @@
+import type { FormEvent } from "react";
 import { useEffect, useState } from "react";
 
 import { api, AuthCapabilities, Session } from "../api/client";
@@ -58,7 +59,7 @@ export function LoginPage({ onAuthenticated }: LoginPageProps) {
     container.appendChild(script);
   }, [auth, onAuthenticated]);
 
-  async function submitLocalLogin(event: React.FormEvent<HTMLFormElement>) {
+  async function submitLocalLogin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSubmitting(true);
     try {
