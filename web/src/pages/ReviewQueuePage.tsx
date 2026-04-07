@@ -3,6 +3,29 @@ import { Link } from "react-router-dom";
 
 import { api, ReviewItem, ReviewListResponse } from "../api/client";
 
+type ReviewFilters = {
+  status: string;
+  confidence_band: string;
+  review_reason: string;
+  severity: string;
+  punitive_eligible: string;
+  q: string;
+  username: string;
+  system_id: string;
+  telegram_id: string;
+  opened_from: string;
+  opened_to: string;
+  repeat_count_min: string;
+  repeat_count_max: string;
+  page: number;
+  page_size: number;
+  sort: string;
+};
+
+function formatIdentifier(label: string, value: string | number | null | undefined) {
+  return `${label}: ${value ?? "N/A"}`;
+}
+
 export function ReviewQueuePage() {
   const [list, setList] = useState<ReviewListResponse>({
     items: [],
@@ -11,13 +34,20 @@ export function ReviewQueuePage() {
     page_size: 25
   });
   const [error, setError] = useState("");
-  const [filters, setFilters] = useState({
+  const [filters, setFilters] = useState<ReviewFilters>({
     status: "OPEN",
     confidence_band: "",
     review_reason: "",
     severity: "",
     punitive_eligible: "",
     q: "",
+    username: "",
+    system_id: "",
+    telegram_id: "",
+    opened_from: "",
+    opened_to: "",
+    repeat_count_min: "",
+    repeat_count_max: "",
     page: 1,
     page_size: 25,
     sort: "updated_desc"
@@ -78,9 +108,62 @@ export function ReviewQueuePage() {
 
       <div className="panel filters">
         <input
-          placeholder="Поиск по IP / username / ISP"
+          placeholder="Быстрый поиск по IP / username / ISP / UUID / IDs"
           value={filters.q}
           onChange={(event) => setFilters((prev) => ({ ...prev, q: event.target.value, page: 1 }))}
+        />
+        <input
+          placeholder="Username"
+          value={String(filters.username ?? "")}
+          onChange={(event) =>
+            setFilters((prev) => ({ ...prev, username: event.target.value, page: 1 }))
+          }
+        />
+        <input
+          placeholder="System ID"
+          value={String(filters.system_id ?? "")}
+          onChange={(event) =>
+            setFilters((prev) => ({ ...prev, system_id: event.target.value, page: 1 }))
+          }
+        />
+        <input
+          placeholder="Telegram ID"
+          value={String(filters.telegram_id ?? "")}
+          onChange={(event) =>
+            setFilters((prev) => ({ ...prev, telegram_id: event.target.value, page: 1 }))
+          }
+        />
+        <input
+          type="date"
+          value={String(filters.opened_from ?? "")}
+          onChange={(event) =>
+            setFilters((prev) => ({ ...prev, opened_from: event.target.value, page: 1 }))
+          }
+        />
+        <input
+          type="date"
+          value={String(filters.opened_to ?? "")}
+          onChange={(event) =>
+            setFilters((prev) => ({ ...prev, opened_to: event.target.value, page: 1 }))
+          }
+        />
+        <input
+          type="number"
+          min={0}
+          placeholder="Repeat count min"
+          value={String(filters.repeat_count_min ?? "")}
+          onChange={(event) =>
+            setFilters((prev) => ({ ...prev, repeat_count_min: event.target.value, page: 1 }))
+          }
+        />
+        <input
+          type="number"
+          min={0}
+          placeholder="Repeat count max"
+          value={String(filters.repeat_count_max ?? "")}
+          onChange={(event) =>
+            setFilters((prev) => ({ ...prev, repeat_count_max: event.target.value, page: 1 }))
+          }
         />
         <select
           value={filters.status}
@@ -151,8 +234,13 @@ export function ReviewQueuePage() {
         {list.items.map((item) => (
           <Link key={item.id} to={`/reviews/${item.id}`} className="queue-card">
             <div className="queue-card-top">
-              <strong>{item.username || item.uuid}</strong>
+              <strong>{item.username || item.uuid || formatIdentifier("User", item.system_id)}</strong>
               <span className={`status-badge status-${item.status.toLowerCase()}`}>{item.status}</span>
+            </div>
+            <div className="queue-card-identifiers">
+              <span>{formatIdentifier("System", item.system_id)}</span>
+              <span>{formatIdentifier("TG", item.telegram_id)}</span>
+              <span>{formatIdentifier("UUID", item.uuid)}</span>
             </div>
             <div className="queue-card-meta">
               <span>{item.ip}</span>
@@ -188,6 +276,7 @@ export function ReviewQueuePage() {
             ) : null}
             <div className="queue-card-bottom">
               <span>repeat x{item.repeat_count}</span>
+              <span>opened {item.opened_at || "n/a"}</span>
               <span>{item.updated_at}</span>
             </div>
           </Link>

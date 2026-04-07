@@ -51,6 +51,9 @@ MobGuard — это система, которая отслеживает нек
     config.json
     bans.db
     GeoLite2-ASN.mmdb
+    GeoLite2-ASN-IPv4.mmdb
+    GeoLite2-ASN-IPv6.mmdb
+    ip2asn-combined.tsv.gz
     health/
 ```
 
@@ -59,7 +62,9 @@ MobGuard — это система, которая отслеживает нек
 - `.env` — секреты и токены
 - `runtime/config.json` — основной редактируемый рантайм-конфиг
 - `runtime/bans.db` — SQLite база
-- `runtime/GeoLite2-ASN.mmdb` — ASN база MaxMind
+- `runtime/GeoLite2-ASN.mmdb` — одиночная ASN MMDB база
+- `runtime/GeoLite2-ASN-IPv4.mmdb` + `runtime/GeoLite2-ASN-IPv6.mmdb` — split MMDB база
+- `runtime/ip2asn-combined.tsv.gz` — ASN база IPtoASN в TSV формате
 - `runtime/health/` — служебный каталог под health/runtime
 - `Caddyfile.example` — пример конфигурации внешнего Caddy
 
@@ -69,7 +74,7 @@ MobGuard — это система, которая отслеживает нек
 
 ### 2.1. Что хранится в `.env`
 
-В `.env` должны лежать только секреты и токены:
+В `.env` должны лежать секреты, токены и опциональные install-time переключатели:
 
 ```env
 TG_MAIN_BOT_TOKEN=
@@ -77,7 +82,9 @@ TG_ADMIN_BOT_TOKEN=
 TG_ADMIN_BOT_USERNAME=
 PANEL_TOKEN=
 IPINFO_TOKEN=
-# optional: нужен только для автоматической загрузки GeoLite2-ASN.mmdb
+# optional install-time switch: auto|oxl|dbip|maxmind|iptoasn|manual
+ASN_DB_PROVIDER=auto
+# optional: нужен только если выбран maxmind или auto дошёл до maxmind
 MAXMIND_LICENSE_KEY=
 ```
 
@@ -88,7 +95,8 @@ MAXMIND_LICENSE_KEY=
 - `TG_ADMIN_BOT_USERNAME` — username админ-бота без `@`
 - `PANEL_TOKEN` — токен доступа к Remnawave API
 - `IPINFO_TOKEN` — обязательный токен IPInfo, без него score может деградировать к `0`
-- `MAXMIND_LICENSE_KEY` — необязательный ключ MaxMind, нужен только для автоматической загрузки `runtime/GeoLite2-ASN.mmdb`
+- `ASN_DB_PROVIDER` — необязательный install-time выбор ASN-источника; по умолчанию `auto`
+- `MAXMIND_LICENSE_KEY` — необязательный ключ MaxMind, нужен только если выбран `maxmind` или `auto` дошёл до MaxMind
 
 Обязательными для запуска `install.sh` с последующим `docker compose up -d --build` считаются только:
 
@@ -98,12 +106,12 @@ MAXMIND_LICENSE_KEY=
 - `PANEL_TOKEN`
 - `IPINFO_TOKEN`
 
-`MAXMIND_LICENSE_KEY` не блокирует установку, если ASN-база уже лежит в `runtime/GeoLite2-ASN.mmdb`, будет положена вручную позже или установка пока выполняется без неё.
+`MAXMIND_LICENSE_KEY` не блокирует установку, если ASN-источник уже лежит в `runtime/`, будет положен вручную позже или установка пока выполняется без него.
 
 Большинство инфраструктурных путей пользователю вручную больше задавать не нужно:
 
 - `db_file` считается константой: `/opt/mobguard/runtime/bans.db`
-- `geoip_db` считается константой: `/opt/mobguard/runtime/GeoLite2-ASN.mmdb`
+- `geoip_db` нормализуется к текущему runtime-dir автоматически
 - runtime-dir считается `/opt/mobguard/runtime`
 - health-dir считается `/opt/mobguard/runtime/health`
 
@@ -145,16 +153,16 @@ MAXMIND_LICENSE_KEY=
 - score часто остаётся равным `0`
 - кейсы массово улетают в ручную модерацию
 
-### 3.2. Нет `runtime/GeoLite2-ASN.mmdb`
+### 3.2. Нет ASN-источника в `runtime/`
 
-Если `runtime/GeoLite2-ASN.mmdb` отсутствует:
+Если в `runtime/` отсутствует любой поддерживаемый ASN-источник:
 
 - fallback по ASN работает неполно
 - ASN-анализ и часть эвристик становятся менее точными
 - `analysis_24h.asn_missing_ratio` может заметно расти
 - score тоже может залипать ниже ожидаемого, особенно если данных от IPInfo недостаточно
 
-Если одновременно нет и `IPINFO_TOKEN`, и `GeoLite2-ASN.mmdb`, деградация качества анализа будет максимальной.
+Если одновременно нет и `IPINFO_TOKEN`, и ASN-источника, деградация качества анализа будет максимальной.
 
 Теперь проект показывает это явно:
 
@@ -168,7 +176,8 @@ MAXMIND_LICENSE_KEY=
 
 1. заполнен ли `IPINFO_TOKEN` в `.env`
 2. показывает ли `/api/health` поле `ipinfo_token_present=true`
-3. существует ли `runtime/GeoLite2-ASN.mmdb`
+3. существует ли хотя бы один ASN-источник в `runtime/`:
+   `GeoLite2-ASN.mmdb`, `GeoLite2-ASN-IPv4.mmdb` + `GeoLite2-ASN-IPv6.mmdb` или `ip2asn-combined.tsv.gz`
 4. действительно ли прокси пишет лог в ожидаемое место
 
 ---
@@ -187,18 +196,32 @@ MAXMIND_LICENSE_KEY=
 - проект уже склонирован, запуск по месту: `./install.sh`
 - в каталоге лежит только `install.sh`, и он сам клонирует приватный репозиторий: `./install.sh 'https://<TOKEN>@github.com/darkneeed/mobguard.git'`
 
-### 4.1. Сценарии ASN-базы
+### 4.1. Источники ASN-базы
 
-`install.sh` обрабатывает `runtime/GeoLite2-ASN.mmdb` так:
+`install.sh` поддерживает несколько бесплатных ASN-источников:
 
-1. если файл уже лежит в `runtime/GeoLite2-ASN.mmdb`, установка продолжается без `MAXMIND_LICENSE_KEY`
-2. если файла нет, но заполнен `MAXMIND_LICENSE_KEY`, скрипт пытается скачать ASN-базу автоматически
-3. если файла нет и `MAXMIND_LICENSE_KEY` пустой, скрипт выводит предупреждение и продолжает установку без ASN-базы
+- `oxl` — open/free OXL, split MMDB (`GeoLite2-ASN-IPv4.mmdb` + `GeoLite2-ASN-IPv6.mmdb`)
+- `dbip` — free DB-IP Lite, single MMDB (`GeoLite2-ASN.mmdb`)
+- `maxmind` — free GeoLite2 ASN от MaxMind, single MMDB (`GeoLite2-ASN.mmdb`), нужен `MAXMIND_LICENSE_KEY`
+- `iptoasn` — public-domain IPtoASN, combined TSV (`ip2asn-combined.tsv.gz`)
+- `manual` — ничего не скачивать автоматически
+- `auto` — пробовать источники по порядку `oxl -> dbip -> maxmind -> iptoasn`
+
+Если ASN-файлы уже лежат в `runtime/`, `install.sh` использует их и ничего не перекачивает.
+
+### 4.2. Сценарии ASN-базы
+
+`install.sh` обрабатывает ASN-источник так:
+
+1. если в `runtime/` уже найден поддерживаемый ASN-файл, установка продолжается без загрузки
+2. если файла нет, `install.sh` пробует скачать его из выбранного `ASN_DB_PROVIDER`
+3. если файла нет и загрузка не удалась или отключена, скрипт выводит предупреждение и продолжает установку без ASN-базы
 
 В третьем сценарии можно в любой момент:
 
-- положить `GeoLite2-ASN.mmdb` вручную в `runtime/GeoLite2-ASN.mmdb`
-- заполнить `MAXMIND_LICENSE_KEY` в `.env`
+- положить вручную один из поддерживаемых файлов в `runtime/`
+- выбрать `ASN_DB_PROVIDER` в `.env`
+- при `maxmind` заполнить `MAXMIND_LICENSE_KEY`
 - повторно запустить `./install.sh`
 
 ---
@@ -217,8 +240,10 @@ MAXMIND_LICENSE_KEY=
 - git
 - curl
 - tar
+- gzip
+- unzip
 
-`curl` и `tar` нужны только для автоматической загрузки `GeoLite2-ASN.mmdb`. Если ASN-база уже положена вручную, они не участвуют в анализе самого рантайма.
+`curl`, `tar`, `gzip` и `unzip` нужны только для автоматической загрузки ASN-источников. Если ASN-файлы уже положены вручную, они не участвуют в анализе самого рантайма.
 
 Проверьте:
 
@@ -229,6 +254,8 @@ caddy version
 git --version
 curl --version
 tar --version
+gzip --version
+unzip -v
 ```
 
 Если какой-то команды нет, сначала установите её.
@@ -371,15 +398,18 @@ TG_ADMIN_BOT_TOKEN=...
 TG_ADMIN_BOT_USERNAME=...
 PANEL_TOKEN=...
 IPINFO_TOKEN=...
-# optional: только для автоматической загрузки ASN-базы
+# optional install-time switch: auto|oxl|dbip|maxmind|iptoasn|manual
+ASN_DB_PROVIDER=auto
+# optional: только если выбран maxmind или auto дошёл до maxmind
 MAXMIND_LICENSE_KEY=...
 ```
 
 Что считается правильным результатом:
 
 - обязательные строки не пустые
-- `MAXMIND_LICENSE_KEY` заполнен только если вы хотите, чтобы `install.sh` сам скачал ASN-базу
-- если `runtime/GeoLite2-ASN.mmdb` уже лежит вручную, `MAXMIND_LICENSE_KEY` можно оставить пустым
+- `ASN_DB_PROVIDER=auto` подходит в большинстве случаев
+- `MAXMIND_LICENSE_KEY` нужен только для MaxMind
+- если ASN-источник уже лежит вручную, `MAXMIND_LICENSE_KEY` можно оставить пустым
 
 Что проверить после шага:
 
@@ -444,21 +474,24 @@ cd /opt/mobguard
 
 1. увидеть, что `.env` уже существует и не перетирать его
 2. не трогать уже существующие `runtime/config.json` и `runtime/bans.db`
-3. обработать ASN-базу по одному из трёх сценариев:
-   - использовать уже существующий `runtime/GeoLite2-ASN.mmdb`
-   - скачать `runtime/GeoLite2-ASN.mmdb` через `MAXMIND_LICENSE_KEY`
+3. обработать ASN-источник по одному из сценариев:
+   - использовать уже существующий ASN-файл из `runtime/`
+   - скачать ASN-файл из выбранного `ASN_DB_PROVIDER`
    - вывести предупреждение и продолжить без ASN-базы
 4. запустить `docker compose up -d --build`, если обязательные токены заполнены
 
 Что считается правильным результатом:
 
 - контейнеры стартовали, если обязательные токены были заполнены
-- `runtime/GeoLite2-ASN.mmdb` либо уже существует, либо был скачан, либо его отсутствие явно объяснено предупреждением
+- в `runtime/` появился один из поддерживаемых ASN-источников, либо его отсутствие явно объяснено предупреждением
 
 Что проверить после шага:
 
 ```bash
 ls -lh /opt/mobguard/runtime/GeoLite2-ASN.mmdb
+ls -lh /opt/mobguard/runtime/GeoLite2-ASN-IPv4.mmdb
+ls -lh /opt/mobguard/runtime/GeoLite2-ASN-IPv6.mmdb
+ls -lh /opt/mobguard/runtime/ip2asn-combined.tsv.gz
 docker compose ps
 ```
 
@@ -657,7 +690,7 @@ cat /opt/mobguard/runtime/config.json
 
 1. заполнен ли `IPINFO_TOKEN`
 2. доступен ли `IPINFO` по `/api/health`
-3. существует ли `runtime/GeoLite2-ASN.mmdb`
+3. существует ли ASN-источник в `runtime/`
 4. пишет ли прокси лог в нужное место
 
 ---
@@ -872,7 +905,7 @@ cd /opt/mobguard
 chmod +x install.sh
 ./install.sh
 
-nano .env  # обязательные токены; MAXMIND_LICENSE_KEY опционален
+nano .env  # обязательные токены; ASN_DB_PROVIDER и MAXMIND_LICENSE_KEY опциональны
 nano runtime/config.json
 
 ./install.sh  # продолжает установку; без ASN-базы только предупреждает
@@ -892,5 +925,5 @@ sudo systemctl status caddy
 2. Каталог проекта: `/opt/mobguard`
 3. Секреты: `/opt/mobguard/.env`
 4. Основной runtime-конфиг: `/opt/mobguard/runtime/config.json`
-5. Если score снова падает к нулю — сначала проверяйте `IPINFO_TOKEN`, `/api/health` и наличие `runtime/GeoLite2-ASN.mmdb`
+5. Если score снова падает к нулю — сначала проверяйте `IPINFO_TOKEN`, `/api/health` и наличие ASN-источника в `runtime/`
 6. Первый безопасный запуск делайте с `shadow_mode=true`

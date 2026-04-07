@@ -19,7 +19,11 @@ class StoreReviewFlowTests(unittest.TestCase):
             "home_isp_keywords": ["fiber"],
             "exclude_isp_keywords": ["hosting"],
             "admin_tg_ids": [1001],
+            "exempt_tg_ids": [2002],
+            "exempt_ids": [3003],
+            "mobile_tags": ["TAG"],
             "settings": {
+                "mobile_score_threshold": 55,
                 "threshold_mobile": 60,
                 "threshold_home": 15,
                 "threshold_probable_home": 30,
@@ -29,6 +33,7 @@ class StoreReviewFlowTests(unittest.TestCase):
                 "learning_promote_combo_min_support": 1,
                 "learning_promote_combo_min_precision": 1.0,
                 "shadow_mode": True,
+                "log_file": "/var/log/remnanode/access.log",
             },
         }
         self.store = PlatformStore(self.db_path, self.base_config, self.config_path)
@@ -55,12 +60,14 @@ class StoreReviewFlowTests(unittest.TestCase):
             "keyword matched",
             {"keywords": ["fiber"]},
         )
-        user = {"uuid": "uuid-1", "username": "alice", "telegramId": "1001"}
+        user = {"uuid": "uuid-1", "username": "alice", "telegramId": "1001", "id": 42}
         event_id = self.store.record_analysis_event(user, bundle.ip, "TAG", bundle)
         summary = self.store.ensure_review_case(user, bundle.ip, "TAG", bundle, event_id, "probable_home")
         resolved = self.store.resolve_review_case(summary.id, "HOME", "admin", 1001, "confirmed")
 
         self.assertEqual(resolved["status"], "RESOLVED")
+        self.assertEqual(resolved["system_id"], 42)
+        self.assertEqual(resolved["latest_event"]["system_id"], 42)
         self.assertEqual(self.store.get_ip_override(bundle.ip), "HOME")
         pattern = self.store.get_promoted_pattern("asn", "12345")
         self.assertIsNotNone(pattern)
@@ -90,6 +97,115 @@ class StoreReviewFlowTests(unittest.TestCase):
             payload = json.load(handle)
         self.assertEqual(payload["settings"]["threshold_mobile"], 70)
         self.assertEqual(payload["_meta"]["revision"], updated["revision"])
+        self.assertEqual(payload["settings"]["log_file"], "/var/log/remnanode/access.log")
+        self.assertEqual(payload["mobile_tags"], ["TAG"])
+
+    def test_legacy_threshold_alias_is_normalized_in_saved_rules(self):
+        updated = self.store.update_live_rules(
+            {"settings": {"mobile_score_threshold": 72}},
+            "admin",
+            1001,
+        )
+
+        self.assertEqual(updated["rules"]["settings"]["threshold_mobile"], 72)
+        with open(self.config_path, "r", encoding="utf-8") as handle:
+            payload = json.load(handle)
+        self.assertEqual(payload["settings"]["threshold_mobile"], 72)
+        self.assertNotIn("mobile_score_threshold", payload["settings"])
+
+    def test_admin_and_exempt_lists_stay_separate(self):
+        state = self.store.get_live_rules_state()
+
+        self.assertEqual(state["rules"]["admin_tg_ids"], [1001])
+        self.assertEqual(state["rules"]["exempt_tg_ids"], [2002])
+        self.assertEqual(state["rules"]["exempt_ids"], [3003])
+        self.assertTrue(self.store.is_admin_tg_id(1001))
+        self.assertFalse(self.store.is_admin_tg_id(2002))
+
+    def test_list_review_cases_filters_by_dates_identifiers_and_repeat_count(self):
+        first_user = {"uuid": "uuid-1", "username": "alice", "telegramId": "1001", "id": 42}
+        second_user = {"uuid": "uuid-2", "username": "bob", "telegramId": "2002", "id": 77}
+
+        first_bundle = DecisionBundle(
+            ip="10.10.10.10",
+            verdict="HOME",
+            confidence_band="PROBABLE_HOME",
+            score=18,
+            asn=12345,
+            isp="ISP-A",
+        )
+        second_bundle = DecisionBundle(
+            ip="10.10.10.11",
+            verdict="UNSURE",
+            confidence_band="UNSURE",
+            score=0,
+            asn=None,
+            isp="ISP-B",
+        )
+
+        first_event = self.store.record_analysis_event(first_user, first_bundle.ip, "TAG", first_bundle)
+        first_case = self.store.ensure_review_case(first_user, first_bundle.ip, "TAG", first_bundle, first_event, "probable_home")
+        second_event = self.store.record_analysis_event(second_user, second_bundle.ip, "TAG", second_bundle)
+        second_case = self.store.ensure_review_case(second_user, second_bundle.ip, "TAG", second_bundle, second_event, "unsure")
+
+        with self.store._connect() as conn:
+            conn.execute(
+                "UPDATE review_cases SET opened_at = ?, repeat_count = ? WHERE id = ?",
+                ("2026-04-01T10:00:00", 3, first_case.id),
+            )
+            conn.execute(
+                "UPDATE review_cases SET opened_at = ?, repeat_count = ? WHERE id = ?",
+                ("2026-04-03T09:00:00", 1, second_case.id),
+            )
+            conn.commit()
+
+        filtered = self.store.list_review_cases(
+            {
+                "username": "ali",
+                "system_id": 42,
+                "telegram_id": "1001",
+                "opened_from": "2026-04-01",
+                "opened_to": "2026-04-01",
+                "repeat_count_min": 2,
+                "repeat_count_max": 4,
+            }
+        )
+
+        self.assertEqual(filtered["count"], 1)
+        self.assertEqual(filtered["items"][0]["id"], first_case.id)
+        self.assertEqual(filtered["items"][0]["system_id"], 42)
+        self.assertEqual(filtered["items"][0]["opened_at"], "2026-04-01T10:00:00")
+
+    def test_quality_metrics_include_promoted_and_legacy_learning_state(self):
+        user = {"uuid": "uuid-1", "username": "alice", "telegramId": "1001", "id": 42}
+        bundle = DecisionBundle(
+            ip="10.10.10.10",
+            verdict="HOME",
+            confidence_band="PROBABLE_HOME",
+            score=18,
+            asn=12345,
+            isp="ISP",
+        )
+        event_id = self.store.record_analysis_event(user, bundle.ip, "TAG", bundle)
+        summary = self.store.ensure_review_case(user, bundle.ip, "TAG", bundle, event_id, "probable_home")
+        self.store.resolve_review_case(summary.id, "HOME", "admin", 1001, "confirmed")
+
+        with self.store._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO unsure_learning (pattern_type, pattern_value, decision, confidence, timestamp)
+                VALUES ('asn', '12345', 'HOME', 7, '2026-04-01T10:00:00')
+                """
+            )
+            conn.commit()
+
+        metrics = self.store.get_quality_metrics()
+
+        self.assertIn("learning", metrics)
+        self.assertGreaterEqual(metrics["learning"]["promoted"]["active_patterns"], 1)
+        self.assertEqual(metrics["learning"]["legacy"]["total_patterns"], 1)
+        self.assertEqual(metrics["learning"]["legacy"]["total_confidence"], 7)
+        self.assertEqual(metrics["learning"]["thresholds"]["asn_min_support"], 1)
 
     def test_health_snapshot_reflects_core_heartbeat(self):
         previous = os.environ.get("IPINFO_TOKEN")

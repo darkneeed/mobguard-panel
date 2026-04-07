@@ -20,6 +20,12 @@ EDITABLE_TOP_LEVEL_KEYS = {
     "home_isp_keywords": str,
     "exclude_isp_keywords": str,
     "admin_tg_ids": int,
+    "exempt_tg_ids": int,
+    "exempt_ids": int,
+}
+
+LEGACY_EDITABLE_SETTING_ALIASES = {
+    "mobile_score_threshold": "threshold_mobile",
 }
 
 EDITABLE_SETTINGS_KEYS = {
@@ -103,6 +109,61 @@ def _validate_setting(key: str, value: Any) -> Any:
     return value
 
 
+def _coerce_optional_int(value: Any) -> Optional[int]:
+    if value in (None, ""):
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _parse_day_boundary(value: Any, *, end_of_day: bool) -> str:
+    try:
+        parsed = datetime.strptime(str(value), "%Y-%m-%d")
+    except ValueError as exc:
+        raise ValueError(f"Invalid date format for {value!r}, expected YYYY-MM-DD") from exc
+    if end_of_day:
+        parsed = parsed.replace(hour=23, minute=59, second=59)
+    return parsed.isoformat()
+
+
+def _normalize_settings_for_storage(settings: dict[str, Any]) -> dict[str, Any]:
+    normalized_settings: dict[str, Any] = {}
+    for key, value in settings.items():
+        canonical_key = LEGACY_EDITABLE_SETTING_ALIASES.get(key, key)
+        if canonical_key not in EDITABLE_SETTINGS_KEYS:
+            raise ValueError(f"Unsupported editable setting: {key}")
+        if key in LEGACY_EDITABLE_SETTING_ALIASES and canonical_key in settings:
+            continue
+        normalized_settings[canonical_key] = _validate_setting(canonical_key, value)
+    return normalized_settings
+
+
+def _apply_editable_settings(target: dict[str, Any], source: Any) -> None:
+    if not isinstance(source, dict):
+        return
+    for key, value in source.items():
+        canonical_key = LEGACY_EDITABLE_SETTING_ALIASES.get(key, key)
+        if canonical_key not in EDITABLE_SETTINGS_KEYS:
+            continue
+        if key in LEGACY_EDITABLE_SETTING_ALIASES and canonical_key in source:
+            continue
+        target[canonical_key] = copy.deepcopy(value)
+
+
+def _normalize_settings_for_runtime(source: Any, base_settings: Any) -> dict[str, Any]:
+    normalized: dict[str, Any] = {}
+    _apply_editable_settings(normalized, base_settings)
+    _apply_editable_settings(normalized, source)
+    for key, value in DEFAULT_SETTINGS.items():
+        normalized.setdefault(key, value)
+    return {
+        key: copy.deepcopy(normalized.get(key, DEFAULT_SETTINGS.get(key)))
+        for key in EDITABLE_SETTINGS_KEYS
+    }
+
+
 def validate_live_rules_patch(payload: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise ValueError("Rules payload must be an object")
@@ -116,12 +177,7 @@ def validate_live_rules_patch(payload: dict[str, Any]) -> dict[str, Any]:
         settings = payload["settings"]
         if not isinstance(settings, dict):
             raise ValueError("settings must be an object")
-        normalized_settings: dict[str, Any] = {}
-        for key, value in settings.items():
-            if key not in EDITABLE_SETTINGS_KEYS:
-                raise ValueError(f"Unsupported editable setting: {key}")
-            normalized_settings[key] = _validate_setting(key, value)
-        normalized["settings"] = normalized_settings
+        normalized["settings"] = _normalize_settings_for_storage(settings)
 
     unsupported = set(payload) - set(EDITABLE_TOP_LEVEL_KEYS) - {"settings"}
     if unsupported:
@@ -150,37 +206,29 @@ class PlatformStore:
         conn.execute("PRAGMA busy_timeout = 5000")
         return conn
 
-    def build_seed_rules(self) -> dict[str, Any]:
-        settings = copy.deepcopy(self.base_config.get("settings", {}))
-        for key, value in DEFAULT_SETTINGS.items():
-            settings.setdefault(key, value)
+    def _table_exists(self, conn: sqlite3.Connection, table_name: str) -> bool:
+        row = conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
+            (table_name,),
+        ).fetchone()
+        return row is not None
 
-        rules = {
-            key: list(copy.deepcopy(self.base_config.get(key, [])))
-            for key in EDITABLE_TOP_LEVEL_KEYS
-            if key != "admin_tg_ids"
-        }
-        rules["admin_tg_ids"] = list(
-            copy.deepcopy(
-                self.base_config.get(
-                    "admin_tg_ids", self.base_config.get("exempt_tg_ids", [])
-                )
-            )
-        )
-        rules["settings"] = {
-            key: settings.get(key, DEFAULT_SETTINGS.get(key))
-            for key in EDITABLE_SETTINGS_KEYS
-        }
-        return rules
+    def build_seed_rules(self) -> dict[str, Any]:
+        return self._normalize_rules({})
 
     def _normalize_rules(self, payload: dict[str, Any]) -> dict[str, Any]:
-        rules = copy.deepcopy(payload)
-        for key, value in DEFAULT_SETTINGS.items():
-            rules.setdefault("settings", {})
-            rules["settings"].setdefault(key, value)
-        rules.setdefault(
-            "admin_tg_ids",
-            self.base_config.get("admin_tg_ids", self.base_config.get("exempt_tg_ids", [])),
+        rules: dict[str, Any] = {}
+        payload = payload if isinstance(payload, dict) else {}
+
+        for key, item_type in EDITABLE_TOP_LEVEL_KEYS.items():
+            raw_value = copy.deepcopy(payload.get(key, self.base_config.get(key, [])))
+            if raw_value is None:
+                raw_value = []
+            rules[key] = _ensure_list_of_type(key, raw_value, item_type)
+
+        rules["settings"] = _normalize_settings_for_runtime(
+            payload.get("settings", {}),
+            self.base_config.get("settings", {}),
         )
         return rules
 
@@ -206,7 +254,7 @@ class PlatformStore:
             self._rules_cache_mtime = current_mtime
             return rules, meta
 
-        return self._normalize_rules(self.build_seed_rules()), {
+        return self.build_seed_rules(), {
             "revision": 1,
             "updated_at": "",
             "updated_by": "bootstrap",
@@ -216,7 +264,23 @@ class PlatformStore:
         if not self.config_path:
             return
         os.makedirs(os.path.dirname(self.config_path), exist_ok=True)
-        payload = copy.deepcopy(rules)
+        payload = copy.deepcopy(self.base_config or {})
+        if os.path.exists(self.config_path):
+            with open(self.config_path, "r", encoding="utf-8") as handle:
+                current_payload = json.load(handle)
+            current_payload.pop("_meta", None)
+            if isinstance(current_payload, dict):
+                payload.update(current_payload)
+
+        settings_payload = {}
+        if isinstance(payload.get("settings"), dict):
+            settings_payload = copy.deepcopy(payload["settings"])
+        settings_payload.pop("mobile_score_threshold", None)
+        settings_payload.update(copy.deepcopy(rules.get("settings", {})))
+
+        for key in EDITABLE_TOP_LEVEL_KEYS:
+            payload[key] = list(copy.deepcopy(rules.get(key, [])))
+        payload["settings"] = settings_payload
         payload["_meta"] = {
             "revision": int(meta.get("revision", 1)),
             "updated_at": meta.get("updated_at", ""),
@@ -261,6 +325,7 @@ class PlatformStore:
                     created_at TEXT NOT NULL,
                     uuid TEXT,
                     username TEXT,
+                    system_id INTEGER,
                     telegram_id TEXT,
                     ip TEXT NOT NULL,
                     tag TEXT,
@@ -285,6 +350,7 @@ class PlatformStore:
                     review_reason TEXT NOT NULL,
                     uuid TEXT,
                     username TEXT,
+                    system_id INTEGER,
                     telegram_id TEXT,
                     ip TEXT NOT NULL,
                     tag TEXT,
@@ -327,6 +393,19 @@ class PlatformStore:
                     decision TEXT NOT NULL,
                     created_at TEXT NOT NULL,
                     UNIQUE(case_id, pattern_type, pattern_value, decision)
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS unsure_learning (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    pattern_type TEXT NOT NULL,
+                    pattern_value TEXT NOT NULL,
+                    decision TEXT NOT NULL,
+                    confidence INTEGER NOT NULL,
+                    timestamp TEXT NOT NULL,
+                    UNIQUE(pattern_type, pattern_value, decision)
                 )
                 """
             )
@@ -423,10 +502,25 @@ class PlatformStore:
                 "CREATE INDEX IF NOT EXISTS idx_review_cases_status ON review_cases(status, updated_at)"
             )
             conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_review_cases_opened_at ON review_cases(opened_at)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_review_cases_system_id ON review_cases(system_id)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_review_cases_telegram_id ON review_cases(telegram_id)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_analysis_events_system_id ON analysis_events(system_id)"
+            )
+            conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_analysis_events_ip ON analysis_events(ip, created_at)"
             )
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_review_labels_pattern ON review_labels(pattern_type, pattern_value)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_unsure_learning_pattern ON unsure_learning(pattern_type, pattern_value)"
             )
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_admin_sessions_exp ON admin_sessions(expires_at)"
@@ -437,11 +531,18 @@ class PlatformStore:
             }
             if columns and "bundle_json" not in columns:
                 conn.execute("ALTER TABLE ip_decisions ADD COLUMN bundle_json TEXT")
+            analysis_event_columns = {
+                row["name"] for row in conn.execute("PRAGMA table_info(analysis_events)").fetchall()
+            }
+            if analysis_event_columns and "system_id" not in analysis_event_columns:
+                conn.execute("ALTER TABLE analysis_events ADD COLUMN system_id INTEGER")
             review_case_columns = {
                 row["name"] for row in conn.execute("PRAGMA table_info(review_cases)").fetchall()
             }
             if review_case_columns and "punitive_eligible" not in review_case_columns:
                 conn.execute("ALTER TABLE review_cases ADD COLUMN punitive_eligible INTEGER NOT NULL DEFAULT 0")
+            if review_case_columns and "system_id" not in review_case_columns:
+                conn.execute("ALTER TABLE review_cases ADD COLUMN system_id INTEGER")
             live_rules_columns = {
                 row["name"] for row in conn.execute("PRAGMA table_info(live_rules)").fetchall()
             }
@@ -478,6 +579,7 @@ class PlatformStore:
             if key in live_rules:
                 runtime_config[key] = list(live_rules[key])
         runtime_config.setdefault("settings", {})
+        runtime_config["settings"].pop("mobile_score_threshold", None)
         for key in EDITABLE_SETTINGS_KEYS:
             if key in live_rules.get("settings", {}):
                 runtime_config["settings"][key] = live_rules["settings"][key]
@@ -599,15 +701,16 @@ class PlatformStore:
             cursor = conn.execute(
                 """
                 INSERT INTO analysis_events (
-                    created_at, uuid, username, telegram_id, ip, tag,
+                    created_at, uuid, username, system_id, telegram_id, ip, tag,
                     verdict, confidence_band, score, isp, asn, punitive_eligible,
                     reasons_json, signal_flags_json, bundle_json
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     now,
                     (user or {}).get("uuid"),
                     (user or {}).get("username"),
+                    _coerce_optional_int((user or {}).get("id")),
                     str((user or {}).get("telegramId")) if (user or {}).get("telegramId") is not None else None,
                     ip,
                     tag,
@@ -655,6 +758,7 @@ class PlatformStore:
                     SET status = 'OPEN',
                         review_reason = ?,
                         username = ?,
+                        system_id = ?,
                         telegram_id = ?,
                         verdict = ?,
                         confidence_band = ?,
@@ -671,6 +775,7 @@ class PlatformStore:
                     (
                         review_reason,
                         (user or {}).get("username"),
+                        _coerce_optional_int((user or {}).get("id")),
                         str((user or {}).get("telegramId")) if (user or {}).get("telegramId") is not None else None,
                         bundle.verdict,
                         bundle.confidence_band,
@@ -690,16 +795,17 @@ class PlatformStore:
                 cursor = conn.execute(
                     """
                     INSERT INTO review_cases (
-                        unique_key, status, review_reason, uuid, username, telegram_id, ip, tag,
+                        unique_key, status, review_reason, uuid, username, system_id, telegram_id, ip, tag,
                         verdict, confidence_band, score, isp, asn, punitive_eligible, latest_event_id, repeat_count,
                         reason_codes_json, opened_at, updated_at
-                    ) VALUES (?, 'OPEN', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
+                    ) VALUES (?, 'OPEN', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
                     """,
                     (
                         unique_key,
                         review_reason,
                         (user or {}).get("uuid"),
                         (user or {}).get("username"),
+                        _coerce_optional_int((user or {}).get("id")),
                         str((user or {}).get("telegramId")) if (user or {}).get("telegramId") is not None else None,
                         ip,
                         tag,
@@ -724,6 +830,7 @@ class PlatformStore:
             review_reason=summary["review_reason"],
             uuid=summary.get("uuid") or "",
             username=summary.get("username") or "",
+            system_id=summary.get("system_id"),
             telegram_id=summary.get("telegram_id"),
             ip=summary["ip"],
             tag=summary.get("tag") or "",
@@ -753,8 +860,8 @@ class PlatformStore:
         }
         order_by = sort_map.get(sort, "updated_at DESC")
         query = [
-            """SELECT id, status, review_reason, uuid, username, telegram_id, ip, tag, verdict, confidence_band,
-               score, isp, asn, punitive_eligible, repeat_count, reason_codes_json, updated_at,
+            """SELECT id, status, review_reason, uuid, username, system_id, telegram_id, ip, tag, verdict, confidence_band,
+               score, isp, asn, punitive_eligible, repeat_count, reason_codes_json, opened_at, updated_at,
                CASE
                    WHEN punitive_eligible = 1 THEN 'critical'
                    WHEN confidence_band = 'HIGH_HOME' THEN 'high'
@@ -774,6 +881,15 @@ class PlatformStore:
         if filters.get("asn") not in (None, ""):
             clauses.append("asn = ?")
             params.append(int(filters["asn"]))
+        if filters.get("username"):
+            clauses.append("username LIKE ?")
+            params.append(f"%{filters['username']}%")
+        if filters.get("system_id") not in (None, ""):
+            clauses.append("system_id = ?")
+            params.append(int(filters["system_id"]))
+        if filters.get("telegram_id") not in (None, ""):
+            clauses.append("telegram_id = ?")
+            params.append(str(filters["telegram_id"]))
         if filters.get("review_reason"):
             clauses.append("review_reason = ?")
             params.append(filters["review_reason"])
@@ -790,9 +906,24 @@ class PlatformStore:
         if filters.get("punitive_eligible") not in (None, ""):
             clauses.append("punitive_eligible = ?")
             params.append(1 if str(filters["punitive_eligible"]).lower() in {"1", "true", "yes"} else 0)
+        if filters.get("repeat_count_min") not in (None, ""):
+            clauses.append("repeat_count >= ?")
+            params.append(int(filters["repeat_count_min"]))
+        if filters.get("repeat_count_max") not in (None, ""):
+            clauses.append("repeat_count <= ?")
+            params.append(int(filters["repeat_count_max"]))
+        if filters.get("opened_from"):
+            clauses.append("opened_at >= ?")
+            params.append(_parse_day_boundary(filters["opened_from"], end_of_day=False))
+        if filters.get("opened_to"):
+            clauses.append("opened_at <= ?")
+            params.append(_parse_day_boundary(filters["opened_to"], end_of_day=True))
         if filters.get("q"):
-            clauses.append("(ip LIKE ? OR username LIKE ? OR isp LIKE ?)")
-            params.extend([f"%{filters['q']}%"] * 3)
+            search = f"%{filters['q']}%"
+            clauses.append(
+                "(ip LIKE ? OR username LIKE ? OR isp LIKE ? OR uuid LIKE ? OR telegram_id LIKE ? OR CAST(system_id AS TEXT) LIKE ?)"
+            )
+            params.extend([search] * 6)
         if clauses:
             query.append("WHERE " + " AND ".join(clauses))
         where_sql = (" WHERE " + " AND ".join(clauses)) if clauses else ""
@@ -840,7 +971,7 @@ class PlatformStore:
             ).fetchall()
             related_cases = conn.execute(
                 """
-                SELECT id, status, ip, verdict, confidence_band, updated_at
+                SELECT id, status, ip, verdict, confidence_band, updated_at, username, uuid, system_id, telegram_id
                 FROM review_cases
                 WHERE id != ? AND (uuid = ? OR ip = ?)
                 ORDER BY updated_at DESC
@@ -1060,6 +1191,20 @@ class PlatformStore:
 
     def get_quality_metrics(self) -> dict[str, Any]:
         live_rules_state = self.get_live_rules_state()
+        learning_thresholds = {
+            "asn_min_support": int(
+                live_rules_state["rules"].get("settings", {}).get("learning_promote_asn_min_support", 10)
+            ),
+            "asn_min_precision": float(
+                live_rules_state["rules"].get("settings", {}).get("learning_promote_asn_min_precision", 0.95)
+            ),
+            "combo_min_support": int(
+                live_rules_state["rules"].get("settings", {}).get("learning_promote_combo_min_support", 5)
+            ),
+            "combo_min_precision": float(
+                live_rules_state["rules"].get("settings", {}).get("learning_promote_combo_min_precision", 0.90)
+            ),
+        }
         with self._connect() as conn:
             open_cases = conn.execute(
                 "SELECT COUNT(*) AS cnt FROM review_cases WHERE status = 'OPEN'"
@@ -1096,6 +1241,41 @@ class PlatformStore:
                 LIMIT 10
                 """
             ).fetchall()
+            promoted_by_type = conn.execute(
+                """
+                SELECT pattern_type, COUNT(*) AS count, COALESCE(SUM(support), 0) AS total_support,
+                       COALESCE(AVG(precision), 0) AS avg_precision
+                FROM learning_patterns_active
+                GROUP BY pattern_type
+                ORDER BY total_support DESC, count DESC
+                """
+            ).fetchall()
+            legacy_total_patterns = 0
+            legacy_total_confidence = 0
+            legacy_by_type: list[sqlite3.Row] = []
+            legacy_top_patterns: list[sqlite3.Row] = []
+            if self._table_exists(conn, "unsure_learning"):
+                legacy_totals = conn.execute(
+                    "SELECT COUNT(*) AS count, COALESCE(SUM(confidence), 0) AS total_confidence FROM unsure_learning"
+                ).fetchone()
+                legacy_total_patterns = int(legacy_totals["count"] or 0)
+                legacy_total_confidence = int(legacy_totals["total_confidence"] or 0)
+                legacy_by_type = conn.execute(
+                    """
+                    SELECT pattern_type, COUNT(*) AS count, COALESCE(SUM(confidence), 0) AS total_confidence
+                    FROM unsure_learning
+                    GROUP BY pattern_type
+                    ORDER BY total_confidence DESC, count DESC
+                    """
+                ).fetchall()
+                legacy_top_patterns = conn.execute(
+                    """
+                    SELECT pattern_type, pattern_value, decision, confidence, timestamp
+                    FROM unsure_learning
+                    ORDER BY confidence DESC, timestamp DESC
+                    LIMIT 10
+                    """
+                ).fetchall()
             active_sessions = conn.execute(
                 "SELECT COUNT(*) AS cnt FROM admin_sessions WHERE expires_at > ?",
                 (_utcnow(),),
@@ -1114,6 +1294,20 @@ class PlatformStore:
             "live_rules_updated_at": live_rules_state["updated_at"],
             "live_rules_updated_by": live_rules_state["updated_by"],
             "active_sessions": active_sessions,
+            "learning": {
+                "thresholds": learning_thresholds,
+                "promoted": {
+                    "active_patterns": active_patterns,
+                    "by_type": [dict(row) for row in promoted_by_type],
+                    "top_patterns": [dict(row) for row in top_patterns],
+                },
+                "legacy": {
+                    "total_patterns": legacy_total_patterns,
+                    "total_confidence": legacy_total_confidence,
+                    "by_type": [dict(row) for row in legacy_by_type],
+                    "top_patterns": [dict(row) for row in legacy_top_patterns],
+                },
+            },
         }
 
     def create_admin_session(self, payload: dict[str, Any], session_ttl_hours: int = 24) -> dict[str, Any]:
@@ -1259,10 +1453,7 @@ class PlatformStore:
 
     def is_admin_tg_id(self, tg_id: int) -> bool:
         rules = self.get_live_rules()
-        admin_ids = rules.get(
-            "admin_tg_ids",
-            self.base_config.get("admin_tg_ids", self.base_config.get("exempt_tg_ids", [])),
-        )
+        admin_ids = rules.get("admin_tg_ids", self.base_config.get("admin_tg_ids", []))
         return int(tg_id) in [int(value) for value in admin_ids]
 
     async def async_sync_runtime_config(self, runtime_config: dict[str, Any]) -> dict[str, Any]:

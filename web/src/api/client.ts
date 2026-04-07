@@ -10,20 +10,22 @@ export type ReviewItem = {
   id: number;
   status: string;
   review_reason: string;
-  uuid: string;
-  username: string;
-  telegram_id?: string;
+  uuid: string | null;
+  username: string | null;
+  system_id: number | null;
+  telegram_id: string | null;
   ip: string;
-  tag: string;
+  tag: string | null;
   verdict: string;
   confidence_band: string;
   score: number;
-  isp: string;
-  asn?: number;
+  isp: string | null;
+  asn: number | null;
   punitive_eligible: number;
   severity: "critical" | "high" | "medium" | "low";
   repeat_count: number;
   reason_codes: string[];
+  opened_at: string;
   updated_at: string;
   review_url: string;
 };
@@ -41,6 +43,8 @@ export type RulesState = {
   updated_at: string;
   updated_by: string;
 };
+
+export type ReviewListParams = Record<string, string | number | boolean | undefined>;
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? "/api";
 
@@ -77,7 +81,7 @@ export const api = {
     }),
   me: () => request<Session>("/admin/me"),
   logout: () => request<{ ok: boolean }>("/admin/logout", { method: "POST" }),
-  listReviews: (params: Record<string, string | number | boolean | undefined>) => {
+  listReviews: (params: ReviewListParams) => {
     const search = new URLSearchParams();
     Object.entries(params).forEach(([key, value]) => {
       if (value !== undefined && value !== "") {

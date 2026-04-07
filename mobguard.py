@@ -5,7 +5,6 @@ import os
 import re
 import sqlite3
 import shutil
-import maxminddb
 import aiohttp
 import sys
 from datetime import datetime, timedelta
@@ -26,6 +25,7 @@ from mobguard_platform import (
     derive_punitive_eligibility,
     normalize_runtime_bound_settings,
     review_reason_for_bundle,
+    resolve_asn_source,
     resolve_runtime_dir,
     should_warning_only,
 )
@@ -525,6 +525,7 @@ panel = PanelAPI(CONFIG['settings']['panel_url'], PANEL_TOKEN)
 class NetworkAnalyzer:
     def __init__(self):
         self.db_path = CONFIG['settings']['geoip_db']
+        self.asn_source = resolve_asn_source(BAN_SYSTEM_DIR, self.db_path)
         self.ip_api_cache = {} 
         self.whois_cache = {}
         # Общая сессия — устанавливается извне через set_session()
@@ -535,13 +536,7 @@ class NetworkAnalyzer:
         self._shared_session = session
 
     def get_asn_info(self, ip: str) -> Tuple[Optional[int], str]:
-        if not os.path.exists(self.db_path): return None, "unknown"
-        try:
-            with maxminddb.open_database(self.db_path) as reader:
-                data = reader.get(ip)
-                if not data: return None, "unknown"
-                return data.get("autonomous_system_number"), data.get("autonomous_system_organization", "unknown").lower()
-        except Exception: return None, "unknown"
+        return self.asn_source.lookup(ip)
 
     async def _check_ip_api(self, ip: str) -> Optional[bool]:
         global IP_API_RATE_LIMITED, IP_API_RATE_LIMIT_UNTIL, IP_API_PENDING_POOL
@@ -1044,7 +1039,7 @@ main_bot = Bot(token=TG_MAIN_BOT_TOKEN, default=DefaultBotProperties(parse_mode=
 dp = Dispatcher()
 
 def is_admin(user_id: int) -> bool: 
-    return user_id in CONFIG.get('admin_tg_ids', CONFIG.get('exempt_tg_ids', []))
+    return user_id in CONFIG.get('admin_tg_ids', [])
 
 async def resolve_target(target: str): 
     return await panel.get_user_data(target)

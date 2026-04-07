@@ -3,11 +3,44 @@ import { useNavigate, useParams } from "react-router-dom";
 
 import { api } from "../api/client";
 
-type ReviewPayload = Record<string, unknown> & {
-  latest_event?: Record<string, unknown> & { bundle?: Record<string, unknown> };
-  resolutions?: Array<Record<string, unknown>>;
-  related_cases?: Array<Record<string, unknown>>;
+type ReviewReason = {
+  code?: string;
+  message?: string;
 };
+
+type ReviewResolution = {
+  id?: number;
+  resolution?: string;
+  actor?: string;
+  created_at?: string;
+  note?: string;
+};
+
+type RelatedCase = {
+  id?: number;
+  ip?: string;
+  verdict?: string;
+  confidence_band?: string;
+  updated_at?: string;
+  username?: string | null;
+  system_id?: number | null;
+  telegram_id?: string | null;
+  uuid?: string | null;
+};
+
+type ReviewPayload = Record<string, unknown> & {
+  system_id?: number | null;
+  telegram_id?: string | null;
+  username?: string | null;
+  uuid?: string | null;
+  latest_event?: Record<string, unknown> & { bundle?: Record<string, unknown> };
+  resolutions?: ReviewResolution[];
+  related_cases?: RelatedCase[];
+};
+
+function formatValue(value: string | number | null | undefined): string {
+  return value === null || value === undefined || value === "" ? "N/A" : String(value);
+}
 
 export function ReviewDetailPage() {
   const { caseId = "" } = useParams();
@@ -33,7 +66,7 @@ export function ReviewDetailPage() {
   }
 
   const bundle = data?.latest_event?.bundle;
-  const reasons = Array.isArray(bundle?.reasons) ? bundle?.reasons : [];
+  const reasons = (Array.isArray(bundle?.reasons) ? bundle?.reasons : []) as ReviewReason[];
   const relatedCases = Array.isArray(data?.related_cases) ? data.related_cases : [];
   const resolutions = Array.isArray(data?.resolutions) ? data.resolutions : [];
 
@@ -54,14 +87,19 @@ export function ReviewDetailPage() {
           <div className="panel">
             <h2>Summary</h2>
             <dl className="detail-list">
-              <div><dt>User</dt><dd>{String(data.username || data.uuid || "N/A")}</dd></div>
-              <div><dt>IP</dt><dd>{String(data.ip || "N/A")}</dd></div>
-              <div><dt>Tag</dt><dd>{String(data.tag || "N/A")}</dd></div>
-              <div><dt>Verdict</dt><dd>{String(data.verdict || "N/A")}</dd></div>
-              <div><dt>Confidence</dt><dd>{String(data.confidence_band || "N/A")}</dd></div>
+              <div><dt>Username</dt><dd>{formatValue(data.username as string | null | undefined)}</dd></div>
+              <div><dt>System ID</dt><dd>{formatValue(data.system_id as number | null | undefined)}</dd></div>
+              <div><dt>Telegram ID</dt><dd>{formatValue(data.telegram_id as string | null | undefined)}</dd></div>
+              <div><dt>UUID</dt><dd>{formatValue(data.uuid as string | null | undefined)}</dd></div>
+              <div><dt>IP</dt><dd>{formatValue(data.ip as string | undefined)}</dd></div>
+              <div><dt>Tag</dt><dd>{formatValue(data.tag as string | undefined)}</dd></div>
+              <div><dt>Verdict</dt><dd>{formatValue(data.verdict as string | undefined)}</dd></div>
+              <div><dt>Confidence</dt><dd>{formatValue(data.confidence_band as string | undefined)}</dd></div>
               <div><dt>Punitive</dt><dd>{Number(data.punitive_eligible || 0) ? "yes" : "no"}</dd></div>
-              <div><dt>ISP</dt><dd>{String(data.isp || "N/A")}</dd></div>
-              <div><dt>Review URL</dt><dd>{String(data.review_url || "N/A")}</dd></div>
+              <div><dt>Opened</dt><dd>{formatValue(data.opened_at as string | undefined)}</dd></div>
+              <div><dt>Updated</dt><dd>{formatValue(data.updated_at as string | undefined)}</dd></div>
+              <div><dt>ISP</dt><dd>{formatValue(data.isp as string | undefined)}</dd></div>
+              <div><dt>Review URL</dt><dd>{formatValue(data.review_url as string | undefined)}</dd></div>
             </dl>
           </div>
 
@@ -69,11 +107,10 @@ export function ReviewDetailPage() {
             <h2>Reasons</h2>
             <ul className="reason-list">
               {reasons.map((reason, index) => {
-                const item = reason as Record<string, unknown>;
                 return (
-                  <li key={`${String(item.code)}-${index}`}>
-                    <strong>{String(item.code)}</strong>
-                    <span>{String(item.message || "")}</span>
+                  <li key={`${String(reason.code)}-${index}`}>
+                    <strong>{formatValue(reason.code)}</strong>
+                    <span>{formatValue(reason.message)}</span>
                   </li>
                 );
               })}
@@ -91,11 +128,11 @@ export function ReviewDetailPage() {
               {resolutions.length === 0 ? <li><span>No resolutions yet</span></li> : null}
               {resolutions.map((resolution) => (
                 <li key={String(resolution.id)}>
-                  <strong>{String(resolution.resolution)}</strong>
+                  <strong>{formatValue(resolution.resolution)}</strong>
                   <span>
-                    {String(resolution.actor || "unknown")} · {String(resolution.created_at || "")}
+                    {formatValue(resolution.actor)} · {formatValue(resolution.created_at)}
                   </span>
-                  <span>{String(resolution.note || "")}</span>
+                  <span>{formatValue(resolution.note)}</span>
                 </li>
               ))}
             </ul>
@@ -107,11 +144,14 @@ export function ReviewDetailPage() {
               {relatedCases.length === 0 ? <li><span>No related cases found</span></li> : null}
               {relatedCases.map((item) => (
                 <li key={String(item.id)}>
-                  <strong>Case #{String(item.id)}</strong>
+                  <strong>Case #{formatValue(item.id)}</strong>
                   <span>
-                    {String(item.ip)} · {String(item.verdict)} / {String(item.confidence_band)}
+                    {formatValue(item.username)} · {formatValue(item.ip)} · {formatValue(item.verdict)} / {formatValue(item.confidence_band)}
                   </span>
-                  <span>{String(item.updated_at)}</span>
+                  <span>
+                    {formatValue(item.system_id)} · {formatValue(item.telegram_id)} · {formatValue(item.uuid)}
+                  </span>
+                  <span>{formatValue(item.updated_at)}</span>
                 </li>
               ))}
             </ul>

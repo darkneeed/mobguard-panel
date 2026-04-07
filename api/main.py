@@ -160,25 +160,42 @@ def list_reviews(
     punitive_eligible: Optional[bool] = None,
     asn: Optional[int] = None,
     q: Optional[str] = None,
+    username: Optional[str] = None,
+    system_id: Optional[int] = None,
+    telegram_id: Optional[str] = None,
+    opened_from: Optional[str] = None,
+    opened_to: Optional[str] = None,
+    repeat_count_min: Optional[int] = None,
+    repeat_count_max: Optional[int] = None,
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=25, ge=1, le=100),
     sort: str = Query(default="updated_desc"),
     _: dict[str, Any] = Depends(get_session),
 ) -> dict[str, Any]:
-    return store.list_review_cases(
-        {
-            "status": status,
-            "confidence_band": confidence_band,
-            "review_reason": review_reason,
-            "severity": severity,
-            "punitive_eligible": punitive_eligible,
-            "asn": asn,
-            "q": q,
-            "page": page,
-            "page_size": page_size,
-            "sort": sort,
-        }
-    )
+    try:
+        return store.list_review_cases(
+            {
+                "status": status,
+                "confidence_band": confidence_band,
+                "review_reason": review_reason,
+                "severity": severity,
+                "punitive_eligible": punitive_eligible,
+                "asn": asn,
+                "q": q,
+                "username": username,
+                "system_id": system_id,
+                "telegram_id": telegram_id,
+                "opened_from": opened_from,
+                "opened_to": opened_to,
+                "repeat_count_min": repeat_count_min,
+                "repeat_count_max": repeat_count_max,
+                "page": page,
+                "page_size": page_size,
+                "sort": sort,
+            }
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @app.get("/admin/reviews/{case_id}")

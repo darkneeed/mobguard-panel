@@ -193,6 +193,7 @@ class ReviewCaseSummary:
     review_reason: str
     uuid: str
     username: str
+    system_id: Optional[int]
     telegram_id: Optional[str]
     ip: str
     tag: str

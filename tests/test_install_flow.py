@@ -110,7 +110,11 @@ printf '%s\\n' 'v2.0.0'
         self.assertIn("compose up -d --build", self._read_log())
 
     def test_missing_asn_db_downloads_when_maxmind_key_is_present(self):
-        self._write_env(required_tokens=True, maxmind_key="test-maxmind-key")
+        self._write_env(
+            required_tokens=True,
+            maxmind_key="test-maxmind-key",
+            extra_values={"ASN_DB_PROVIDER": "maxmind"},
+        )
         self._write_stub(
             "curl",
             """#!/usr/bin/env sh
@@ -158,6 +162,182 @@ printf '%s' 'mmdb' > "$dest/GeoLite2-ASN_FAKE/GeoLite2-ASN.mmdb"
         self.assertIn("Скачиваю GeoLite2-ASN.mmdb с MaxMind", result.stdout + result.stderr)
         self.assertIn("compose up -d --build", self._read_log())
 
+    def test_oxl_provider_downloads_dual_mmdb_files(self):
+        self._write_env(
+            required_tokens=True,
+            maxmind_key="",
+            extra_values={"ASN_DB_PROVIDER": "oxl"},
+        )
+        self._write_stub(
+            "curl",
+            """#!/usr/bin/env sh
+set -eu
+output=''
+
+while [ "$#" -gt 0 ]; do
+  if [ "$1" = "-o" ]; then
+    output="$2"
+    shift 2
+    continue
+  fi
+  shift
+done
+
+[ -n "$output" ] || exit 1
+printf '%s' 'zip' > "$output"
+""",
+        )
+        self._write_stub(
+            "unzip",
+            """#!/usr/bin/env sh
+set -eu
+archive=''
+dest=''
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    -d)
+      dest="$2"
+      shift 2
+      ;;
+    -*)
+      shift
+      ;;
+    *)
+      archive="$1"
+      shift
+      ;;
+  esac
+done
+
+[ -n "$archive" ] || exit 1
+[ -n "$dest" ] || exit 1
+mkdir -p "$dest"
+case "$archive" in
+  *ipv4.zip) printf '%s' 'ipv4-mmdb' > "$dest/source-ipv4.mmdb" ;;
+  *ipv6.zip) printf '%s' 'ipv6-mmdb' > "$dest/source-ipv6.mmdb" ;;
+  *) exit 1 ;;
+esac
+""",
+        )
+
+        result = self._run_install()
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertTrue((self.root / "runtime" / "GeoLite2-ASN-IPv4.mmdb").exists())
+        self.assertTrue((self.root / "runtime" / "GeoLite2-ASN-IPv6.mmdb").exists())
+        self.assertIn("Скачиваю ASN-базы OXL", result.stdout + result.stderr)
+        self.assertIn("compose up -d --build", self._read_log())
+
+    def test_dbip_provider_downloads_mmdb_file(self):
+        self._write_env(
+            required_tokens=True,
+            maxmind_key="",
+            extra_values={"ASN_DB_PROVIDER": "dbip"},
+        )
+        self._write_stub(
+            "curl",
+            """#!/usr/bin/env sh
+set -eu
+output=''
+
+while [ "$#" -gt 0 ]; do
+  if [ "$1" = "-o" ]; then
+    output="$2"
+    shift 2
+    continue
+  fi
+  shift
+done
+
+[ -n "$output" ] || exit 1
+printf '%s' 'dbip-archive' > "$output"
+""",
+        )
+        self._write_stub(
+            "gzip",
+            """#!/usr/bin/env sh
+set -eu
+if [ "${1:-}" = "-dc" ]; then
+  printf '%s' 'dbip-mmdb'
+  exit 0
+fi
+if [ "${1:-}" = "-t" ]; then
+  exit 0
+fi
+exit 1
+""",
+        )
+        self._write_stub(
+            "date",
+            """#!/usr/bin/env sh
+set -eu
+if [ "$#" -eq 2 ] && [ "$1" = "-u" ] && [ "$2" = "+%Y-%m" ]; then
+  printf '%s\\n' '2026-04'
+  exit 0
+fi
+if [ "$#" -eq 2 ] && [ "$1" = "-u" ] && [ "$2" = "+%Y-%m-01" ]; then
+  printf '%s\\n' '2026-04-01'
+  exit 0
+fi
+if [ "$#" -ge 4 ] && [ "$1" = "-u" ] && [ "$2" = "-d" ]; then
+  printf '%s\\n' '2026-03'
+  exit 0
+fi
+exit 1
+""",
+        )
+
+        result = self._run_install()
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertTrue((self.root / "runtime" / "GeoLite2-ASN.mmdb").exists())
+        self.assertIn("Скачиваю ASN-базу DB-IP Lite", result.stdout + result.stderr)
+        self.assertIn("compose up -d --build", self._read_log())
+
+    def test_iptoasn_provider_downloads_combined_tsv(self):
+        self._write_env(
+            required_tokens=True,
+            maxmind_key="",
+            extra_values={"ASN_DB_PROVIDER": "iptoasn"},
+        )
+        self._write_stub(
+            "curl",
+            """#!/usr/bin/env sh
+set -eu
+output=''
+
+while [ "$#" -gt 0 ]; do
+  if [ "$1" = "-o" ]; then
+    output="$2"
+    shift 2
+    continue
+  fi
+  shift
+done
+
+[ -n "$output" ] || exit 1
+printf '%s' 'iptoasn-gzip' > "$output"
+""",
+        )
+        self._write_stub(
+            "gzip",
+            """#!/usr/bin/env sh
+set -eu
+if [ "${1:-}" = "-t" ]; then
+  exit 0
+fi
+exit 1
+""",
+        )
+
+        result = self._run_install()
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertTrue((self.root / "runtime" / "ip2asn-combined.tsv.gz").exists())
+        self.assertIn("Скачиваю ASN-базу IPtoASN", result.stdout + result.stderr)
+        self.assertIn("compose up -d --build", self._read_log())
+
     def test_missing_asn_db_without_key_warns_and_finishes_preparation(self):
         runtime_dir = self.root / "runtime"
         runtime_dir.mkdir()
@@ -173,6 +353,7 @@ printf '%s' 'mmdb' > "$dest/GeoLite2-ASN_FAKE/GeoLite2-ASN.mmdb"
                     "PANEL_TOKEN=",
                     "IPINFO_TOKEN=",
                     "MAXMIND_LICENSE_KEY=",
+                    "ASN_DB_PROVIDER=manual",
                     "",
                 ]
             ),
@@ -207,7 +388,7 @@ printf '%s' 'mmdb' > "$dest/GeoLite2-ASN_FAKE/GeoLite2-ASN.mmdb"
             timeout=30,
         )
 
-    def _write_env(self, required_tokens, maxmind_key):
+    def _write_env(self, required_tokens, maxmind_key, extra_values=None):
         values = {
             "TG_MAIN_BOT_TOKEN": "tg-main" if required_tokens else "",
             "TG_ADMIN_BOT_TOKEN": "tg-admin" if required_tokens else "",
@@ -216,6 +397,8 @@ printf '%s' 'mmdb' > "$dest/GeoLite2-ASN_FAKE/GeoLite2-ASN.mmdb"
             "IPINFO_TOKEN": "ipinfo-token" if required_tokens else "",
             "MAXMIND_LICENSE_KEY": maxmind_key,
         }
+        if extra_values:
+            values.update(extra_values)
         payload = "".join(f"{key}={value}\n" for key, value in values.items())
         (self.root / ".env").write_text(payload, encoding="utf-8")
 
