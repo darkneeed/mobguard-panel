@@ -2821,15 +2821,11 @@ def pre_flight_check():
 async def main():
     pre_flight_check()
     
-    # Инициализируем одну общую aiohttp-сессию для всех HTTP-клиентов.
-    # Это позволяет использовать Keep-Alive и избежать накладных расходов
-    # на установку TCP/TLS соединения при каждом запросе.
     shared_http_session = aiohttp.ClientSession()
     panel.set_session(shared_http_session)
     network_analyzer.set_session(shared_http_session)
     await ipinfo_api.init_session(shared_http_session)
     
-    # Start background tasks
     asyncio.create_task(telegram_queue_processor())
     asyncio.create_task(log_reader_task())
     asyncio.create_task(unbanner_task())
@@ -2842,14 +2838,13 @@ async def main():
     asyncio.create_task(learning_promotion_task())
     asyncio.create_task(core_heartbeat_task())
     
-    # Wait for queue to initialize
     await asyncio.sleep(1)
     
     admin_msg = (
         f"📶 <b>#mobguard</b>\n"
         f"➖➖➖➖➖➖➖➖➖\n"
         f"🚀 <b>MobGuard запущен</b>\n"
-        f"Версия 0.8.5 Stabilization\n"
+        f"Версия 0.9.0 web\n"
         f"Debug: {'ВКЛ' if DEBUG_MODE else 'ВЫКЛ'}\n"
         f"Режим: {'ОТЛАДКА' if DRY_RUN else 'ПРОД'}\n"
         f"Shadow mode: {'ВКЛ' if CONFIG['settings'].get('shadow_mode', True) else 'ВЫКЛ'}\n"
