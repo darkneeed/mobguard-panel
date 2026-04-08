@@ -93,6 +93,24 @@ class SettingsSectionUpdateRequest(BaseModel):
     updated_at: Optional[str] = None
 
 
+def _coerce_optional_int(value: Any) -> Optional[int]:
+    if value in (None, ""):
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _coerce_int_list(values: list[Any]) -> list[int]:
+    result: list[int] = []
+    for value in values:
+        coerced = _coerce_optional_int(value)
+        if coerced is not None:
+            result.append(coerced)
+    return result
+
+
 class UserBanRequest(BaseModel):
     minutes: int = Field(default=15, gt=0)
 
@@ -366,8 +384,8 @@ def _get_user_card(identifier: str) -> dict[str, Any]:
             (identity.get("uuid"), datetime.utcnow().isoformat()),
         ).fetchone()["cnt"] if identity.get("uuid") and has_violations else 0
 
-    exempt_system_ids = {int(value) for value in rules_state["rules"].get("exempt_ids", [])}
-    exempt_tg_ids = {int(value) for value in rules_state["rules"].get("exempt_tg_ids", [])}
+    exempt_system_ids = set(_coerce_int_list(rules_state["rules"].get("exempt_ids", [])))
+    exempt_tg_ids = set(_coerce_int_list(rules_state["rules"].get("exempt_tg_ids", [])))
     system_id = identity.get("system_id")
     telegram_id = identity.get("telegram_id")
     return {
@@ -954,7 +972,7 @@ def update_user_exemptions(
         raise HTTPException(status_code=400, detail="Resolved user has no matching identifier for this exemption")
 
     state = store.get_live_rules_state()
-    current_values = [int(item) for item in state["rules"].get(key, [])]
+    current_values = _coerce_int_list(state["rules"].get(key, []))
     if body.enabled and value not in current_values:
         current_values.append(value)
     if not body.enabled:

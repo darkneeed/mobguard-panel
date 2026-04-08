@@ -1,10 +1,16 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import Any, Optional
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote
 from urllib.request import Request, urlopen
+
+
+UUID_PATTERN = re.compile(
+    r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+)
 
 
 class PanelClient:
@@ -22,8 +28,11 @@ class PanelClient:
 
         str_id = str(identifier).strip()
         endpoints: list[str]
-        if len(str_id) > 20 and "-" in str_id:
-            endpoints = [f"/api/users/{quote(str_id)}"]
+        if UUID_PATTERN.fullmatch(str_id):
+            endpoints = [
+                f"/api/users/{quote(str_id)}",
+                f"/api/users/by-short-uuid/{quote(str_id)}",
+            ]
         elif str_id.isdigit():
             endpoints = [
                 f"/api/users/by-id/{quote(str_id)}",
@@ -31,8 +40,9 @@ class PanelClient:
             ]
         else:
             endpoints = [
+                f"/api/users/by-username/{quote(str_id)}",
+                f"/api/users/by-short-uuid/{quote(str_id)}",
                 f"/api/users/{quote(str_id)}",
-                f"/api/users/by-id/{quote(str_id)}",
             ]
 
         for endpoint in endpoints:
