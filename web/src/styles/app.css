@@ -11,6 +11,10 @@
   --danger: #b42318;
   --warning: #c77d1a;
   --shadow: 0 24px 60px rgba(39, 52, 45, 0.14);
+  --button-bg: #15211a;
+  --button-bg-hover: #223129;
+  --button-fg: #ffffff;
+  --button-ghost-hover: rgba(21, 33, 26, 0.08);
 }
 
 :root[data-theme="dark"] {
@@ -24,6 +28,10 @@
   --danger: #ff8a80;
   --warning: #ffc266;
   --shadow: 0 30px 80px rgba(0, 0, 0, 0.42);
+  --button-bg: #53d4c5;
+  --button-bg-hover: #73e4d8;
+  --button-fg: #071115;
+  --button-ghost-hover: rgba(239, 248, 241, 0.08);
 }
 
 * {
@@ -62,10 +70,20 @@ textarea {
 button {
   border: 0;
   border-radius: 14px;
-  background: var(--ink);
-  color: white;
+  background: var(--button-bg);
+  color: var(--button-fg);
   padding: 0.85rem 1.1rem;
   cursor: pointer;
+  transition: background 160ms ease, color 160ms ease, border-color 160ms ease, opacity 160ms ease;
+}
+
+button:hover:not(:disabled):not(.ghost):not(.info-button) {
+  background: var(--button-bg-hover);
+}
+
+button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 button:disabled {
@@ -77,6 +95,11 @@ button.ghost {
   background: transparent;
   color: var(--ink);
   border: 1px solid var(--line);
+}
+
+button.ghost:hover:not(:disabled),
+button.ghost:focus-visible:not(:disabled) {
+  background: var(--button-ghost-hover);
 }
 
 .info-button {
