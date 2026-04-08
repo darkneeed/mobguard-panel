@@ -2,6 +2,7 @@ import type { FormEvent } from "react";
 import { useEffect, useState } from "react";
 
 import { api, AuthCapabilities, Session } from "../api/client";
+import { useI18n } from "../localization";
 
 declare global {
   interface Window {
@@ -14,6 +15,7 @@ type LoginPageProps = {
 };
 
 export function LoginPage({ onAuthenticated }: LoginPageProps) {
+  const { t, language, setLanguage } = useI18n();
   const [error, setError] = useState("");
   const [auth, setAuth] = useState<AuthCapabilities | null>(null);
   const [localUsername, setLocalUsername] = useState("");
@@ -40,7 +42,7 @@ export function LoginPage({ onAuthenticated }: LoginPageProps) {
         const session = await api.authVerify(user);
         onAuthenticated(session);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Auth failed");
+        setError(err instanceof Error ? err.message : t("login.authFailed"));
       }
     };
 
@@ -57,7 +59,7 @@ export function LoginPage({ onAuthenticated }: LoginPageProps) {
     script.setAttribute("data-request-access", "write");
     script.setAttribute("data-onauth", "onTelegramAuth(user)");
     container.appendChild(script);
-  }, [auth, onAuthenticated]);
+  }, [auth, onAuthenticated, t]);
 
   async function submitLocalLogin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -66,7 +68,7 @@ export function LoginPage({ onAuthenticated }: LoginPageProps) {
       const session = await api.localLogin(localUsername, localPassword);
       onAuthenticated(session);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Local auth failed");
+      setError(err instanceof Error ? err.message : t("login.localAuthFailed"));
     } finally {
       setSubmitting(false);
     }
@@ -75,38 +77,45 @@ export function LoginPage({ onAuthenticated }: LoginPageProps) {
   return (
     <div className="login-screen">
       <div className="login-card">
-        <span className="eyebrow">Remnawave + MobGuard</span>
-        <h1>Веб-панель модерации, данных и runtime-настроек</h1>
-        <p>
-          Очередь спорных кейсов, data-admin, Telegram delivery и runtime-конфигурация в одной панели.
-        </p>
+        <span className="eyebrow">{t("login.eyebrow")}</span>
+        <div className="action-row">
+          <label className="theme-picker">
+            <span>{t("layout.language.label")}</span>
+            <select value={language} onChange={(event) => setLanguage(event.target.value as "ru" | "en")}>
+              <option value="ru">{t("layout.language.ru")}</option>
+              <option value="en">{t("layout.language.en")}</option>
+            </select>
+          </label>
+        </div>
+        <h1>{t("login.title")}</h1>
+        <p>{t("login.description")}</p>
         <div className="login-methods">
           <div className="login-method">
-            <strong>Telegram вход</strong>
+            <strong>{t("login.telegramTitle")}</strong>
             <div id="telegram-login-slot" className="telegram-slot" />
-            {auth && !auth.telegram_enabled ? <p className="muted">Telegram auth не настроен.</p> : null}
-            {!auth && !error ? <p className="muted">Загружаю Telegram auth…</p> : null}
+            {auth && !auth.telegram_enabled ? <p className="muted">{t("login.telegramNotConfigured")}</p> : null}
+            {!auth && !error ? <p className="muted">{t("login.telegramLoading")}</p> : null}
           </div>
 
           <form className="login-method local-login" onSubmit={submitLocalLogin}>
-            <strong>Локальный вход</strong>
+            <strong>{t("login.localTitle")}</strong>
             <input
-              placeholder="Username"
+              placeholder={t("login.usernamePlaceholder")}
               value={localUsername}
               onChange={(event) => setLocalUsername(event.target.value)}
               disabled={!auth?.local_enabled}
             />
             <input
               type="password"
-              placeholder="Password"
+              placeholder={t("login.passwordPlaceholder")}
               value={localPassword}
               onChange={(event) => setLocalPassword(event.target.value)}
               disabled={!auth?.local_enabled}
             />
             <button disabled={!auth?.local_enabled || submitting}>
-              {submitting ? "Signing in…" : "Login"}
+              {submitting ? t("login.signingIn") : t("login.signIn")}
             </button>
-            {auth && !auth.local_enabled ? <p className="muted">Local fallback auth не настроен.</p> : null}
+            {auth && !auth.local_enabled ? <p className="muted">{t("login.localNotConfigured")}</p> : null}
           </form>
         </div>
         {error ? <div className="error-box">{error}</div> : null}

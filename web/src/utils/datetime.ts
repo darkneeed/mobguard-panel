@@ -1,10 +1,13 @@
+import type { Language } from "../localization";
+
 function pad(value: number): string {
   return String(value).padStart(2, "0");
 }
 
 export function formatDisplayDateTime(
   value: string | null | undefined,
-  emptyFallback = "N/A"
+  emptyFallback = "N/A",
+  language: Language = "ru"
 ): string {
   if (!value) {
     return emptyFallback;
@@ -15,5 +18,13 @@ export function formatDisplayDateTime(
     return value;
   }
 
-  return `${pad(parsed.getDate())}.${pad(parsed.getMonth() + 1)} ${pad(parsed.getHours())}:${pad(parsed.getMinutes())}`;
+  const day = pad(parsed.getDate());
+  const month = pad(parsed.getMonth() + 1);
+  const time = `${pad(parsed.getHours())}:${pad(parsed.getMinutes())}`;
+
+  if (language === "en") {
+    return `${day}/${month} ${time}`;
+  }
+
+  return `${day}.${month} ${time}`;
 }

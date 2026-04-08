@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 
 import { api, RulesState } from "../api/client";
 import { FieldLabel } from "../components/FieldLabel";
+import { useI18n } from "../localization";
 import {
   RULE_LIST_FIELDS,
   RULE_SETTING_FIELDS,
@@ -16,69 +17,37 @@ type EnforcementPayload = {
   settings: Record<string, string | number | boolean | string[]>;
 };
 
+type GeneralSettingKey =
+  | "usage_time_threshold"
+  | "warning_timeout_seconds"
+  | "warnings_before_ban"
+  | "warning_only_mode"
+  | "manual_review_mixed_home_enabled"
+  | "manual_ban_approval_enabled"
+  | "dry_run"
+  | "ban_durations_minutes";
+
 type GeneralSettingField = {
-  key: string;
-  label: string;
-  description: string;
+  key: GeneralSettingKey;
   inputType: "number" | "boolean" | "number-list";
   step?: number;
 };
 
 const GENERAL_SETTINGS_FIELDS: GeneralSettingField[] = [
-  {
-    key: "usage_time_threshold",
-    label: "Minimum suspicious usage time (sec)",
-    description: "How long a suspicious session must stay active before enforcement starts.",
-    inputType: "number"
-  },
-  {
-    key: "warning_timeout_seconds",
-    label: "Warning cooldown (sec)",
-    description: "Minimum delay before the next warning can be sent.",
-    inputType: "number"
-  },
-  {
-    key: "warnings_before_ban",
-    label: "Warnings before first ban",
-    description: "How many warning events are required before the first ban.",
-    inputType: "number"
-  },
-  {
-    key: "warning_only_mode",
-    label: "Only warnings mode",
-    description: "Never escalate to bans automatically.",
-    inputType: "boolean"
-  },
-  {
-    key: "manual_review_mixed_home_enabled",
-    label: "Review mixed HOME cases manually",
-    description: "Send mixed HOME outcomes to manual review before action.",
-    inputType: "boolean"
-  },
-  {
-    key: "manual_ban_approval_enabled",
-    label: "Require admin approval for bans",
-    description: "Pause ban execution until admin approves it.",
-    inputType: "boolean"
-  },
-  {
-    key: "dry_run",
-    label: "Dry run",
-    description: "Analyze and notify without applying remote disable actions.",
-    inputType: "boolean"
-  },
-  {
-    key: "ban_durations_minutes",
-    label: "Ban durations ladder (minutes)",
-    description: "One duration per line: first ban, second ban, third ban, and so on.",
-    inputType: "number-list"
-  }
+  { key: "usage_time_threshold", inputType: "number" },
+  { key: "warning_timeout_seconds", inputType: "number" },
+  { key: "warnings_before_ban", inputType: "number" },
+  { key: "warning_only_mode", inputType: "boolean" },
+  { key: "manual_review_mixed_home_enabled", inputType: "boolean" },
+  { key: "manual_ban_approval_enabled", inputType: "boolean" },
+  { key: "dry_run", inputType: "boolean" },
+  { key: "ban_durations_minutes", inputType: "number-list" }
 ];
 
 const LIST_SECTIONS = Array.from(
-  new Set(RULE_LIST_FIELDS.filter((field) => field.section !== "Access").map((field) => field.section))
+  new Set(RULE_LIST_FIELDS.filter((field) => field.sectionKey !== "access").map((field) => field.sectionKey))
 );
-const SETTING_SECTIONS = Array.from(new Set(RULE_SETTING_FIELDS.map((field) => field.section)));
+const SETTING_SECTIONS = Array.from(new Set(RULE_SETTING_FIELDS.map((field) => field.sectionKey)));
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -130,72 +99,6 @@ function parseListText(text: string): string[] {
     .filter(Boolean);
 }
 
-function serializeListField(meta: RuleListFieldMeta, values: Array<string | number> | undefined) {
-  const rawValues = (values || []).map((item) => String(item).trim()).filter(Boolean);
-  if (meta.itemType === "string") {
-    return rawValues;
-  }
-
-  const serialized: number[] = [];
-  for (const item of rawValues) {
-    const parsed = Number(item);
-    if (!Number.isFinite(parsed)) {
-      throw new Error(`${meta.label}: invalid number '${item}'`);
-    }
-    serialized.push(parsed);
-  }
-  return serialized;
-}
-
-function serializeSettingField(meta: RuleSettingFieldMeta, value: RuleSettingValue) {
-  if (meta.inputType === "boolean") {
-    return Boolean(value);
-  }
-  if (meta.inputType === "text") {
-    return String(value ?? "").trim();
-  }
-
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed)) {
-    throw new Error(`${meta.label}: invalid number`);
-  }
-  return parsed;
-}
-
-function serializeGeneralSettings(draft: Record<string, string>) {
-  const payload: Record<string, unknown> = {};
-
-  for (const field of GENERAL_SETTINGS_FIELDS) {
-    const rawValue = draft[field.key] ?? "";
-    if (field.inputType === "boolean") {
-      payload[field.key] = rawValue === "true";
-      continue;
-    }
-    if (field.inputType === "number-list") {
-      payload[field.key] = rawValue
-        .split("\n")
-        .map((item) => item.trim())
-        .filter(Boolean)
-        .map((item) => {
-          const parsed = Number(item);
-          if (!Number.isFinite(parsed)) {
-            throw new Error(`${field.label}: invalid value '${item}'`);
-          }
-          return parsed;
-        });
-      continue;
-    }
-
-    const parsed = Number(rawValue);
-    if (!Number.isFinite(parsed)) {
-      throw new Error(`${field.label}: invalid number`);
-    }
-    payload[field.key] = parsed;
-  }
-
-  return payload;
-}
-
 function getSettingInputValue(meta: RuleSettingFieldMeta, value: RuleSettingValue): string {
   if (meta.inputType === "boolean") {
     return value === true ? "true" : "false";
@@ -203,12 +106,8 @@ function getSettingInputValue(meta: RuleSettingFieldMeta, value: RuleSettingValu
   return value === undefined || value === null ? "" : String(value);
 }
 
-function formatUpdatedBy(value: string | undefined): string {
-  if (!value || value === "bootstrap") return "system";
-  return value;
-}
-
 export function RulesPage() {
+  const { t, language } = useI18n();
   const [state, setState] = useState<RulesState | null>(null);
   const [draft, setDraft] = useState<RulesDraft | null>(null);
   const [savedDraft, setSavedDraft] = useState<RulesDraft | null>(null);
@@ -243,7 +142,7 @@ export function RulesPage() {
         setSavedGeneralDraft(normalizedGeneral);
       } catch (err) {
         if (!cancelled) {
-          setError(err instanceof Error ? err.message : "Failed to load rules");
+          setError(err instanceof Error ? err.message : t("rules.loadFailed"));
         }
       }
     }
@@ -252,10 +151,101 @@ export function RulesPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [t]);
 
   const dirty = JSON.stringify(draft) !== JSON.stringify(savedDraft);
   const generalDirty = JSON.stringify(generalDraft) !== JSON.stringify(savedGeneralDraft);
+
+  function listFieldMeta(field: RuleListFieldMeta) {
+    return {
+      label: t(`rulesMeta.listFields.${field.key}.label`),
+      description: t(`rulesMeta.listFields.${field.key}.description`),
+      recommendation: t(`rulesMeta.listFields.${field.key}.recommendation`)
+    };
+  }
+
+  function settingFieldMeta(field: RuleSettingFieldMeta) {
+    return {
+      label: t(`rulesMeta.settingFields.${field.key}.label`),
+      description: t(`rulesMeta.settingFields.${field.key}.description`),
+      recommendation: t(`rulesMeta.settingFields.${field.key}.recommendation`)
+    };
+  }
+
+  function generalFieldMeta(key: GeneralSettingKey) {
+    return {
+      label: t(`rulesMeta.rulesGeneralFields.${key}.label`),
+      description: t(`rulesMeta.rulesGeneralFields.${key}.description`)
+    };
+  }
+
+  function serializeListField(meta: RuleListFieldMeta, values: Array<string | number> | undefined) {
+    const rawValues = (values || []).map((item) => String(item).trim()).filter(Boolean);
+    if (meta.itemType === "string") {
+      return rawValues;
+    }
+
+    const serialized: number[] = [];
+    const label = listFieldMeta(meta).label;
+    for (const item of rawValues) {
+      const parsed = Number(item);
+      if (!Number.isFinite(parsed)) {
+        throw new Error(t("rules.invalidValue", { field: label, value: item }));
+      }
+      serialized.push(parsed);
+    }
+    return serialized;
+  }
+
+  function serializeSettingField(meta: RuleSettingFieldMeta, value: RuleSettingValue) {
+    if (meta.inputType === "boolean") {
+      return Boolean(value);
+    }
+    if (meta.inputType === "text") {
+      return String(value ?? "").trim();
+    }
+
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) {
+      throw new Error(t("rules.invalidNumber", { field: settingFieldMeta(meta).label }));
+    }
+    return parsed;
+  }
+
+  function serializeGeneralSettings(draftValues: Record<string, string>) {
+    const payload: Record<string, unknown> = {};
+
+    for (const field of GENERAL_SETTINGS_FIELDS) {
+      const rawValue = draftValues[field.key] ?? "";
+      const label = generalFieldMeta(field.key).label;
+      if (field.inputType === "boolean") {
+        payload[field.key] = rawValue === "true";
+        continue;
+      }
+      if (field.inputType === "number-list") {
+        payload[field.key] = rawValue
+          .split("\n")
+          .map((item) => item.trim())
+          .filter(Boolean)
+          .map((item) => {
+            const parsed = Number(item);
+            if (!Number.isFinite(parsed)) {
+              throw new Error(t("rules.invalidValue", { field: label, value: item }));
+            }
+            return parsed;
+          });
+        continue;
+      }
+
+      const parsed = Number(rawValue);
+      if (!Number.isFinite(parsed)) {
+        throw new Error(t("rules.invalidNumber", { field: label }));
+      }
+      payload[field.key] = parsed;
+    }
+
+    return payload;
+  }
 
   async function save() {
     if (!draft || !state) return;
@@ -283,9 +273,9 @@ export function RulesPage() {
       setDraft(normalized);
       setSavedDraft(normalized);
       setError("");
-      setSaved("Rules updated");
+      setSaved(t("rules.rulesUpdated"));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Save failed");
+      setError(err instanceof Error ? err.message : t("rules.saveFailed"));
       setSaved("");
     }
   }
@@ -300,9 +290,9 @@ export function RulesPage() {
       setGeneralDraft(normalized);
       setSavedGeneralDraft(normalized);
       setGeneralError("");
-      setGeneralSaved("General settings saved");
+      setGeneralSaved(t("rules.generalSaved"));
     } catch (err) {
-      setGeneralError(err instanceof Error ? err.message : "Save failed");
+      setGeneralError(err instanceof Error ? err.message : t("rules.saveFailed"));
       setGeneralSaved("");
     }
   }
@@ -335,19 +325,21 @@ export function RulesPage() {
     setGeneralSaved("");
   }
 
+  const updatedBy = !state?.updated_by || state.updated_by === "bootstrap" ? t("common.system") : state.updated_by;
+
   return (
     <section className="page">
       <div className="page-header">
         <div>
-          <span className="eyebrow">Live Rules</span>
-          <h1>Понятные live-настройки без редактирования сырых ключей</h1>
+          <span className="eyebrow">{t("rules.eyebrow")}</span>
+          <h1>{t("rules.title")}</h1>
         </div>
         <div className="action-row">
           <span className={dirty ? "tag review-only" : "tag severity-low"}>
-            {dirty ? "unsaved changes" : "saved"}
+            {dirty ? t("common.unsavedChanges") : t("common.saved")}
           </span>
           <button disabled={!dirty} onClick={save}>
-            Save rules
+            {t("rules.saveRules")}
           </button>
         </div>
       </div>
@@ -355,62 +347,65 @@ export function RulesPage() {
       {saved ? <div className="ok-box">{saved}</div> : null}
       {state ? (
         <div className="panel queue-footer">
-          <span>Revision {state.revision}</span>
-          <span>Updated at {formatDisplayDateTime(state.updated_at, "n/a")}</span>
-          <span>Updated by {formatUpdatedBy(state.updated_by)}</span>
+          <span>{t("rules.revision", { value: state.revision })}</span>
+          <span>{t("rules.updatedAt", { value: formatDisplayDateTime(state.updated_at, t("common.notAvailable"), language) })}</span>
+          <span>{t("rules.updatedBy", { value: updatedBy })}</span>
         </div>
       ) : null}
-      {!draft && !generalDraft ? <div className="panel">Loading…</div> : null}
+      {!draft && !generalDraft ? <div className="panel">{t("common.loading")}</div> : null}
 
       {generalDraft ? (
         <div className="panel">
           <div className="panel-heading panel-heading-row">
             <div>
-              <h2>General settings</h2>
-              <p className="muted">Runtime escalation and sanction controls.</p>
+              <h2>{t("rules.general.title")}</h2>
+              <p className="muted">{t("rules.general.description")}</p>
             </div>
             <div className="action-row">
               <span className={generalDirty ? "tag review-only" : "tag severity-low"}>
-                {generalDirty ? "unsaved changes" : "saved"}
+                {generalDirty ? t("common.unsavedChanges") : t("common.saved")}
               </span>
               <button disabled={!generalDirty} onClick={saveGeneralSettings}>
-                Save general settings
+                {t("rules.general.save")}
               </button>
             </div>
           </div>
           {generalError ? <div className="error-box">{generalError}</div> : null}
           {generalSaved ? <div className="ok-box">{generalSaved}</div> : null}
           <div className="form-grid">
-            {GENERAL_SETTINGS_FIELDS.map((field) => (
-              <div
-                className={field.inputType === "number-list" ? "rule-field rule-field-wide" : "rule-field"}
-                key={field.key}
-              >
-                <FieldLabel label={field.label} description={field.description} />
-                {field.inputType === "boolean" ? (
-                  <select
-                    value={generalDraft[field.key] || "false"}
-                    onChange={(event) => updateGeneralField(field.key, event.target.value)}
-                  >
-                    <option value="true">true</option>
-                    <option value="false">false</option>
-                  </select>
-                ) : field.inputType === "number-list" ? (
-                  <textarea
-                    className="note-box tall"
-                    value={generalDraft[field.key] || ""}
-                    onChange={(event) => updateGeneralField(field.key, event.target.value)}
-                  />
-                ) : (
-                  <input
-                    type="number"
-                    step={field.step}
-                    value={generalDraft[field.key] || ""}
-                    onChange={(event) => updateGeneralField(field.key, event.target.value)}
-                  />
-                )}
-              </div>
-            ))}
+            {GENERAL_SETTINGS_FIELDS.map((field) => {
+              const meta = generalFieldMeta(field.key);
+              return (
+                <div
+                  className={field.inputType === "number-list" ? "rule-field rule-field-wide" : "rule-field"}
+                  key={field.key}
+                >
+                  <FieldLabel label={meta.label} description={meta.description} />
+                  {field.inputType === "boolean" ? (
+                    <select
+                      value={generalDraft[field.key] || "false"}
+                      onChange={(event) => updateGeneralField(field.key, event.target.value)}
+                    >
+                      <option value="true">{t("common.true")}</option>
+                      <option value="false">{t("common.false")}</option>
+                    </select>
+                  ) : field.inputType === "number-list" ? (
+                    <textarea
+                      className="note-box tall"
+                      value={generalDraft[field.key] || ""}
+                      onChange={(event) => updateGeneralField(field.key, event.target.value)}
+                    />
+                  ) : (
+                    <input
+                      type="number"
+                      step={field.step}
+                      value={generalDraft[field.key] || ""}
+                      onChange={(event) => updateGeneralField(field.key, event.target.value)}
+                    />
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
       ) : null}
@@ -420,24 +415,27 @@ export function RulesPage() {
           {LIST_SECTIONS.map((section) => (
             <div className="panel" key={section}>
               <div className="panel-heading">
-                <h2>{section}</h2>
-                <p className="muted">Editable list-based rules.</p>
+                <h2>{t(`rulesMeta.sections.${section}`)}</h2>
+                <p className="muted">{t("rules.listSectionDescription")}</p>
               </div>
               <div className="detail-grid">
-                {RULE_LIST_FIELDS.filter((field) => field.section === section).map((field) => (
-                  <div className="rule-field" key={field.key}>
-                    <FieldLabel
-                      label={field.label}
-                      description={field.description}
-                      recommendation={field.recommendation}
-                    />
-                    <textarea
-                      className="note-box tall"
-                      value={listValuesToText(draft[field.key])}
-                      onChange={(event) => updateListField(field, event.target.value)}
-                    />
-                  </div>
-                ))}
+                {RULE_LIST_FIELDS.filter((field) => field.sectionKey === section).map((field) => {
+                  const meta = listFieldMeta(field);
+                  return (
+                    <div className="rule-field" key={field.key}>
+                      <FieldLabel
+                        label={meta.label}
+                        description={meta.description}
+                        recommendation={meta.recommendation}
+                      />
+                      <textarea
+                        className="note-box tall"
+                        value={listValuesToText(draft[field.key])}
+                        onChange={(event) => updateListField(field, event.target.value)}
+                      />
+                    </div>
+                  );
+                })}
               </div>
             </div>
           ))}
@@ -445,35 +443,38 @@ export function RulesPage() {
           {SETTING_SECTIONS.map((section) => (
             <div className="panel" key={section}>
               <div className="panel-heading">
-                <h2>{section}</h2>
-                <p className="muted">Canonical editable settings only.</p>
+                <h2>{t(`rulesMeta.sections.${section}`)}</h2>
+                <p className="muted">{t("rules.settingSectionDescription")}</p>
               </div>
               <div className="form-grid">
-                {RULE_SETTING_FIELDS.filter((field) => field.section === section).map((field) => (
-                  <div className="rule-field" key={field.key}>
-                    <FieldLabel
-                      label={field.label}
-                      description={field.description}
-                      recommendation={field.recommendation}
-                    />
-                    {field.inputType === "boolean" ? (
-                      <select
-                        value={getSettingInputValue(field, draft.settings?.[field.key])}
-                        onChange={(event) => updateSettingField(field, event.target.value)}
-                      >
-                        <option value="true">true</option>
-                        <option value="false">false</option>
-                      </select>
-                    ) : (
-                      <input
-                        type={field.inputType === "number" ? "number" : "text"}
-                        step={field.step}
-                        value={getSettingInputValue(field, draft.settings?.[field.key])}
-                        onChange={(event) => updateSettingField(field, event.target.value)}
+                {RULE_SETTING_FIELDS.filter((field) => field.sectionKey === section).map((field) => {
+                  const meta = settingFieldMeta(field);
+                  return (
+                    <div className="rule-field" key={field.key}>
+                      <FieldLabel
+                        label={meta.label}
+                        description={meta.description}
+                        recommendation={meta.recommendation}
                       />
-                    )}
-                  </div>
-                ))}
+                      {field.inputType === "boolean" ? (
+                        <select
+                          value={getSettingInputValue(field, draft.settings?.[field.key])}
+                          onChange={(event) => updateSettingField(field, event.target.value)}
+                        >
+                          <option value="true">{t("common.true")}</option>
+                          <option value="false">{t("common.false")}</option>
+                        </select>
+                      ) : (
+                        <input
+                          type={field.inputType === "number" ? "number" : "text"}
+                          step={field.step}
+                          value={getSettingInputValue(field, draft.settings?.[field.key])}
+                          onChange={(event) => updateSettingField(field, event.target.value)}
+                        />
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           ))}

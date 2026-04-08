@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { api } from "../api/client";
 import { FieldLabel } from "../components/FieldLabel";
 import { InfoTooltip } from "../components/InfoTooltip";
+import { useI18n } from "../localization";
 
 type TelegramPayload = {
   settings: Record<string, string | number | boolean>;
@@ -16,160 +17,66 @@ type EnforcementPayload = {
   settings: Record<string, string | number | boolean | string[]>;
 };
 
+type TelegramFieldKey =
+  | "tg_admin_chat_id"
+  | "tg_topic_id"
+  | "telegram_message_min_interval_seconds"
+  | "telegram_admin_notifications_enabled"
+  | "telegram_user_notifications_enabled"
+  | "telegram_admin_commands_enabled"
+  | "telegram_notify_admin_review_enabled"
+  | "telegram_notify_admin_warning_only_enabled"
+  | "telegram_notify_admin_warning_enabled"
+  | "telegram_notify_admin_ban_enabled"
+  | "telegram_notify_user_warning_only_enabled"
+  | "telegram_notify_user_warning_enabled"
+  | "telegram_notify_user_ban_enabled";
+
+type TemplateFieldKey =
+  | "user_warning_only_template"
+  | "user_warning_template"
+  | "user_ban_template"
+  | "admin_warning_only_template"
+  | "admin_warning_template"
+  | "admin_ban_template"
+  | "admin_review_template";
+
 type TelegramField = {
-  key: string;
-  label: string;
+  key: TelegramFieldKey;
   section: "delivery" | "admin" | "user";
   type: "text" | "number" | "boolean";
   step?: number;
-  description: string;
 };
 
 type TemplateField = {
-  key: string;
+  key: TemplateFieldKey;
   audience: "admin" | "user";
-  label: string;
-  description: string;
 };
 
 const TELEGRAM_FIELDS: TelegramField[] = [
-  {
-    key: "tg_admin_chat_id",
-    label: "Admin chat destination",
-    section: "delivery",
-    type: "text",
-    description: "Telegram chat id for admin notifications."
-  },
-  {
-    key: "tg_topic_id",
-    label: "Admin thread/topic",
-    section: "delivery",
-    type: "number",
-    description: "Optional topic/thread id inside the admin chat."
-  },
-  {
-    key: "telegram_message_min_interval_seconds",
-    label: "Message interval (sec)",
-    section: "delivery",
-    type: "number",
-    step: 0.1,
-    description: "Minimum delay between Telegram sends."
-  },
-  {
-    key: "telegram_admin_notifications_enabled",
-    label: "Send admin notifications",
-    section: "delivery",
-    type: "boolean",
-    description: "Master switch for all admin bot notifications."
-  },
-  {
-    key: "telegram_user_notifications_enabled",
-    label: "Send user notifications",
-    section: "delivery",
-    type: "boolean",
-    description: "Master switch for all user-facing bot messages."
-  },
-  {
-    key: "telegram_admin_commands_enabled",
-    label: "Enable admin bot commands",
-    section: "delivery",
-    type: "boolean",
-    description: "Allows Telegram admin command handlers to run."
-  },
-  {
-    key: "telegram_notify_admin_review_enabled",
-    label: "Notify review cases",
-    section: "admin",
-    type: "boolean",
-    description: "Send admin messages when review/manual moderation is needed."
-  },
-  {
-    key: "telegram_notify_admin_warning_only_enabled",
-    label: "Notify warning-only cases",
-    section: "admin",
-    type: "boolean",
-    description: "Send admin messages for non-escalating warning-only events."
-  },
-  {
-    key: "telegram_notify_admin_warning_enabled",
-    label: "Notify warnings",
-    section: "admin",
-    type: "boolean",
-    description: "Send admin messages when a warning is issued."
-  },
-  {
-    key: "telegram_notify_admin_ban_enabled",
-    label: "Notify bans",
-    section: "admin",
-    type: "boolean",
-    description: "Send admin messages when a ban is issued."
-  },
-  {
-    key: "telegram_notify_user_warning_only_enabled",
-    label: "Send warning-only messages",
-    section: "user",
-    type: "boolean",
-    description: "Send user-facing messages for non-escalating warning-only events."
-  },
-  {
-    key: "telegram_notify_user_warning_enabled",
-    label: "Send warning messages",
-    section: "user",
-    type: "boolean",
-    description: "Send user-facing messages when a warning is issued."
-  },
-  {
-    key: "telegram_notify_user_ban_enabled",
-    label: "Send ban messages",
-    section: "user",
-    type: "boolean",
-    description: "Send user-facing messages when a ban is issued."
-  }
+  { key: "tg_admin_chat_id", section: "delivery", type: "text" },
+  { key: "tg_topic_id", section: "delivery", type: "number" },
+  { key: "telegram_message_min_interval_seconds", section: "delivery", type: "number", step: 0.1 },
+  { key: "telegram_admin_notifications_enabled", section: "delivery", type: "boolean" },
+  { key: "telegram_user_notifications_enabled", section: "delivery", type: "boolean" },
+  { key: "telegram_admin_commands_enabled", section: "delivery", type: "boolean" },
+  { key: "telegram_notify_admin_review_enabled", section: "admin", type: "boolean" },
+  { key: "telegram_notify_admin_warning_only_enabled", section: "admin", type: "boolean" },
+  { key: "telegram_notify_admin_warning_enabled", section: "admin", type: "boolean" },
+  { key: "telegram_notify_admin_ban_enabled", section: "admin", type: "boolean" },
+  { key: "telegram_notify_user_warning_only_enabled", section: "user", type: "boolean" },
+  { key: "telegram_notify_user_warning_enabled", section: "user", type: "boolean" },
+  { key: "telegram_notify_user_ban_enabled", section: "user", type: "boolean" }
 ];
 
 const TEMPLATE_FIELDS: TemplateField[] = [
-  {
-    key: "user_warning_only_template",
-    audience: "user",
-    label: "Warning-only message",
-    description: "User-facing message when the case is warning-only and does not escalate."
-  },
-  {
-    key: "user_warning_template",
-    audience: "user",
-    label: "Warning message",
-    description: "User-facing message for standard warnings before a ban."
-  },
-  {
-    key: "user_ban_template",
-    audience: "user",
-    label: "Ban message",
-    description: "User-facing message sent when a ban is applied."
-  },
-  {
-    key: "admin_warning_only_template",
-    audience: "admin",
-    label: "Warning-only message",
-    description: "Admin notification text for warning-only cases."
-  },
-  {
-    key: "admin_warning_template",
-    audience: "admin",
-    label: "Warning message",
-    description: "Admin notification text for warning events."
-  },
-  {
-    key: "admin_ban_template",
-    audience: "admin",
-    label: "Ban message",
-    description: "Admin notification text for ban events."
-  },
-  {
-    key: "admin_review_template",
-    audience: "admin",
-    label: "Review message",
-    description: "Admin notification text for review/manual moderation cases."
-  }
+  { key: "user_warning_only_template", audience: "user" },
+  { key: "user_warning_template", audience: "user" },
+  { key: "user_ban_template", audience: "user" },
+  { key: "admin_warning_only_template", audience: "admin" },
+  { key: "admin_warning_template", audience: "admin" },
+  { key: "admin_ban_template", audience: "admin" },
+  { key: "admin_review_template", audience: "admin" }
 ];
 
 function normalizeTelegramDraft(payload: TelegramPayload): Record<string, string> {
@@ -185,6 +92,7 @@ function normalizeTemplateDraft(payload: EnforcementPayload): Record<string, str
 }
 
 export function TelegramPage() {
+  const { t } = useI18n();
   const [data, setData] = useState<TelegramPayload | null>(null);
   const [settings, setSettings] = useState<Record<string, string>>({});
   const [savedSettings, setSavedSettings] = useState<Record<string, string>>({});
@@ -219,7 +127,7 @@ export function TelegramPage() {
         setSavedTemplates(normalizedTemplates);
       } catch (err) {
         if (!cancelled) {
-          setError(err instanceof Error ? err.message : "Failed to load Telegram settings");
+          setError(err instanceof Error ? err.message : t("telegram.loadFailed"));
         }
       }
     }
@@ -228,10 +136,24 @@ export function TelegramPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [t]);
 
   const runtimeDirty = JSON.stringify(settings) !== JSON.stringify(savedSettings);
   const templatesDirty = JSON.stringify(templates) !== JSON.stringify(savedTemplates);
+
+  function fieldMeta(key: TelegramFieldKey) {
+    return {
+      label: t(`rulesMeta.telegramFields.${key}.label`),
+      description: t(`rulesMeta.telegramFields.${key}.description`)
+    };
+  }
+
+  function templateMeta(key: TemplateFieldKey) {
+    return {
+      label: t(`rulesMeta.telegramTemplateFields.${key}.label`),
+      description: t(`rulesMeta.telegramTemplateFields.${key}.description`)
+    };
+  }
 
   async function saveRuntime() {
     if (!data) return;
@@ -244,7 +166,7 @@ export function TelegramPage() {
           if (field.type === "number") {
             const parsed = Number(settings[field.key]);
             if (!Number.isFinite(parsed)) {
-              throw new Error(`${field.label}: invalid number`);
+              throw new Error(t("telegram.invalidNumber", { field: fieldMeta(field.key).label }));
             }
             return [field.key, parsed];
           }
@@ -258,10 +180,10 @@ export function TelegramPage() {
       setData(response);
       setSettings(normalized);
       setSavedSettings(normalized);
-      setSaved("Telegram settings saved");
+      setSaved(t("telegram.settingsSaved"));
       setError("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Save failed");
+      setError(err instanceof Error ? err.message : t("telegram.saveFailed"));
       setSaved("");
     }
   }
@@ -276,18 +198,19 @@ export function TelegramPage() {
       const normalized = normalizeTemplateDraft(response);
       setTemplates(normalized);
       setSavedTemplates(normalized);
-      setTemplatesSaved("Message templates saved");
+      setTemplatesSaved(t("telegram.templatesSaved"));
       setTemplatesError("");
     } catch (err) {
-      setTemplatesError(err instanceof Error ? err.message : "Save failed");
+      setTemplatesError(err instanceof Error ? err.message : t("telegram.saveFailed"));
       setTemplatesSaved("");
     }
   }
 
   function renderTelegramField(field: TelegramField) {
+    const meta = fieldMeta(field.key);
     return (
       <div className="rule-field" key={field.key}>
-        <FieldLabel label={field.label} description={field.description} />
+        <FieldLabel label={meta.label} description={meta.description} />
         {field.type === "boolean" ? (
           <select
             value={settings[field.key]}
@@ -295,8 +218,8 @@ export function TelegramPage() {
               setSettings((prev) => ({ ...prev, [field.key]: event.target.value }))
             }
           >
-            <option value="true">true</option>
-            <option value="false">false</option>
+            <option value="true">{t("common.true")}</option>
+            <option value="false">{t("common.false")}</option>
           </select>
         ) : (
           <input
@@ -316,56 +239,56 @@ export function TelegramPage() {
     <section className="page">
       <div className="page-header">
         <div>
-          <span className="eyebrow">Telegram</span>
-          <h1>Bot runtime settings and message delivery</h1>
+          <span className="eyebrow">{t("telegram.eyebrow")}</span>
+          <h1>{t("telegram.title")}</h1>
         </div>
         <div className="action-row">
           <span className={runtimeDirty ? "tag review-only" : "tag severity-low"}>
-            {runtimeDirty ? "unsaved changes" : "saved"}
+            {runtimeDirty ? t("common.unsavedChanges") : t("common.saved")}
           </span>
           <button onClick={saveRuntime} disabled={!data || !runtimeDirty}>
-            Save telegram settings
+            {t("telegram.saveSettings")}
           </button>
         </div>
       </div>
       {error ? <div className="error-box">{error}</div> : null}
       {saved ? <div className="ok-box">{saved}</div> : null}
-      {!data ? <div className="panel">Loading…</div> : null}
+      {!data ? <div className="panel">{t("common.loading")}</div> : null}
 
       {data ? (
         <>
           <div className="stats-grid">
             <div className="stat-card">
-              <span>Admin bot</span>
-              <strong>{data.capabilities.admin_bot_enabled ? "ON" : "OFF"}</strong>
+              <span>{t("telegram.cards.adminBot")}</span>
+              <strong>{data.capabilities.admin_bot_enabled ? t("common.on") : t("common.off")}</strong>
             </div>
             <div className="stat-card">
-              <span>User bot</span>
-              <strong>{data.capabilities.user_bot_enabled ? "ON" : "OFF"}</strong>
+              <span>{t("telegram.cards.userBot")}</span>
+              <strong>{data.capabilities.user_bot_enabled ? t("common.on") : t("common.off")}</strong>
             </div>
           </div>
 
           <div className="panel">
             <div className="panel-heading">
-              <h2>Telegram capability status</h2>
-              <p className="muted">Bot tokens and usernames are managed only through `.env` on the server.</p>
+              <h2>{t("telegram.capabilityStatusTitle")}</h2>
+              <p className="muted">{t("telegram.capabilityStatusDescription")}</p>
             </div>
             <div className="stats-grid">
               <div className="stat-card">
-                <span>Admin bot token + username</span>
-                <strong>{data.capabilities.admin_bot_enabled ? "Configured" : "Disabled"}</strong>
+                <span>{t("telegram.cards.adminBotConfigured")}</span>
+                <strong>{data.capabilities.admin_bot_enabled ? t("common.configured") : t("common.disabled")}</strong>
               </div>
               <div className="stat-card">
-                <span>User bot token</span>
-                <strong>{data.capabilities.user_bot_enabled ? "Configured" : "Disabled"}</strong>
+                <span>{t("telegram.cards.userBotConfigured")}</span>
+                <strong>{data.capabilities.user_bot_enabled ? t("common.configured") : t("common.disabled")}</strong>
               </div>
             </div>
           </div>
 
           <div className="panel">
             <div className="panel-heading">
-              <h2>Delivery & bot behavior</h2>
-              <p className="muted">These settings are live-editable and do not require restart.</p>
+              <h2>{t("telegram.deliveryTitle")}</h2>
+              <p className="muted">{t("telegram.deliveryDescription")}</p>
             </div>
             <div className="form-grid">
               {TELEGRAM_FIELDS.filter((field) => field.section === "delivery").map(renderTelegramField)}
@@ -374,8 +297,8 @@ export function TelegramPage() {
 
           <div className="panel">
             <div className="panel-heading">
-              <h2>Admin notifications</h2>
-              <p className="muted">Per-event delivery controls for the admin bot.</p>
+              <h2>{t("telegram.adminNotificationsTitle")}</h2>
+              <p className="muted">{t("telegram.adminNotificationsDescription")}</p>
             </div>
             <div className="form-grid">
               {TELEGRAM_FIELDS.filter((field) => field.section === "admin").map(renderTelegramField)}
@@ -384,8 +307,8 @@ export function TelegramPage() {
 
           <div className="panel">
             <div className="panel-heading">
-              <h2>User notifications</h2>
-              <p className="muted">Per-event delivery controls for user-facing bot messages.</p>
+              <h2>{t("telegram.userNotificationsTitle")}</h2>
+              <p className="muted">{t("telegram.userNotificationsDescription")}</p>
             </div>
             <div className="form-grid">
               {TELEGRAM_FIELDS.filter((field) => field.section === "user").map(renderTelegramField)}
@@ -395,20 +318,18 @@ export function TelegramPage() {
           <div className="panel">
             <div className="panel-heading panel-heading-row">
               <div className="action-row">
-                <h2>Message templates</h2>
+                <h2>{t("telegram.templatesTitle")}</h2>
                 <InfoTooltip
-                  label="Message templates hint"
-                  content={
-                    "Multiline text is preserved.\n\nPlaceholders: {{username}}, {{warning_count}}, {{warnings_left}}, {{ban_text}}, {{review_url}}."
-                  }
+                  label={t("telegram.templatesHintLabel")}
+                  content={t("telegram.templatesHint")}
                 />
               </div>
               <div className="action-row">
                 <span className={templatesDirty ? "tag review-only" : "tag severity-low"}>
-                  {templatesDirty ? "unsaved changes" : "saved"}
+                  {templatesDirty ? t("common.unsavedChanges") : t("common.saved")}
                 </span>
                 <button disabled={!templatesDirty} onClick={saveTemplates}>
-                  Save message templates
+                  {t("telegram.saveTemplates")}
                 </button>
               </div>
             </div>
@@ -417,20 +338,23 @@ export function TelegramPage() {
             <div className="detail-grid">
               {(["user", "admin"] as const).map((audience) => (
                 <div className="settings-group" key={audience}>
-                  <h3>{audience === "user" ? "User templates" : "Admin templates"}</h3>
+                  <h3>{audience === "user" ? t("telegram.userTemplates") : t("telegram.adminTemplates")}</h3>
                   <div className="settings-group-fields">
-                    {TEMPLATE_FIELDS.filter((field) => field.audience === audience).map((field) => (
-                      <div className="rule-field" key={field.key}>
-                        <FieldLabel label={field.label} description={field.description} />
-                        <textarea
-                          className="note-box tall"
-                          value={templates[field.key] || ""}
-                          onChange={(event) =>
-                            setTemplates((prev) => ({ ...prev, [field.key]: event.target.value }))
-                          }
-                        />
-                      </div>
-                    ))}
+                    {TEMPLATE_FIELDS.filter((field) => field.audience === audience).map((field) => {
+                      const meta = templateMeta(field.key);
+                      return (
+                        <div className="rule-field" key={field.key}>
+                          <FieldLabel label={meta.label} description={meta.description} />
+                          <textarea
+                            className="note-box tall"
+                            value={templates[field.key] || ""}
+                            onChange={(event) =>
+                              setTemplates((prev) => ({ ...prev, [field.key]: event.target.value }))
+                            }
+                          />
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               ))}

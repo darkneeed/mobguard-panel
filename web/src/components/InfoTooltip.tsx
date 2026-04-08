@@ -1,5 +1,7 @@
 import { type ReactNode, useId, useState } from "react";
 
+import { useI18n } from "../localization";
+
 type InfoTooltipProps = {
   content: ReactNode;
   label?: string;
@@ -7,8 +9,9 @@ type InfoTooltipProps = {
 
 export function InfoTooltip({
   content,
-  label = "Show field hint"
+  label
 }: InfoTooltipProps) {
+  const { t } = useI18n();
   const tooltipId = useId();
   const [open, setOpen] = useState(false);
 
@@ -17,7 +20,7 @@ export function InfoTooltip({
       <button
         type="button"
         className="info-button"
-        aria-label={label}
+        aria-label={label || t("common.showHint")}
         aria-describedby={tooltipId}
         aria-expanded={open}
         onClick={() => setOpen((prev) => !prev)}

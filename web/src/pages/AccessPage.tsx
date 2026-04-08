@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 
 import { api } from "../api/client";
 import { FieldLabel } from "../components/FieldLabel";
+import { useI18n } from "../localization";
 import { RULE_LIST_FIELDS } from "../rulesMeta";
 
 type AccessPayload = {
@@ -16,25 +17,14 @@ type AccessPayload = {
   };
 };
 
-const ACCESS_FIELDS = RULE_LIST_FIELDS.filter((field) => field.section === "Access");
+const ACCESS_FIELDS = RULE_LIST_FIELDS.filter((field) => field.sectionKey === "access");
 
 function listValuesToText(values: Array<string | number> | undefined): string {
   return (values || []).map((item) => String(item)).join("\n");
 }
 
-function parseNumberList(text: string): number[] {
-  const values: number[] = [];
-  for (const raw of text.split("\n").map((item) => item.trim()).filter(Boolean)) {
-    const parsed = Number(raw);
-    if (!Number.isFinite(parsed)) {
-      throw new Error(`Invalid numeric value '${raw}'`);
-    }
-    values.push(parsed);
-  }
-  return values;
-}
-
 export function AccessPage() {
+  const { t } = useI18n();
   const [data, setData] = useState<AccessPayload | null>(null);
   const [lists, setLists] = useState<Record<string, string>>({});
   const [error, setError] = useState("");
@@ -52,8 +42,20 @@ export function AccessPage() {
           )
         );
       })
-      .catch((err: Error) => setError(err.message));
-  }, []);
+      .catch((err: Error) => setError(err.message || t("access.loadFailed")));
+  }, [t]);
+
+  function parseNumberList(text: string): number[] {
+    const values: number[] = [];
+    for (const raw of text.split("\n").map((item) => item.trim()).filter(Boolean)) {
+      const parsed = Number(raw);
+      if (!Number.isFinite(parsed)) {
+        throw new Error(t("access.invalidNumericValue", { value: raw }));
+      }
+      values.push(parsed);
+    }
+    return values;
+  }
 
   async function save() {
     if (!data) return;
@@ -72,10 +74,10 @@ export function AccessPage() {
           ACCESS_FIELDS.map((field) => [field.key, listValuesToText(response.lists[field.key])])
         )
       );
-      setSaved("Access settings saved");
+      setSaved(t("access.saved"));
       setError("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Save failed");
+      setError(err instanceof Error ? err.message : t("access.saveFailed"));
       setSaved("");
     }
   }
@@ -84,60 +86,60 @@ export function AccessPage() {
     <section className="page">
       <div className="page-header">
         <div>
-          <span className="eyebrow">Access</span>
-          <h1>Способы входа и списки доступа</h1>
+          <span className="eyebrow">{t("access.eyebrow")}</span>
+          <h1>{t("access.title")}</h1>
         </div>
         <button onClick={save} disabled={!data}>
-          Save access settings
+          {t("access.save")}
         </button>
       </div>
 
       {error ? <div className="error-box">{error}</div> : null}
       {saved ? <div className="ok-box">{saved}</div> : null}
-      {!data ? <div className="panel">Loading…</div> : null}
+      {!data ? <div className="panel">{t("common.loading")}</div> : null}
 
       {data ? (
         <>
           <div className="stats-grid">
             <div className="stat-card">
-              <span>Telegram login</span>
-              <strong>{data.auth.telegram_enabled ? "ON" : "OFF"}</strong>
+              <span>{t("access.cards.telegramLogin")}</span>
+              <strong>{data.auth.telegram_enabled ? t("common.on") : t("common.off")}</strong>
             </div>
             <div className="stat-card">
-              <span>Local fallback login</span>
-              <strong>{data.auth.local_enabled ? "ON" : "OFF"}</strong>
+              <span>{t("access.cards.localFallback")}</span>
+              <strong>{data.auth.local_enabled ? t("common.on") : t("common.off")}</strong>
             </div>
           </div>
 
           <div className="panel">
             <div className="panel-heading">
-              <h2>Authentication status</h2>
-              <p className="muted">Credentials are managed only through `.env` on the server.</p>
+              <h2>{t("access.authStatusTitle")}</h2>
+              <p className="muted">{t("access.authStatusDescription")}</p>
             </div>
             <div className="stats-grid">
               <div className="stat-card">
-                <span>Telegram panel auth</span>
-                <strong>{data.auth.telegram_enabled ? "Configured" : "Disabled"}</strong>
+                <span>{t("access.authCards.telegramPanel")}</span>
+                <strong>{data.auth.telegram_enabled ? t("common.configured") : t("common.disabled")}</strong>
               </div>
               <div className="stat-card">
-                <span>Local fallback auth</span>
-                <strong>{data.auth.local_enabled ? "Configured" : "Disabled"}</strong>
+                <span>{t("access.authCards.localFallback")}</span>
+                <strong>{data.auth.local_enabled ? t("common.configured") : t("common.disabled")}</strong>
               </div>
             </div>
           </div>
 
           <div className="panel">
             <div className="panel-heading">
-              <h2>Access lists</h2>
-              <p className="muted">Panel admins and runtime exclusions are managed separately.</p>
+              <h2>{t("access.listsTitle")}</h2>
+              <p className="muted">{t("access.listsDescription")}</p>
             </div>
             <div className="detail-grid">
               {ACCESS_FIELDS.map((field) => (
                 <div className="rule-field" key={field.key}>
                   <FieldLabel
-                    label={field.label}
-                    description={field.description}
-                    recommendation={field.recommendation}
+                    label={t(`rulesMeta.listFields.${field.key}.label`)}
+                    description={t(`rulesMeta.listFields.${field.key}.description`)}
+                    recommendation={t(`rulesMeta.listFields.${field.key}.recommendation`)}
                   />
                   <textarea
                     className="note-box tall"
