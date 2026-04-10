@@ -1,5 +1,7 @@
+import json
 import asyncio
 import unittest
+from pathlib import Path
 
 from mobguard_core.scoring import ScoringContext, ScoringDependencies, evaluate_mobile_network
 from mobguard_platform import review_reason_for_bundle
@@ -62,6 +64,10 @@ BASE_CONFIG = {
     },
 }
 
+RUNTIME_CONFIG = json.loads(
+    (Path(__file__).resolve().parents[1] / "runtime" / "config.json").read_text(encoding="utf-8")
+)
+
 
 class ScoringPipelineTests(unittest.TestCase):
     def make_deps(
@@ -78,6 +84,7 @@ class ScoringPipelineTests(unittest.TestCase):
         legacy_mobile=0,
         legacy_home=0,
         ip_api_mobile=None,
+        datacenter_detector=None,
     ):
         behavior = behavior or {
             "logs": [],
@@ -129,7 +136,8 @@ class ScoringPipelineTests(unittest.TestCase):
             get_ip_info=get_ip_info,
             parse_asn=lambda value: int(str(value).split()[0].replace("AS", "")) if str(value).startswith("AS") else None,
             normalize_isp_name=lambda value: value,
-            is_datacenter=lambda raw_org, raw_hostname: "hosting" in raw_org.lower() or "hosting" in raw_hostname.lower(),
+            is_datacenter=datacenter_detector
+            or (lambda raw_org, raw_hostname: "hosting" in raw_org.lower() or "hosting" in raw_hostname.lower()),
             analyze_behavior=analyze_behavior,
             get_promoted_pattern=get_promoted_pattern,
             get_legacy_confidence=get_legacy_confidence,
@@ -236,3 +244,21 @@ class ScoringPipelineTests(unittest.TestCase):
         self.assertEqual(bundle.verdict, "MOBILE")
         self.assertFalse(evidence["review_recommended"])
         self.assertIsNone(review_reason_for_bundle(bundle))
+
+    def test_runtime_config_removed_noisy_keywords_do_not_create_signals(self):
+        exclude_keywords = tuple(RUNTIME_CONFIG["exclude_isp_keywords"])
+        deps, _ = self.make_deps(
+            org="AS64500 Cloud Wire Static Dom",
+            hostname="wire.static.cloud.dom.example",
+            datacenter_detector=lambda raw_org, raw_hostname: any(
+                kw in f"{raw_org} {raw_hostname}".lower() for kw in exclude_keywords
+            ),
+        )
+        bundle = asyncio.run(
+            evaluate_mobile_network(ScoringContext(ip="7.7.7.7"), RUNTIME_CONFIG, deps)
+        )
+        evidence = bundle.signal_flags["provider_evidence"]
+        self.assertNotIn("datacenter", bundle.reason_codes)
+        self.assertNotIn("keyword_home", bundle.reason_codes)
+        self.assertEqual(evidence["home_keywords"], [])
+        self.assertEqual(evidence["mobile_keywords"], [])

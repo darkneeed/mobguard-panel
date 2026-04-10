@@ -20,23 +20,18 @@
   ],
   "exclude_isp_keywords": [
     "datacenter", "data center", "data-center",
-    "hosting", "hoster", "host provider",
-    "cloud", "vps", "vds", "dedicated",
+    "hosting", "hoster", "vps", "vds", "dedicated",
     "colo", "colocation",
-    "cdn", "edge network",
-    "server farm", "infrastructure",
     "hetzner", "ovh", "digitalocean", "aws", "amazon",
-    "google cloud", "microsoft azure", "linode", "vultr", "selectel"
+    "google cloud", "azure", "linode", "vultr", "selectel"
   ],
   "home_isp_keywords": [
     "fttb", "ftth", "dsl", "adsl", "pppoe",
-    "fiber", "fixed", "cable", "dom", "static", "wire",
-    "akado", "izet", "gpon", "ethernet", "smit", "it-region"
+    "fiber", "gpon", "ethernet", "cable"
   ],
   "allowed_isp_keywords": [
     "mobile", "cellular", "lte", "gprs", "umts", "gsm",
-    "hsdpa", "pgw", "3g", "4g", "5g", "tbank", "sberbank",
-    "TBANK", "Mobile"
+    "hsdpa", "pgw", "3g", "4g", "5g"
   ],
   "provider_profiles": [
     {
@@ -44,7 +39,7 @@
       "classification": "mixed",
       "aliases": ["mts", "mgts"],
       "mobile_markers": ["mobile", "lte", "5g", "pgw"],
-      "home_markers": ["fiber", "gpon", "fttb", "ftth"],
+      "home_markers": ["fiber", "gpon", "fttb", "ftth", "mgts"],
       "asns": [8359, 12389]
     },
     {
@@ -52,7 +47,7 @@
       "classification": "mixed",
       "aliases": ["beeline", "vimpelcom", "vimpel"],
       "mobile_markers": ["mobile", "lte", "5g", "pgw"],
-      "home_markers": ["fiber", "gpon", "fttb", "home"],
+      "home_markers": ["fiber", "gpon", "fttb", "ftth", "home"],
       "asns": [3216, 16345]
     },
     {
@@ -61,14 +56,14 @@
       "aliases": ["rostelecom", "onlime"],
       "mobile_markers": ["mobile", "lte"],
       "home_markers": ["fiber", "gpon", "fttb", "ftth", "onlime"],
-      "asns": [12389, 25159, 8359]
+      "asns": [12389, 25159]
     },
     {
       "key": "megafon",
       "classification": "mixed",
       "aliases": ["megafon", "megaphone"],
       "mobile_markers": ["mobile", "lte", "5g", "pgw"],
-      "home_markers": ["fiber", "gpon", "fttb"],
+      "home_markers": ["fiber", "gpon", "fttb", "ftth"],
       "asns": [31163]
     },
     {
@@ -76,8 +71,8 @@
       "classification": "mixed",
       "aliases": ["dom.ru", "domru", "ertelecom", "er-telecom", "wifire", "netbynet"],
       "mobile_markers": ["mobile", "lte"],
-      "home_markers": ["fiber", "gpon", "fttb", "ethernet"],
-      "asns": [8402, 12714]
+      "home_markers": ["fiber", "gpon", "fttb", "ftth", "ethernet"],
+      "asns": [12714]
     }
   ],
   "mobile_tags": [
@@ -144,7 +139,7 @@
     "learning_promote_combo_min_precision": 0.9,
     "live_rules_refresh_seconds": 15
   },
-  "exempt_ids": [2, 3],
+  "exempt_ids": [2, 3, 10, 234],
   "exempt_tg_ids": [1081950251],
   "admin_tg_ids": [1081950251],
   "_meta": {
