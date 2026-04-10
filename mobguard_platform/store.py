@@ -514,6 +514,28 @@ class PlatformStore:
             }
             if analysis_event_columns and "system_id" not in analysis_event_columns:
                 conn.execute("ALTER TABLE analysis_events ADD COLUMN system_id INTEGER")
+            if analysis_event_columns and "score" not in analysis_event_columns:
+                conn.execute("ALTER TABLE analysis_events ADD COLUMN score INTEGER NOT NULL DEFAULT 0")
+            if analysis_event_columns and "isp" not in analysis_event_columns:
+                conn.execute("ALTER TABLE analysis_events ADD COLUMN isp TEXT")
+            if analysis_event_columns and "asn" not in analysis_event_columns:
+                conn.execute("ALTER TABLE analysis_events ADD COLUMN asn INTEGER")
+            if analysis_event_columns and "punitive_eligible" not in analysis_event_columns:
+                conn.execute(
+                    "ALTER TABLE analysis_events ADD COLUMN punitive_eligible INTEGER NOT NULL DEFAULT 0"
+                )
+            if analysis_event_columns and "reasons_json" not in analysis_event_columns:
+                conn.execute(
+                    "ALTER TABLE analysis_events ADD COLUMN reasons_json TEXT NOT NULL DEFAULT '[]'"
+                )
+            if analysis_event_columns and "signal_flags_json" not in analysis_event_columns:
+                conn.execute(
+                    "ALTER TABLE analysis_events ADD COLUMN signal_flags_json TEXT NOT NULL DEFAULT '{}'"
+                )
+            if analysis_event_columns and "bundle_json" not in analysis_event_columns:
+                conn.execute(
+                    "ALTER TABLE analysis_events ADD COLUMN bundle_json TEXT NOT NULL DEFAULT '{}'"
+                )
             review_case_columns = {
                 row["name"] for row in conn.execute("PRAGMA table_info(review_cases)").fetchall()
             }
