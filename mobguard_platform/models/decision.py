@@ -128,9 +128,7 @@ class DecisionBundle:
             verdict=str(payload.get("verdict", "UNSURE")),
             confidence_band=str(payload.get("confidence_band", "UNSURE")),
             score=int(payload.get("score", 0)),
-            reasons=[
-                DecisionReason.from_dict(item) for item in payload.get("reasons", [])
-            ],
+            reasons=[DecisionReason.from_dict(item) for item in payload.get("reasons", [])],
             signal_flags=dict(payload.get("signal_flags", {})),
             asn=payload.get("asn"),
             isp=str(payload.get("isp", "Unknown ISP")),
@@ -184,25 +182,3 @@ class DecisionBundle:
             "score": self.score,
             "bundle": self.to_dict(),
         }
-
-
-@dataclass
-class ReviewCaseSummary:
-    id: int
-    status: str
-    review_reason: str
-    uuid: str
-    username: str
-    system_id: Optional[int]
-    telegram_id: Optional[str]
-    ip: str
-    tag: str
-    verdict: str
-    confidence_band: str
-    score: int
-    isp: str
-    asn: Optional[int]
-    repeat_count: int
-    reason_codes: list[str] = field(default_factory=list)
-    updated_at: str = ""
-    review_url: str = ""

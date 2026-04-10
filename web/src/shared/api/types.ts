@@ -1,0 +1,72 @@
+export type Session = {
+  telegram_id: number;
+  username?: string;
+  first_name?: string;
+  expires_at: string;
+  payload?: Record<string, unknown>;
+};
+
+export type AuthCapabilities = {
+  telegram_enabled: boolean;
+  bot_username: string;
+  local_enabled: boolean;
+  local_username_hint: string;
+  review_ui_base_url: string;
+  panel_name: string;
+};
+
+export type EnvFieldState = {
+  key: string;
+  value: string;
+  present: boolean;
+  masked: boolean;
+  restart_required: boolean;
+};
+
+export type ReviewItem = {
+  id: number;
+  status: string;
+  review_reason: string;
+  uuid: string | null;
+  username: string | null;
+  system_id: number | null;
+  telegram_id: string | null;
+  ip: string;
+  tag: string | null;
+  verdict: string;
+  confidence_band: string;
+  score: number;
+  isp: string | null;
+  asn: number | null;
+  punitive_eligible: number;
+  severity: "critical" | "high" | "medium" | "low";
+  repeat_count: number;
+  reason_codes: string[];
+  opened_at: string;
+  updated_at: string;
+  review_url: string;
+};
+
+export type ReviewListResponse = {
+  items: ReviewItem[];
+  count: number;
+  page: number;
+  page_size: number;
+};
+
+export type RulesState = {
+  rules: Record<string, unknown>;
+  revision: number;
+  updated_at: string;
+  updated_by: string;
+};
+
+export type ReviewListParams = Record<string, string | number | boolean | undefined>;
+
+export type SettingsSectionUpdatePayload = {
+  settings?: Record<string, unknown>;
+  lists?: Record<string, unknown[]>;
+  env?: Record<string, string>;
+  revision?: number;
+  updated_at?: string;
+};

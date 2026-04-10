@@ -1,5 +1,4 @@
-from typing import Tuple, Dict, Optional
-from datetime import datetime, timedelta
+from typing import Tuple, Dict
 import logging
 
 logger = logging.getLogger("BehavioralAnalyzers")

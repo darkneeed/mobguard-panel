@@ -13,7 +13,7 @@ try:
 except ModuleNotFoundError:  # pragma: no cover - exercised in test envs without the wheel
     maxminddb = None
 
-from .runtime_paths import runtime_geoip_db_path
+from .runtime import runtime_geoip_db_path
 
 
 logger = logging.getLogger("mobguard.asn")

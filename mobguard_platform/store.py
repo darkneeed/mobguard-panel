@@ -8,10 +8,12 @@ import sqlite3
 from datetime import datetime, timedelta
 from typing import Any, Optional
 
-from .auth import issue_session_token
 from .models import DecisionBundle, ReviewCaseSummary
 from .asn_sources import detect_asn_source
-from .runtime_paths import canonicalize_runtime_bound_settings
+from .repositories.health import ServiceHealthRepository
+from .repositories.sessions import AdminSessionRepository
+from .runtime import canonicalize_runtime_bound_settings
+from .storage.sqlite import SQLiteStorage
 
 
 EDITABLE_TOP_LEVEL_KEYS = {
@@ -200,13 +202,12 @@ class PlatformStore:
         self._rules_cache: Optional[dict[str, Any]] = None
         self._rules_cache_meta: Optional[dict[str, Any]] = None
         self._rules_cache_mtime: Optional[float] = None
+        self.storage = SQLiteStorage(db_path)
+        self.sessions = AdminSessionRepository(self.storage)
+        self.health = ServiceHealthRepository(self.storage, db_path)
 
     def _connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.db_path, check_same_thread=False, timeout=30)
-        conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA journal_mode=WAL")
-        conn.execute("PRAGMA busy_timeout = 5000")
-        return conn
+        return self.storage.connect()
 
     def _table_exists(self, conn: sqlite3.Connection, table_name: str) -> bool:
         row = conn.execute(
@@ -1321,56 +1322,13 @@ class PlatformStore:
         }
 
     def create_admin_session(self, payload: dict[str, Any], session_ttl_hours: int = 24) -> dict[str, Any]:
-        token = issue_session_token()
-        now = datetime.utcnow().replace(microsecond=0)
-        expires_at = now + timedelta(hours=session_ttl_hours)
-        with self._connect() as conn:
-            conn.execute(
-                """
-                INSERT INTO admin_sessions (token, telegram_id, username, first_name, payload_json, created_at, expires_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    token,
-                    int(payload["id"]),
-                    payload.get("username"),
-                    payload.get("first_name"),
-                    json.dumps(payload, ensure_ascii=False),
-                    now.isoformat(),
-                    expires_at.isoformat(),
-                ),
-            )
-            conn.commit()
-        return {
-            "token": token,
-            "telegram_id": int(payload["id"]),
-            "username": payload.get("username"),
-            "first_name": payload.get("first_name"),
-            "expires_at": expires_at.isoformat(),
-        }
+        return self.sessions.create(payload, session_ttl_hours=session_ttl_hours)
 
     def get_admin_session(self, token: str) -> Optional[dict[str, Any]]:
-        with self._connect() as conn:
-            row = conn.execute(
-                """
-                SELECT token, telegram_id, username, first_name, payload_json, created_at, expires_at
-                FROM admin_sessions
-                WHERE token = ?
-                """,
-                (token,),
-            ).fetchone()
-        if not row:
-            return None
-        if row["expires_at"] <= _utcnow():
-            return None
-        payload = dict(row)
-        payload["payload"] = json.loads(payload.pop("payload_json"))
-        return payload
+        return self.sessions.get(token)
 
     def delete_admin_session(self, token: str) -> None:
-        with self._connect() as conn:
-            conn.execute("DELETE FROM admin_sessions WHERE token = ?", (token,))
-            conn.commit()
+        self.sessions.delete(token)
 
     def update_service_heartbeat(
         self,
@@ -1378,88 +1336,13 @@ class PlatformStore:
         status: str = "ok",
         details: Optional[dict[str, Any]] = None,
     ) -> None:
-        now = _utcnow()
-        with self._connect() as conn:
-            conn.execute(
-                """
-                INSERT INTO service_heartbeats (service_name, status, details_json, updated_at)
-                VALUES (?, ?, ?, ?)
-                ON CONFLICT(service_name) DO UPDATE SET
-                    status = excluded.status,
-                    details_json = excluded.details_json,
-                    updated_at = excluded.updated_at
-                """,
-                (service_name, status, json.dumps(details or {}, ensure_ascii=False), now),
-            )
-            conn.commit()
+        self.health.update_heartbeat(service_name, status=status, details=details)
 
     def get_service_heartbeat(self, service_name: str, stale_after_seconds: int = 60) -> dict[str, Any]:
-        with self._connect() as conn:
-            row = conn.execute(
-                "SELECT service_name, status, details_json, updated_at FROM service_heartbeats WHERE service_name = ?",
-                (service_name,),
-            ).fetchone()
-        if not row:
-            return {"service_name": service_name, "healthy": False, "status": "missing", "updated_at": ""}
-        updated_at = datetime.fromisoformat(row["updated_at"])
-        age = (datetime.utcnow() - updated_at).total_seconds()
-        return {
-            "service_name": row["service_name"],
-            "healthy": age <= stale_after_seconds and row["status"] == "ok",
-            "status": row["status"],
-            "updated_at": row["updated_at"],
-            "age_seconds": int(age),
-            "details": json.loads(row["details_json"]),
-        }
+        return self.health.get_heartbeat(service_name, stale_after_seconds=stale_after_seconds)
 
     def get_health_snapshot(self) -> dict[str, Any]:
-        live_rules_state = self.get_live_rules_state()
-        core_heartbeat = self.get_service_heartbeat("mobguard-core")
-        with self._connect() as conn:
-            conn.execute("SELECT 1").fetchone()
-            admin_sessions = conn.execute(
-                "SELECT COUNT(*) AS cnt FROM admin_sessions WHERE expires_at > ?",
-                (_utcnow(),),
-            ).fetchone()["cnt"]
-            analysis_stats = conn.execute(
-                """
-                SELECT
-                    COUNT(*) AS total,
-                    SUM(CASE WHEN score = 0 THEN 1 ELSE 0 END) AS score_zero_count,
-                    SUM(CASE WHEN asn IS NULL THEN 1 ELSE 0 END) AS asn_missing_count
-                FROM analysis_events
-                WHERE created_at >= ?
-                """,
-                ((datetime.utcnow() - timedelta(hours=24)).replace(microsecond=0).isoformat(),),
-            ).fetchone()
-        total = int(analysis_stats["total"] or 0)
-        score_zero_count = int(analysis_stats["score_zero_count"] or 0)
-        asn_missing_count = int(analysis_stats["asn_missing_count"] or 0)
-        score_zero_ratio = (score_zero_count / total) if total else 0.0
-        asn_missing_ratio = (asn_missing_count / total) if total else 0.0
-        ipinfo_token_present = bool(os.getenv("IPINFO_TOKEN"))
-
-        degraded = not core_heartbeat["healthy"] or not ipinfo_token_present
-        overall = "degraded" if degraded else "ok"
-        return {
-            "status": overall,
-            "db": {"healthy": True, "path": self.db_path},
-            "live_rules": {
-                "revision": live_rules_state["revision"],
-                "updated_at": live_rules_state["updated_at"],
-                "updated_by": live_rules_state["updated_by"],
-            },
-            "core": core_heartbeat,
-            "admin_sessions": admin_sessions,
-            "ipinfo_token_present": ipinfo_token_present,
-            "analysis_24h": {
-                "total": total,
-                "score_zero_count": score_zero_count,
-                "score_zero_ratio": score_zero_ratio,
-                "asn_missing_count": asn_missing_count,
-                "asn_missing_ratio": asn_missing_ratio,
-            },
-        }
+        return self.health.get_snapshot(live_rules_state_loader=self.get_live_rules_state)
 
     def is_admin_tg_id(self, tg_id: int) -> bool:
         rules = self.get_live_rules()

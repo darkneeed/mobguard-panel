@@ -2,6 +2,7 @@
 .gitignore
 .env
 __pycache__/
+.pytest_cache/
 *.pyc
 *.pyo
 *.pyd
@@ -10,6 +11,7 @@ __pycache__/
 *.log
 runtime/
 tests/
+.venv/
+venv/
 web/node_modules/
 web/dist/
-mobguard panel 0.6.sh

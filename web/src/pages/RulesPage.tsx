@@ -2,6 +2,13 @@ import { useEffect, useState } from "react";
 
 import { api, RulesState } from "../api/client";
 import { FieldLabel } from "../components/FieldLabel";
+import {
+  getSettingInputValue,
+  listValuesToText,
+  normalizeGeneralSettingsDraft,
+  normalizeRulesDraft,
+  parseListText
+} from "../features/rules/lib/serializers";
 import { useI18n } from "../localization";
 import {
   RULE_LIST_FIELDS,
@@ -49,63 +56,6 @@ const LIST_SECTIONS = Array.from(
 );
 const SETTING_SECTIONS = Array.from(new Set(RULE_SETTING_FIELDS.map((field) => field.sectionKey)));
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function normalizeRulesDraft(source: Record<string, unknown>): RulesDraft {
-  const draft: RulesDraft = { settings: {} };
-  const settings = isRecord(source.settings) ? source.settings : {};
-
-  for (const field of RULE_LIST_FIELDS) {
-    const rawValue = source[field.key];
-    draft[field.key] = Array.isArray(rawValue) ? rawValue.map((item) => String(item)) : [];
-  }
-
-  for (const field of RULE_SETTING_FIELDS) {
-    const rawValue = settings[field.key];
-    if (
-      typeof rawValue === "string" ||
-      typeof rawValue === "number" ||
-      typeof rawValue === "boolean"
-    ) {
-      draft.settings![field.key] = rawValue;
-    }
-  }
-
-  return draft;
-}
-
-function normalizeGeneralSettingsDraft(source: Record<string, string | number | boolean | string[]>): Record<string, string> {
-  return Object.fromEntries(
-    GENERAL_SETTINGS_FIELDS.map((field) => {
-      const rawValue = source[field.key];
-      if (field.inputType === "number-list") {
-        return [field.key, Array.isArray(rawValue) ? rawValue.map((item) => String(item)).join("\n") : ""];
-      }
-      return [field.key, String(rawValue ?? "")];
-    })
-  );
-}
-
-function listValuesToText(values: Array<string | number> | undefined): string {
-  return (values || []).map((item) => String(item)).join("\n");
-}
-
-function parseListText(text: string): string[] {
-  return text
-    .split("\n")
-    .map((item) => item.trim())
-    .filter(Boolean);
-}
-
-function getSettingInputValue(meta: RuleSettingFieldMeta, value: RuleSettingValue): string {
-  if (meta.inputType === "boolean") {
-    return value === true ? "true" : "false";
-  }
-  return value === undefined || value === null ? "" : String(value);
-}
-
 export function RulesPage() {
   const { t, language } = useI18n();
   const [state, setState] = useState<RulesState | null>(null);
@@ -133,7 +83,7 @@ export function RulesPage() {
         const typedDetection = detectionPayload as RulesState;
         const normalizedRules = normalizeRulesDraft(typedDetection.rules);
         const typedEnforcement = enforcementPayload as EnforcementPayload;
-        const normalizedGeneral = normalizeGeneralSettingsDraft(typedEnforcement.settings);
+        const normalizedGeneral = normalizeGeneralSettingsDraft(typedEnforcement.settings, GENERAL_SETTINGS_FIELDS);
 
         setState(typedDetection);
         setDraft(normalizedRules);
@@ -286,7 +236,7 @@ export function RulesPage() {
       const response = (await api.updateEnforcementSettings({
         settings: serializeGeneralSettings(generalDraft)
       })) as EnforcementPayload;
-      const normalized = normalizeGeneralSettingsDraft(response.settings);
+      const normalized = normalizeGeneralSettingsDraft(response.settings, GENERAL_SETTINGS_FIELDS);
       setGeneralDraft(normalized);
       setSavedGeneralDraft(normalized);
       setGeneralError("");
