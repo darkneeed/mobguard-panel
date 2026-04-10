@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import base64
+import copy
 import csv
 import io
 import json
 from datetime import datetime, timedelta
 from typing import Any
+import zipfile
 
 from fastapi import HTTPException
 
@@ -364,6 +366,81 @@ def _ground_truth_for_resolution(final_resolution: str | None) -> str:
     return "pending"
 
 
+def _match_provider_profile(profiles: list[dict[str, Any]], isp: str, asn: Any) -> tuple[dict[str, Any] | None, list[str]]:
+    searchable = str(isp or "").lower()
+    best_profile: dict[str, Any] | None = None
+    best_aliases: list[str] = []
+    best_score = 0
+    normalized_asn = coerce_optional_int(asn)
+    for profile in profiles:
+        aliases = [str(item).lower() for item in profile.get("aliases", []) if str(item).strip()]
+        alias_hits = [alias for alias in aliases if alias in searchable]
+        profile_asns = {coerce_optional_int(item) for item in profile.get("asns", [])}
+        asn_hit = normalized_asn is not None and normalized_asn in profile_asns
+        if not alias_hits and not asn_hit:
+            continue
+        score = (3 if asn_hit else 0) + len(alias_hits)
+        if score > best_score:
+            best_profile = profile
+            best_aliases = alias_hits
+            best_score = score
+    return best_profile, best_aliases
+
+
+def _normalize_provider_evidence(provider_evidence: dict[str, Any]) -> dict[str, Any]:
+    evidence = dict(provider_evidence or {})
+    return {
+        "provider_key": evidence.get("provider_key"),
+        "provider_classification": evidence.get("provider_classification", "unknown"),
+        "service_type_hint": evidence.get("service_type_hint", "unknown"),
+        "service_conflict": bool(evidence.get("service_conflict", False)),
+        "review_recommended": bool(evidence.get("review_recommended", False)),
+        "matched_aliases": list(evidence.get("matched_aliases", [])),
+        "provider_mobile_markers": list(evidence.get("provider_mobile_markers", evidence.get("mobile_markers", []))),
+        "provider_home_markers": list(evidence.get("provider_home_markers", evidence.get("home_markers", []))),
+    }
+
+
+def _has_provider_evidence(provider_evidence: dict[str, Any]) -> bool:
+    return bool(
+        provider_evidence.get("provider_key")
+        or provider_evidence.get("matched_aliases")
+        or provider_evidence.get("provider_mobile_markers")
+        or provider_evidence.get("provider_home_markers")
+        or provider_evidence.get("service_type_hint") not in (None, "", "unknown")
+    )
+
+
+def _reconstruct_provider_evidence(
+    provider_evidence: dict[str, Any],
+    *,
+    reasons: list[dict[str, Any]],
+    rules_snapshot: dict[str, Any],
+    isp: Any,
+    asn: Any,
+) -> tuple[dict[str, Any], bool]:
+    if provider_evidence and provider_evidence.get("provider_key"):
+        return _normalize_provider_evidence(provider_evidence), False
+
+    reconstructed: dict[str, Any] = {}
+    for reason in reasons:
+        if not isinstance(reason, dict):
+            continue
+        metadata = reason.get("metadata") if isinstance(reason.get("metadata"), dict) else {}
+        if metadata.get("provider_key"):
+            reconstructed["provider_key"] = str(metadata.get("provider_key"))
+            reconstructed["provider_classification"] = str(metadata.get("provider_classification") or "unknown")
+            reconstructed["service_type_hint"] = str(metadata.get("service_type_hint") or "unknown")
+            reconstructed["matched_aliases"] = list(metadata.get("matched_aliases") or [])
+            reconstructed["provider_mobile_markers"] = list(metadata.get("mobile_markers") or [])
+            reconstructed["provider_home_markers"] = list(metadata.get("home_markers") or [])
+            reconstructed["service_conflict"] = reconstructed.get("service_type_hint") == "conflict"
+            reconstructed["review_recommended"] = bool(reason.get("code") == "provider_review_guardrail")
+            return _normalize_provider_evidence(reconstructed), True
+
+    return _normalize_provider_evidence(provider_evidence), False
+
+
 def _explainability_snapshot(reasons: list[dict[str, Any]], provider_evidence: dict[str, Any]) -> dict[str, Any]:
     home_sources = sorted(
         {
@@ -418,7 +495,34 @@ def _csv_string(fieldnames: list[str], rows: list[dict[str, Any]]) -> str:
     return stream.getvalue()
 
 
+def _build_export_rules_snapshot(container: APIContainer) -> tuple[dict[str, Any], list[str], str]:
+    warnings: list[str] = []
+    live_rules_state = container.store.get_live_rules_state()
+    snapshot_source = "live_rules"
+    snapshot = copy.deepcopy(live_rules_state)
+    runtime_rules = None
+    if getattr(container, "runtime", None) is not None:
+        runtime_rules = copy.deepcopy(container.runtime.reload_config())
+    if runtime_rules is not None:
+        live_profiles = live_rules_state["rules"].get("provider_profiles", [])
+        runtime_profiles = runtime_rules.get("provider_profiles", [])
+        if (not live_profiles) and runtime_profiles:
+            snapshot["rules"]["provider_profiles"] = copy.deepcopy(runtime_profiles)
+            snapshot["rules"].setdefault("settings", {}).update(
+                {
+                    key: value
+                    for key, value in runtime_rules.get("settings", {}).items()
+                    if key in {"provider_mobile_marker_bonus", "provider_home_marker_penalty", "provider_conflict_review_only"}
+                }
+            )
+            snapshot_source = "runtime_merged"
+            warnings.append("live_rules_stale_or_unseeded")
+    return snapshot, warnings, snapshot_source
+
+
 def _build_calibration_rows(container: APIContainer, filters: dict[str, Any]) -> list[dict[str, Any]]:
+    rules_snapshot_state, snapshot_warnings, _ = _build_export_rules_snapshot(container)
+    rules_snapshot = rules_snapshot_state.get("rules", {})
     store = container.store
     status = str(filters.get("status") or "resolved_only").lower()
     if status not in {"resolved_only", "open_only", "all"}:
@@ -500,12 +604,24 @@ def _build_calibration_rows(container: APIContainer, filters: dict[str, Any]) ->
         provider_evidence = signal_flags.get("provider_evidence") if isinstance(signal_flags, dict) else {}
         if not isinstance(provider_evidence, dict):
             provider_evidence = {}
-        provider_key = str(provider_evidence.get("provider_key") or "").strip().lower()
-        if provider_key_filter and provider_key != provider_key_filter:
-            continue
 
         final_resolution = row.get("final_resolution")
         ground_truth = _ground_truth_for_resolution(str(final_resolution) if final_resolution else None)
+        provider_evidence, reconstructed = _reconstruct_provider_evidence(
+            provider_evidence,
+            reasons=reasons if isinstance(reasons, list) else [],
+            rules_snapshot=rules_snapshot,
+            isp=row.get("isp"),
+            asn=row.get("asn"),
+        )
+        provider_key = str(provider_evidence.get("provider_key") or "").strip().lower()
+        if provider_key_filter and provider_key != provider_key_filter:
+            continue
+        dataset_warning_flags = list(snapshot_warnings)
+        if not final_resolution:
+            dataset_warning_flags.append("pending_resolution")
+        if not provider_evidence.get("provider_key"):
+            dataset_warning_flags.append("provider_explainability_missing")
         export_rows.append(
             {
                 "case_id": int(row["case_id"]),
@@ -520,9 +636,11 @@ def _build_calibration_rows(container: APIContainer, filters: dict[str, Any]) ->
                 "asn": row.get("asn"),
                 "isp": row.get("isp"),
                 "provider_evidence": provider_evidence,
+                "provider_evidence_reconstructed": reconstructed,
                 "reason_codes": _safe_json_loads(row.get("reason_codes_json"), []),
                 "reasons": reasons if isinstance(reasons, list) else [],
                 "review_labels": labels_map.get(int(row["case_id"]), []),
+                "dataset_warning_flags": sorted(set(dataset_warning_flags)),
                 "explainability": _explainability_snapshot(
                     reasons if isinstance(reasons, list) else [],
                     provider_evidence,
@@ -544,7 +662,8 @@ def _build_provider_summary(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
             {
                 "provider_key": provider_key,
                 "service_type_hint": service_hint,
-                "total": 0,
+                "raw_total": 0,
+                "known_total": 0,
                 "home": 0,
                 "mobile": 0,
                 "unknown": 0,
@@ -552,18 +671,20 @@ def _build_provider_summary(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "conflict_rate": 0.0,
             },
         )
-        bucket["total"] += 1
+        bucket["raw_total"] += 1
         if row["ground_truth"] == "HOME":
+            bucket["known_total"] += 1
             bucket["home"] += 1
         elif row["ground_truth"] == "MOBILE":
+            bucket["known_total"] += 1
             bucket["mobile"] += 1
         else:
             bucket["unknown"] += 1
         if evidence.get("service_conflict"):
             bucket["conflicts"] += 1
     for bucket in buckets.values():
-        bucket["conflict_rate"] = round(bucket["conflicts"] / bucket["total"], 4) if bucket["total"] else 0.0
-    return sorted(buckets.values(), key=lambda item: (-int(item["total"]), item["provider_key"], item["service_type_hint"]))
+        bucket["conflict_rate"] = round(bucket["conflicts"] / bucket["raw_total"], 4) if bucket["raw_total"] else 0.0
+    return sorted(buckets.values(), key=lambda item: (-int(item["raw_total"]), item["provider_key"], item["service_type_hint"]))
 
 
 def _build_feature_summary(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -612,14 +733,14 @@ def _build_mixed_provider_summary(rows: list[dict[str, Any]]) -> list[dict[str, 
             provider_key,
             {
                 "provider_key": provider_key,
-                "total": 0,
+                "raw_total": 0,
                 "conflicts": 0,
                 "known_total": 0,
                 "correct_service_hint": 0,
                 "resolved_precision": 0.0,
             },
         )
-        bucket["total"] += 1
+        bucket["raw_total"] += 1
         if evidence.get("service_conflict"):
             bucket["conflicts"] += 1
         service_hint = str(evidence.get("service_type_hint") or "").lower()
@@ -631,7 +752,7 @@ def _build_mixed_provider_summary(rows: list[dict[str, Any]]) -> list[dict[str, 
         bucket["resolved_precision"] = round(
             bucket["correct_service_hint"] / bucket["known_total"], 4
         ) if bucket["known_total"] else 0.0
-    return sorted(buckets.values(), key=lambda item: (-int(item["total"]), -float(item["resolved_precision"]), item["provider_key"]))
+    return sorted(buckets.values(), key=lambda item: (-int(item["raw_total"]), -float(item["resolved_precision"]), item["provider_key"]))
 
 
 def _build_review_reason_summary(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -659,14 +780,69 @@ def _build_review_reason_summary(rows: list[dict[str, Any]]) -> list[dict[str, A
 
 
 def build_calibration_export(container: APIContainer, filters: dict[str, Any]) -> dict[str, Any]:
+    rules_snapshot, manifest_warnings, snapshot_source = _build_export_rules_snapshot(container)
     rows = _build_calibration_rows(container, filters)
     include_unknown = bool(filters.get("include_unknown", False))
+    resolved_rows = [row for row in rows if row["ground_truth"] in {"HOME", "MOBILE", "unknown"}]
     known_rows = [row for row in rows if row["ground_truth"] in {"HOME", "MOBILE"}]
     aggregate_rows = rows if include_unknown else known_rows
     unknown_count = sum(1 for row in rows if row["ground_truth"] == "unknown")
+    pending_count = sum(1 for row in rows if row["ground_truth"] == "pending")
+    resolved_ratio = round(len(resolved_rows) / len(rows), 4) if rows else 0.0
+    pending_ratio = round(pending_count / len(rows), 4) if rows else 0.0
+    unknown_ratio = round(unknown_count / len(rows), 4) if rows else 0.0
+    resolved_provider_rows = known_rows
+    provider_evidence_count = sum(
+        1 for row in resolved_provider_rows if _has_provider_evidence(row.get("provider_evidence", {}))
+    )
+    provider_key_count = sum(
+        1 for row in resolved_provider_rows if (row.get("provider_evidence") or {}).get("provider_key")
+    )
+    provider_evidence_coverage = (
+        round(provider_evidence_count / len(resolved_provider_rows), 4) if resolved_provider_rows else 0.0
+    )
+    provider_key_coverage = (
+        round(provider_key_count / len(resolved_provider_rows), 4) if resolved_provider_rows else 0.0
+    )
+    provider_profiles_count = len(rules_snapshot.get("rules", {}).get("provider_profiles", []))
+    provider_support_counts: dict[str, int] = {}
+    for row in known_rows:
+        evidence = row.get("provider_evidence", {})
+        provider_key = str(evidence.get("provider_key") or "").strip().lower()
+        service_hint = str(evidence.get("service_type_hint") or "").strip().lower()
+        if not provider_key:
+            continue
+        pattern_key = f"{provider_key}:{service_hint}" if service_hint else provider_key
+        provider_support_counts[pattern_key] = provider_support_counts.get(pattern_key, 0) + 1
+    warnings = list(manifest_warnings)
+    if provider_profiles_count == 0:
+        warnings.append("provider_profiles_missing")
+    if provider_key_coverage == 0:
+        warnings.append("provider_key_coverage_zero")
+    if provider_evidence_coverage == 0:
+        warnings.append("provider_explainability_missing")
+    if resolved_ratio < 0.5:
+        warnings.append("resolved_ratio_below_threshold")
+    if provider_profiles_count > 0 and provider_key_coverage < 0.6:
+        warnings.append("provider_key_coverage_below_target")
+    if provider_support_counts and min(provider_support_counts.values()) < 5:
+        warnings.append("provider_support_below_target")
+    dataset_ready = not (
+        provider_profiles_count == 0 or provider_key_coverage == 0 or resolved_ratio < 0.5
+    )
+    tuning_ready = bool(
+        provider_profiles_count > 0
+        and provider_key_coverage >= 0.6
+        and provider_support_counts
+        and min(provider_support_counts.values()) >= 5
+    )
     manifest = {
         "schema_version": 1,
         "generated_at": datetime.utcnow().replace(microsecond=0).isoformat(),
+        "snapshot_source": snapshot_source,
+        "dataset_ready": dataset_ready,
+        "tuning_ready": tuning_ready,
+        "warnings": sorted(set(warnings)),
         "filters": {
             "opened_from": filters.get("opened_from"),
             "opened_to": filters.get("opened_to"),
@@ -677,24 +853,34 @@ def build_calibration_export(container: APIContainer, filters: dict[str, Any]) -
         },
         "row_counts": {
             "raw_rows": len(rows),
+            "resolved_known_rows": len(known_rows),
+            "resolved_unknown_rows": unknown_count,
+            "open_rows": pending_count,
             "known_rows": len(known_rows),
             "aggregate_rows": len(aggregate_rows),
             "unknown_rows": unknown_count,
-            "unknown_ratio": round(unknown_count / len(rows), 4) if rows else 0.0,
+            "unknown_ratio": unknown_ratio,
+        },
+        "coverage": {
+            "resolved_ratio": resolved_ratio,
+            "pending_ratio": pending_ratio,
+            "unknown_ratio": unknown_ratio,
+            "provider_evidence_coverage": provider_evidence_coverage,
+            "provider_key_coverage": provider_key_coverage,
+            "provider_profiles_count": provider_profiles_count,
+            "provider_pattern_candidates": len(provider_support_counts),
         },
     }
     provider_summary = _build_provider_summary(rows)
-    feature_summary = _build_feature_summary(aggregate_rows)
+    feature_summary = _build_feature_summary(known_rows)
     mixed_provider_summary = _build_mixed_provider_summary(rows)
     review_reason_summary = _build_review_reason_summary(rows)
 
     archive_buffer = io.BytesIO()
-    rules_snapshot = container.store.get_live_rules_state()
     with io.StringIO() as jsonl_stream:
         for row in rows:
             jsonl_stream.write(json.dumps(row, ensure_ascii=False) + "\n")
         calibration_jsonl = jsonl_stream.getvalue()
-    import zipfile
 
     with zipfile.ZipFile(archive_buffer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
         archive.writestr("manifest.json", json.dumps(manifest, ensure_ascii=False, indent=2))
@@ -703,7 +889,7 @@ def build_calibration_export(container: APIContainer, filters: dict[str, Any]) -
         archive.writestr(
             "provider_summary.csv",
             _csv_string(
-                ["provider_key", "service_type_hint", "total", "home", "mobile", "unknown", "conflicts", "conflict_rate"],
+                ["provider_key", "service_type_hint", "raw_total", "known_total", "home", "mobile", "unknown", "conflicts", "conflict_rate"],
                 provider_summary,
             ),
         )
@@ -717,7 +903,7 @@ def build_calibration_export(container: APIContainer, filters: dict[str, Any]) -
         archive.writestr(
             "mixed_provider_summary.csv",
             _csv_string(
-                ["provider_key", "total", "conflicts", "known_total", "correct_service_hint", "resolved_precision"],
+                ["provider_key", "raw_total", "conflicts", "known_total", "correct_service_hint", "resolved_precision"],
                 mixed_provider_summary,
             ),
         )

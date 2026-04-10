@@ -167,7 +167,10 @@ export const ruDictionary: TranslationDictionary = {
       reviewFirst: "Нужен review-first",
       autoReady: "Сигналов уже хватает для автоматики",
       homeSources: "Поддерживающие HOME-источники",
-      mobileSources: "Поддерживающие MOBILE-источники"
+      mobileSources: "Поддерживающие MOBILE-источники",
+      matchedAliases: "Совпавшие алиасы",
+      mobileMarkers: "Совпавшие mobile markers",
+      homeMarkers: "Совпавшие home markers"
     }
   },
   rules: {
@@ -447,7 +450,14 @@ export const ruDictionary: TranslationDictionary = {
       generate: "Собрать ZIP",
       lastManifestTitle: "Manifest последней выгрузки",
       noManifest: "Calibration export ещё не формировался",
+      datasetReady: "Датасет структурно пригоден для анализа",
+      datasetNotReady: "Датасет пока непригоден для надёжной provider-калибровки",
+      tuningReady: "По этой выгрузке уже можно начинать provider tuning",
+      tuningNotReady: "Provider tuning пока заблокирован покрытием или support",
+      warningsTitle: "Предупреждения readiness-проверки",
+      notReadyToast: "Calibration archive сформирован, но readiness checks не пройдены",
       filterSnapshot: "Применённые фильтры",
+      coverageSnapshot: "Снимок покрытия",
       filters: {
         openedFrom: "Открыт с",
         openedTo: "Открыт по",
@@ -465,7 +475,19 @@ export const ruDictionary: TranslationDictionary = {
         file: "Архив",
         rawRows: "Сырые rows",
         knownRows: "Размеченные rows",
-        unknownRows: "Unknown rows"
+        unknownRows: "Unknown rows",
+        providerProfiles: "Профили провайдеров",
+        providerCoverage: "Покрытие provider key",
+        patternCandidates: "Кандидаты provider patterns"
+      },
+      warnings: {
+        live_rules_stale_or_unseeded: "Live rules snapshot был пуст и был слит с runtime config.",
+        provider_profiles_missing: "В snapshot выгрузки нет provider profiles.",
+        provider_key_coverage_zero: "В resolved rows вообще нет provider key.",
+        provider_explainability_missing: "В экспортированных rows отсутствует provider explainability.",
+        resolved_ratio_below_threshold: "Слишком много pending rows: resolved ratio ниже безопасного порога.",
+        provider_key_coverage_below_target: "Покрытие provider key ниже целевого порога 0.6.",
+        provider_support_below_target: "Хотя бы один provider/provider_service кандидат имеет меньше 5 известных resolved cases."
       }
     }
   },

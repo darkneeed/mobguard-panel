@@ -1,0 +1,7 @@
+reason_code,source,pattern,support,total,precision
+keyword_home,keyword,it-region,2,2,1.0
+learning_asn,learning_asn,asn:31213,2,2,1.0
+mixed_asn,asn_mixed,asn:16345,2,2,1.0
+keyword_home,keyword,er-telecom|ertelecom|pppoe,1,1,1.0
+mixed_asn,asn_mixed,asn:31163,1,1,1.0
+behavior_churn,behavior_churn,,5,8,0.625

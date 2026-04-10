@@ -55,7 +55,10 @@ class CalibrationExportTests(unittest.TestCase):
         }
         self.store = PlatformStore(str(self.db_path), self.base_config, str(self.config_path))
         self.store.init_schema()
-        self.container = SimpleNamespace(store=self.store)
+        self.container = SimpleNamespace(
+            store=self.store,
+            runtime=SimpleNamespace(reload_config=lambda: json.loads(json.dumps(self.base_config))),
+        )
 
     def tearDown(self):
         shutil.rmtree(self.temp_dir, ignore_errors=True)
@@ -157,6 +160,9 @@ class CalibrationExportTests(unittest.TestCase):
         self.assertEqual(manifest_from_header["row_counts"]["raw_rows"], 2)
         self.assertEqual(manifest_from_header["row_counts"]["aggregate_rows"], 1)
         self.assertEqual(manifest_from_header["row_counts"]["unknown_rows"], 1)
+        self.assertTrue(manifest_from_header["dataset_ready"])
+        self.assertFalse(manifest_from_header["tuning_ready"])
+        self.assertIn("provider_support_below_target", manifest_from_header["warnings"])
 
         archive = zipfile.ZipFile(io.BytesIO(payload["content"]))
         self.assertEqual(
@@ -177,6 +183,10 @@ class CalibrationExportTests(unittest.TestCase):
         manifest = json.loads(archive.read("manifest.json").decode("utf-8"))
         self.assertEqual(manifest["row_counts"]["known_rows"], 1)
         self.assertEqual(manifest["row_counts"]["unknown_rows"], 1)
+        self.assertEqual(manifest["row_counts"]["resolved_known_rows"], 1)
+        self.assertEqual(manifest["row_counts"]["resolved_unknown_rows"], 1)
+        self.assertEqual(manifest["coverage"]["provider_profiles_count"], 2)
+        self.assertEqual(manifest["coverage"]["provider_key_coverage"], 1.0)
 
         calibration_rows = [
             json.loads(line)
@@ -185,11 +195,78 @@ class CalibrationExportTests(unittest.TestCase):
         ]
         self.assertEqual(len(calibration_rows), 2)
         self.assertEqual({row["ground_truth"] for row in calibration_rows}, {"HOME", "unknown"})
-        self.assertEqual(calibration_rows[0]["provider_evidence"]["provider_key"] in {"beeline", "mts"}, True)
+        self.assertTrue(calibration_rows[0]["provider_evidence"]["provider_key"] in {"beeline", "mts"})
+        self.assertIn("provider_evidence_reconstructed", calibration_rows[0])
 
         provider_summary = archive.read("provider_summary.csv").decode("utf-8")
         self.assertIn("beeline", provider_summary)
         self.assertIn("mts", provider_summary)
+        self.assertIn("raw_total", provider_summary)
+
+    def test_calibration_export_warns_when_provider_profiles_are_missing_and_runtime_is_merged(self):
+        container = SimpleNamespace(
+            store=self.store,
+            runtime=SimpleNamespace(
+                reload_config=lambda: {
+                    **self.base_config,
+                    "provider_profiles": [
+                        {
+                            "key": "beeline",
+                            "classification": "mixed",
+                            "aliases": ["beeline"],
+                            "mobile_markers": ["lte"],
+                            "home_markers": ["gpon"],
+                            "asns": [3216],
+                        }
+                    ],
+                }
+            ),
+        )
+        self.store.update_live_rules({"provider_profiles": []}, "admin", 1001)
+
+        payload = data_admin_service.build_calibration_export(
+            container,
+            {"status": "resolved_only", "include_unknown": False},
+        )
+        manifest = json.loads(base64.b64decode(payload["manifest_header"]).decode("utf-8"))
+
+        self.assertEqual(manifest["snapshot_source"], "runtime_merged")
+        self.assertIn("live_rules_stale_or_unseeded", manifest["warnings"])
+        self.assertFalse(manifest["dataset_ready"])
+
+    def test_calibration_export_flags_missing_provider_explainability_on_resolved_rows(self):
+        bundle = DecisionBundle(
+            ip="10.0.0.12",
+            verdict="HOME",
+            confidence_band="HIGH_HOME",
+            score=-20,
+            asn=3216,
+            isp="Beeline GPON",
+        )
+        bundle.add_reason(
+            "keyword_home",
+            "generic_keyword",
+            -20,
+            "soft",
+            "HOME",
+            "HOME keywords found",
+            {"keywords": ["gpon"]},
+        )
+        self._create_case(
+            user={"uuid": "uuid-no-provider", "username": "charlie", "telegramId": "3003", "id": 99},
+            bundle=bundle,
+            review_reason="home_requires_review",
+            resolution="HOME",
+        )
+
+        payload = data_admin_service.build_calibration_export(
+            self.container,
+            {"status": "resolved_only", "include_unknown": False},
+        )
+        manifest = json.loads(base64.b64decode(payload["manifest_header"]).decode("utf-8"))
+        self.assertIn("provider_key_coverage_zero", manifest["warnings"])
+        self.assertIn("provider_explainability_missing", manifest["warnings"])
+        self.assertFalse(manifest["dataset_ready"])
 
 
 if __name__ == "__main__":

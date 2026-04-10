@@ -169,6 +169,18 @@ export function ReviewDetailPage() {
                 <strong>{t("reviewDetail.providerEvidence.mobileSources")}</strong>
                 <span>{mobileSources.length > 0 ? mobileSources.join(", ") : t("common.notAvailable")}</span>
               </li>
+              <li>
+                <strong>{t("reviewDetail.providerEvidence.matchedAliases")}</strong>
+                <span>{Array.isArray(providerEvidence.matched_aliases) && providerEvidence.matched_aliases.length > 0 ? providerEvidence.matched_aliases.join(", ") : t("common.notAvailable")}</span>
+              </li>
+              <li>
+                <strong>{t("reviewDetail.providerEvidence.mobileMarkers")}</strong>
+                <span>{Array.isArray(providerEvidence.provider_mobile_markers) && providerEvidence.provider_mobile_markers.length > 0 ? providerEvidence.provider_mobile_markers.join(", ") : t("common.notAvailable")}</span>
+              </li>
+              <li>
+                <strong>{t("reviewDetail.providerEvidence.homeMarkers")}</strong>
+                <span>{Array.isArray(providerEvidence.provider_home_markers) && providerEvidence.provider_home_markers.length > 0 ? providerEvidence.provider_home_markers.join(", ") : t("common.notAvailable")}</span>
+              </li>
             </ul>
           </div>
 

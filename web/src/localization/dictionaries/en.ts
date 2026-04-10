@@ -167,7 +167,10 @@ export const enDictionary: TranslationDictionary = {
       reviewFirst: "Review-first recommended",
       autoReady: "Has enough signals for automation",
       homeSources: "Supporting HOME sources",
-      mobileSources: "Supporting MOBILE sources"
+      mobileSources: "Supporting MOBILE sources",
+      matchedAliases: "Matched aliases",
+      mobileMarkers: "Matched mobile markers",
+      homeMarkers: "Matched home markers"
     }
   },
   rules: {
@@ -447,7 +450,14 @@ export const enDictionary: TranslationDictionary = {
       generate: "Generate ZIP",
       lastManifestTitle: "Last export manifest",
       noManifest: "No calibration export generated yet",
+      datasetReady: "Dataset is structurally ready for analysis",
+      datasetNotReady: "Dataset is not ready for reliable provider calibration",
+      tuningReady: "Provider tuning can start from this export",
+      tuningNotReady: "Provider tuning is still blocked by coverage/support",
+      warningsTitle: "Readiness warnings",
+      notReadyToast: "Calibration archive generated, but readiness checks failed",
       filterSnapshot: "Applied filters",
+      coverageSnapshot: "Coverage snapshot",
       filters: {
         openedFrom: "Opened from",
         openedTo: "Opened to",
@@ -465,7 +475,19 @@ export const enDictionary: TranslationDictionary = {
         file: "Archive",
         rawRows: "Raw rows",
         knownRows: "Known rows",
-        unknownRows: "Unknown rows"
+        unknownRows: "Unknown rows",
+        providerProfiles: "Provider profiles",
+        providerCoverage: "Provider key coverage",
+        patternCandidates: "Provider pattern candidates"
+      },
+      warnings: {
+        live_rules_stale_or_unseeded: "Live rules snapshot was empty and had to be merged from runtime config.",
+        provider_profiles_missing: "No provider profiles were present in the export snapshot.",
+        provider_key_coverage_zero: "Resolved rows contain zero provider keys.",
+        provider_explainability_missing: "Provider explainability is missing in exported rows.",
+        resolved_ratio_below_threshold: "Too many pending rows: resolved ratio is below the safety threshold.",
+        provider_key_coverage_below_target: "Provider key coverage is below the target 0.6 threshold.",
+        provider_support_below_target: "At least one provider/provider_service candidate has fewer than 5 known resolved cases."
       }
     }
   },

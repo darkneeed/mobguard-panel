@@ -203,7 +203,6 @@ export function DataPage() {
 
   function downloadUserExport() {
     if (!userCardExport) return;
-    const meta = (userCardExport.export_meta as Record<string, unknown> | undefined) || {};
     const identity = (userCardExport.identity as Record<string, unknown> | undefined) || {};
     const baseName = String(identity.username || identity.uuid || identity.system_id || identity.telegram_id || "user-card").replace(/[^\w.-]+/g, "_");
     const blob = new Blob([JSON.stringify(userCardExport, null, 2)], { type: "application/json" });
@@ -216,10 +215,14 @@ export function DataPage() {
       const response = await withPending("calibrationExport", () =>
         api.exportCalibration(calibrationFilters as Record<string, string | number | boolean | undefined>)
       );
-      setLastCalibrationManifest(parseManifestHeader(response.headers.get("X-MobGuard-Export-Manifest")));
+      const manifest = parseManifestHeader(response.headers.get("X-MobGuard-Export-Manifest"));
+      setLastCalibrationManifest(manifest);
       setLastCalibrationFilename(response.filename);
       downloadBlob(response.filename, response.blob);
       pushToast("success", t("data.saved.calibrationExportReady"));
+      if (manifest && manifest.dataset_ready === false) {
+        pushToast("warning", t("data.exports.notReadyToast"));
+      }
     } catch (err) {
       pushToast("error", err instanceof Error ? err.message : t("data.errors.exportCalibrationFailed"));
     }
@@ -236,6 +239,11 @@ export function DataPage() {
         <span>{Boolean(providerEvidence.review_recommended) ? t("data.users.reviewFirst") : t("data.users.autoReady")}</span>
       </div>
     );
+  }
+
+  function formatExportWarning(code: string): string {
+    const translated = t(`data.exports.warnings.${code}`);
+    return translated === `data.exports.warnings.${code}` ? code : translated;
   }
 
   function renderUserExportPreview() {
@@ -705,6 +713,10 @@ export function DataPage() {
   function renderExportsTab() {
     const rowCounts = (lastCalibrationManifest?.row_counts as Record<string, unknown> | undefined) || {};
     const filters = (lastCalibrationManifest?.filters as Record<string, unknown> | undefined) || {};
+    const coverage = (lastCalibrationManifest?.coverage as Record<string, unknown> | undefined) || {};
+    const warnings = (lastCalibrationManifest?.warnings as string[] | undefined) || [];
+    const datasetReady = Boolean(lastCalibrationManifest?.dataset_ready);
+    const tuningReady = Boolean(lastCalibrationManifest?.tuning_ready);
     return (
       <div className="detail-grid">
         <div className="panel">
@@ -756,15 +768,38 @@ export function DataPage() {
           {!lastCalibrationManifest ? <p className="muted">{t("data.exports.noManifest")}</p> : null}
           {lastCalibrationManifest ? (
             <>
+              <div className={datasetReady ? "ok-box" : "error-box"}>
+                {datasetReady ? t("data.exports.datasetReady") : t("data.exports.datasetNotReady")}
+              </div>
+              <div className={tuningReady ? "ok-box" : "error-box"}>
+                {tuningReady ? t("data.exports.tuningReady") : t("data.exports.tuningNotReady")}
+              </div>
+              {warnings.length > 0 ? (
+                <div className="panel export-warning-panel">
+                  <h3>{t("data.exports.warningsTitle")}</h3>
+                  <ul className="reason-list">
+                    {warnings.map((warning) => (
+                      <li key={warning}><span>{formatExportWarning(warning)}</span></li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
               <div className="stats-grid">
                 <div className="stat-card"><span>{t("data.exports.cards.file")}</span><strong>{displayValue(lastCalibrationFilename)}</strong></div>
                 <div className="stat-card"><span>{t("data.exports.cards.rawRows")}</span><strong>{displayValue(rowCounts.raw_rows)}</strong></div>
                 <div className="stat-card"><span>{t("data.exports.cards.knownRows")}</span><strong>{displayValue(rowCounts.known_rows)}</strong></div>
                 <div className="stat-card"><span>{t("data.exports.cards.unknownRows")}</span><strong>{displayValue(rowCounts.unknown_rows)}</strong></div>
+                <div className="stat-card"><span>{t("data.exports.cards.providerProfiles")}</span><strong>{displayValue(coverage.provider_profiles_count)}</strong></div>
+                <div className="stat-card"><span>{t("data.exports.cards.providerCoverage")}</span><strong>{displayValue(coverage.provider_key_coverage)}</strong></div>
+                <div className="stat-card"><span>{t("data.exports.cards.patternCandidates")}</span><strong>{displayValue(coverage.provider_pattern_candidates)}</strong></div>
               </div>
               <details className="export-section" open>
                 <summary>{t("data.exports.filterSnapshot")}</summary>
                 <pre className="log-box">{JSON.stringify(filters, null, 2)}</pre>
+              </details>
+              <details className="export-section">
+                <summary>{t("data.exports.coverageSnapshot")}</summary>
+                <pre className="log-box">{JSON.stringify(coverage, null, 2)}</pre>
               </details>
             </>
           ) : null}
