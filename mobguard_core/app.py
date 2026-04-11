@@ -18,12 +18,22 @@ from aiogram.enums import ParseMode
 from behavioral_analyzers import BehavioralEngine
 from ipinfo_api import ipinfo_api
 from mobguard_platform import (
+    apply_remote_restriction_state_async,
+    apply_remote_access_state_async,
+    apply_remote_traffic_cap_async,
+    build_auto_restriction_state,
     DecisionBundle,
+    DEFAULT_TRAFFIC_LIMIT_STRATEGY,
     PlatformStore,
     load_runtime_context,
+    normalize_restriction_mode,
+    remote_access_squad_name,
     review_reason_for_bundle,
+    restore_remote_restriction_state_async,
     resolve_asn_source,
+    SQUAD_RESTRICTION_MODE,
     should_warning_only,
+    TRAFFIC_CAP_RESTRICTION_MODE,
 )
 from mobguard_platform.template_utils import render_optional_template
 from mobguard_platform.runtime_admin_defaults import (
@@ -122,12 +132,20 @@ class DatabaseManager:
             c.execute('''CREATE TABLE IF NOT EXISTS violations
                          (uuid text primary key, strikes int, unban_time timestamp, 
                           last_forgiven timestamp, last_strike_time timestamp,
-                          warning_time timestamp, warning_count int DEFAULT 0)''')
+                          warning_time timestamp, warning_count int DEFAULT 0,
+                          restriction_mode text DEFAULT 'SQUAD',
+                          saved_traffic_limit_bytes int,
+                          saved_traffic_limit_strategy text,
+                          applied_traffic_limit_bytes int)''')
             c.execute('''CREATE TABLE IF NOT EXISTS violation_history
                          (id integer primary key autoincrement, uuid text, ip text, 
                           isp text, asn int, tag text, strike_number int, 
                           punishment_duration int, timestamp timestamp,
                           FOREIGN KEY (uuid) REFERENCES violations(uuid))''')
+            c.execute('''CREATE TABLE IF NOT EXISTS manual_traffic_cap_overrides
+                         (uuid text primary key, saved_traffic_limit_bytes int,
+                          saved_traffic_limit_strategy text, applied_traffic_limit_bytes int,
+                          updated_at timestamp)''')
             c.execute('''CREATE TABLE IF NOT EXISTS active_trackers
                          (key text primary key, start_time timestamp, last_seen timestamp)''')
             c.execute('''CREATE TABLE IF NOT EXISTS ip_decisions
@@ -173,6 +191,14 @@ class DatabaseManager:
             cols = [col[1] for col in c.fetchall()]
             if 'warning_time' not in cols:
                 c.execute("ALTER TABLE violations ADD COLUMN warning_time timestamp")
+            if 'restriction_mode' not in cols:
+                c.execute("ALTER TABLE violations ADD COLUMN restriction_mode text DEFAULT 'SQUAD'")
+            if 'saved_traffic_limit_bytes' not in cols:
+                c.execute("ALTER TABLE violations ADD COLUMN saved_traffic_limit_bytes int")
+            if 'saved_traffic_limit_strategy' not in cols:
+                c.execute("ALTER TABLE violations ADD COLUMN saved_traffic_limit_strategy text")
+            if 'applied_traffic_limit_bytes' not in cols:
+                c.execute("ALTER TABLE violations ADD COLUMN applied_traffic_limit_bytes int")
             
             c.execute("PRAGMA table_info(ip_decisions)")
             cols = [col[1] for col in c.fetchall()]
@@ -422,8 +448,10 @@ class PanelAPI:
     def __init__(self, base_url: str, token: str):
         self.base_url = base_url
         self.headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
-        self._uuid_cache: Dict[str, Dict] = {} 
+        self.last_error: Optional[str] = None
+        self._uuid_cache: Dict[str, Dict] = {}
         self._tg_cache: Dict[int, str] = {}
+        self._internal_squad_uuid_cache: Dict[str, str] = {}
         # Общая сессия — устанавливается извне через set_session()
         self._session: Optional[aiohttp.ClientSession] = None
 
@@ -433,6 +461,7 @@ class PanelAPI:
 
     async def get_user_data(self, identifier: str | int) -> Optional[Dict]:
         str_id = str(identifier).strip()
+        self.last_error = None
         
         if len(str_id) > 20 and '-' in str_id:
             if str_id in self._uuid_cache: return self._uuid_cache[str_id]
@@ -474,6 +503,7 @@ class PanelAPI:
                                     self._cache_user(user)
                                     return user
             except Exception as e:
+                self.last_error = f"Panel lookup failed for '{str_id}': {e}"
                 logger.error(f"PanelAPI Error for user '{str_id}': {type(e).__name__}: {e}")
         finally:
             if _own_session:
@@ -486,10 +516,15 @@ class PanelAPI:
             self._uuid_cache[uuid] = user
             if user.get('telegramId'):
                 self._tg_cache[int(user['telegramId'])] = uuid
+            for squad in user.get('activeInternalSquads', []):
+                if isinstance(squad, dict):
+                    name = str(squad.get('name', '')).strip()
+                    squad_uuid = str(squad.get('uuid', '')).strip()
+                    if name and squad_uuid:
+                        self._internal_squad_uuid_cache[name] = squad_uuid
 
-    async def toggle_user(self, uuid: str, enable: bool) -> bool:
-        action = "enable" if enable else "disable"
-        url = f"{self.base_url}/api/users/{uuid}/actions/{action}"
+    async def list_internal_squads(self) -> List[Dict[str, Any]]:
+        url = f"{self.base_url}/api/internal-squads"
         _own_session = None
         if self._session and not self._session.closed:
             session = self._session
@@ -498,14 +533,116 @@ class PanelAPI:
             session = _own_session
         try:
             try:
-                async with session.post(url, headers=self.headers, json={}, timeout=5) as resp:
-                    return resp.status in [200, 201]
+                async with session.get(url, headers=self.headers, timeout=5) as resp:
+                    if resp.status != 200:
+                        self.last_error = f"Internal squads request failed with HTTP {resp.status}"
+                        return []
+                    payload = await resp.json()
+                    response = payload.get('response', payload)
+                    if isinstance(response, dict):
+                        squads = response.get('internalSquads', [])
+                    elif isinstance(response, list):
+                        squads = response
+                    else:
+                        squads = []
+                    result = [item for item in squads if isinstance(item, dict)]
+                    self._internal_squad_uuid_cache.update(
+                        {
+                            str(item.get('name', '')).strip(): str(item.get('uuid', '')).strip()
+                            for item in result
+                            if str(item.get('name', '')).strip() and str(item.get('uuid', '')).strip()
+                        }
+                    )
+                    self.last_error = None
+                    return result
             except Exception as e:
-                logger.error(f"API Action Error: {e}")
+                self.last_error = f"Internal squads request failed: {e}"
+                logger.error(f"Internal squads request error: {e}")
+                return []
+        finally:
+            if _own_session:
+                await _own_session.close()
+
+    async def resolve_internal_squad_uuid(self, squad_name: str) -> Optional[str]:
+        normalized_name = str(squad_name or "").strip()
+        if not normalized_name:
+            self.last_error = "Internal squad name is empty"
+            return None
+
+        cached = self._internal_squad_uuid_cache.get(normalized_name)
+        if cached:
+            self.last_error = None
+            return cached
+
+        squads = await self.list_internal_squads()
+        for squad in squads:
+            if str(squad.get('name', '')).strip() == normalized_name:
+                squad_uuid = str(squad.get('uuid', '')).strip()
+                if squad_uuid:
+                    self._internal_squad_uuid_cache[normalized_name] = squad_uuid
+                    self.last_error = None
+                    return squad_uuid
+
+        self.last_error = f"Internal squad '{normalized_name}' was not found"
+        return None
+
+    async def update_user_active_internal_squads(self, uuid: str, squad_uuids: List[str]) -> bool:
+        return await self.update_user_fields(uuid=uuid, activeInternalSquads=squad_uuids)
+
+    async def apply_access_squad(self, uuid: str, squad_name: str) -> bool:
+        squad_uuid = await self.resolve_internal_squad_uuid(squad_name)
+        if not squad_uuid:
+            return False
+        return await self.update_user_active_internal_squads(uuid, [squad_uuid])
+
+    async def update_user_fields(self, **fields: Any) -> bool:
+        url = f"{self.base_url}/api/users"
+        _own_session = None
+        if self._session and not self._session.closed:
+            session = self._session
+        else:
+            _own_session = aiohttp.ClientSession()
+            session = _own_session
+        try:
+            try:
+                async with session.patch(
+                    url,
+                    headers=self.headers,
+                    json=fields,
+                    timeout=5,
+                ) as resp:
+                    if resp.status not in [200, 201]:
+                        self.last_error = f"User update failed with HTTP {resp.status}"
+                        return False
+                    try:
+                        payload = await resp.json()
+                    except Exception:
+                        payload = None
+                    if isinstance(payload, dict):
+                        user = payload.get('response', payload)
+                        if isinstance(user, dict):
+                            self._cache_user(user)
+                    self.last_error = None
+                    return True
+            except Exception as e:
+                self.last_error = f"User update failed: {e}"
+                logger.error(f"User update error: {e}")
                 return False
         finally:
             if _own_session:
                 await _own_session.close()
+
+    async def update_user_traffic_limit(
+        self,
+        uuid: str,
+        traffic_limit_bytes: int,
+        traffic_limit_strategy: str,
+    ) -> bool:
+        return await self.update_user_fields(
+            uuid=uuid,
+            trafficLimitBytes=int(traffic_limit_bytes),
+            trafficLimitStrategy=str(traffic_limit_strategy or DEFAULT_TRAFFIC_LIMIT_STRATEGY),
+        )
 
 panel = PanelAPI(CONFIG['settings']['panel_url'], PANEL_TOKEN)
 
@@ -693,6 +830,22 @@ def enforcement_template(key: str) -> str:
 
 def telegram_setting(key: str) -> Any:
     return normalize_telegram_runtime_settings(settings())[key]
+
+
+def _violation_state_from_row(row: Any) -> Dict[str, Any]:
+    if not row:
+        return {
+            "restriction_mode": SQUAD_RESTRICTION_MODE,
+            "saved_traffic_limit_bytes": None,
+            "saved_traffic_limit_strategy": None,
+            "applied_traffic_limit_bytes": None,
+        }
+    return {
+        "restriction_mode": normalize_restriction_mode(row[4] if len(row) > 4 else None),
+        "saved_traffic_limit_bytes": row[5] if len(row) > 5 else None,
+        "saved_traffic_limit_strategy": row[6] if len(row) > 6 else None,
+        "applied_traffic_limit_bytes": row[7] if len(row) > 7 else None,
+    }
 
 
 def admin_bot_available() -> bool:
@@ -971,29 +1124,53 @@ async def handle_ban_approve(callback: CallbackQuery):
     try:
         parts = callback.data.split(':')
         uuid, ip, strikes, ban_min = parts[1], parts[2], int(parts[3]), int(parts[4])
+        row = await db.fetch_one(
+            """
+            SELECT strikes, unban_time, warning_time, warning_count,
+                   restriction_mode, saved_traffic_limit_bytes,
+                   saved_traffic_limit_strategy, applied_traffic_limit_bytes
+            FROM violations WHERE uuid=?
+            """,
+            (uuid,),
+        )
+        restriction_state = _violation_state_from_row(row)
         
         if not DRY_RUN:
-            await panel.toggle_user(uuid, False)
+            restricted = await apply_remote_restriction_state_async(
+                panel,
+                uuid,
+                settings(),
+                restriction_state,
+            )
+            if not restricted:
+                logger.error(
+                    "Access restriction approval failed for %s (%s): %s",
+                    uuid,
+                    restriction_state["restriction_mode"],
+                    panel.last_error or "unknown error",
+                )
+                await callback.answer("Не удалось применить ограничение", show_alert=True)
+                return
         
         admin_name = callback.from_user.first_name or "Admin"
-        await callback.answer(f"✅ Бан применён ({ban_min} мин)")
+        await callback.answer(f"✅ Ограничение применено ({ban_min} мин)")
         
         if callback.message:
             try:
                 safe_text = escape_html(callback.message.text)
                 await callback.message.edit_text(
-                    text=f"{safe_text}\n\n✅ <b>Бан одобрен</b> (by {admin_name})",
+                    text=f"{safe_text}\n\n✅ <b>Ограничение доступа одобрено</b> (by {admin_name})",
                     reply_markup=None,
                     parse_mode="HTML"
                 )
             except Exception as e:
                 logger.error(f"Error editing message: {e}")
         
-        _dbg('IMPORTANT', f"[MANUAL_REVIEW] Ban approved for {uuid} by {admin_name}")
+        _dbg('IMPORTANT', f"[MANUAL_REVIEW] Access restriction approved for {uuid} by {admin_name}")
         
     except Exception as e:
         logger.error(f"Ban approve error: {e}")
-        await callback.answer("Error approving ban", show_alert=True)
+        await callback.answer("Error approving access restriction", show_alert=True)
 
 @dp.callback_query(lambda c: c.data and c.data.startswith('ban_reject:'))
 async def handle_ban_reject(callback: CallbackQuery):
@@ -1009,24 +1186,24 @@ async def handle_ban_reject(callback: CallbackQuery):
         await db.execute("DELETE FROM active_trackers WHERE uuid=?", (uuid,))
         
         admin_name = callback.from_user.first_name or "Admin"
-        await callback.answer("❌ Бан отменён")
+        await callback.answer("❌ Ограничение отменено")
         
         if callback.message:
             try:
                 safe_text = escape_html(callback.message.text)
                 await callback.message.edit_text(
-                    text=f"{safe_text}\n\n❌ <b>Бан отменён</b> (by {admin_name})",
+                    text=f"{safe_text}\n\n❌ <b>Ограничение доступа отменено</b> (by {admin_name})",
                     reply_markup=None,
                     parse_mode="HTML"
                 )
             except Exception as e:
                 logger.error(f"Error editing message: {e}")
         
-        _dbg('IMPORTANT', f"[MANUAL_REVIEW] Ban rejected for {uuid} by {admin_name}")
+        _dbg('IMPORTANT', f"[MANUAL_REVIEW] Access restriction rejected for {uuid} by {admin_name}")
         
     except Exception as e:
         logger.error(f"Ban reject error: {e}")
-        await callback.answer("Error rejecting ban", show_alert=True)
+        await callback.answer("Error rejecting access restriction", show_alert=True)
 
 @dp.message(Command("status"))
 async def cmd_status(message: Message):
@@ -1038,7 +1215,7 @@ async def cmd_status(message: Message):
     quality = platform_store.get_quality_metrics()
     await message.reply(
         f"📊 <b>Статус Mobguard</b>\n"
-        f"• Активных банов: {active[0]}\n"
+        f"• Активных ограничений: {active[0]}\n"
         f"• Всего нарушений: {total[0]}\n"
         f"• Активных трекеров: {trackers[0]}\n"
         f"• UNSURE patterns: {unsure_patterns[0]}\n"
@@ -1046,7 +1223,7 @@ async def cmd_status(message: Message):
         f"• Active learning patterns: {quality['active_learning_patterns']}\n"
         f"• UNSURE notified (session): {len(UNSURE_NOTIFIED)}\n"
         f"• Пользователей с иммунитетом: {len(EXEMPT_UUIDS)}\n"
-        f"• Режим: {'⚠️ DRY RUN' if DRY_RUN else '✅ БАНХАМЕР'}\n"
+        f"• Режим: {'⚠️ DRY RUN' if DRY_RUN else '✅ ОГРАНИЧЕНИЯ'}\n"
         f"• Shadow mode: {'ON' if CONFIG['settings'].get('shadow_mode', True) else 'OFF'}\n"
         f"• DEBUG: {DEBUG_LEVEL}"
     )
@@ -1070,7 +1247,7 @@ async def cmd_review_mode(message: Message, command: CommandObject):
         await message.reply(
             f"🔍 <b>Режимы модерации:</b>\n\n"
             f"Mixed ASN: {'✅' if MANUAL_REVIEW_UNSURE else '⛔'}\n"
-            f"Ban approval: {'✅' if MANUAL_REVIEW_ALL_BANS else '⛔'}\n\n"
+            f"Restriction approval: {'✅' if MANUAL_REVIEW_ALL_BANS else '⛔'}\n\n"
             f"/review_mode unsure|bans|auto"
         )
         return
@@ -1082,7 +1259,7 @@ async def cmd_review_mode(message: Message, command: CommandObject):
         await message.reply(f"🔍 Mixed ASN: {'✅' if MANUAL_REVIEW_UNSURE else '⛔'}")
     elif mode == 'bans':
         MANUAL_REVIEW_ALL_BANS = not MANUAL_REVIEW_ALL_BANS
-        await message.reply(f"👮 Bans: {'✅' if MANUAL_REVIEW_ALL_BANS else '⛔'}")
+        await message.reply(f"👮 Ограничения: {'✅' if MANUAL_REVIEW_ALL_BANS else '⛔'}")
     elif mode == 'auto':
         MANUAL_REVIEW_UNSURE = False
         MANUAL_REVIEW_ALL_BANS = False
@@ -1125,14 +1302,36 @@ async def cmd_unban(message: Message, command: CommandObject):
         return
     
     uuid = target['uuid']
+    row = await db.fetch_one(
+        """
+        SELECT strikes, unban_time, warning_time, warning_count,
+               restriction_mode, saved_traffic_limit_bytes,
+               saved_traffic_limit_strategy, applied_traffic_limit_bytes
+        FROM violations WHERE uuid=?
+        """,
+        (uuid,),
+    )
+    restriction_state = _violation_state_from_row(row)
+    if not DRY_RUN:
+        restore_result = await restore_remote_restriction_state_async(
+            panel,
+            uuid,
+            settings(),
+            restriction_state,
+        )
+        if not restore_result["remote_updated"]:
+            await message.reply(
+                f"❌ Не удалось восстановить полный доступ для {target.get('username', uuid)}: "
+                f"{panel.last_error or 'unknown error'}"
+            )
+            return
     await db.execute("DELETE FROM violations WHERE uuid=?", (uuid,))
-    await panel.toggle_user(uuid, True)
-    
-    await message.reply(f"✅ Бан снят с {target.get('username', uuid)}")
+
+    await message.reply(f"✅ Полный доступ восстановлен для {target.get('username', uuid)}")
     await notify_admin(
         f"📶 <b>#mobguard</b>\n"
         f"➖➖➖➖➖➖➖➖➖\n"
-        f"🔓 <b>Разбан</b>\n"
+        f"🔓 <b>Восстановление полного доступа</b>\n"
         f"Админ: {message.from_user.first_name}\n"
         f"User: {escape_html(target.get('username', uuid))}"
     )
@@ -1346,7 +1545,7 @@ async def cmd_check(message: Message, command: CommandObject):
                 remaining = unban_time - datetime.now()
                 hours = int(remaining.total_seconds() // 3600)
                 minutes = int((remaining.total_seconds() % 3600) // 60)
-                msg += f"• Статус: 🔒 Забанен (осталось {hours}ч {minutes}м)\n"
+                msg += f"• Статус: 🔒 Доступ ограничен (осталось {hours}ч {minutes}м)\n"
             else:
                 msg += f"• Статус: ✅ Активен\n"
         elif warning_time_str:
@@ -1379,7 +1578,7 @@ async def cmd_check(message: Message, command: CommandObject):
             msg += f"  IP: <code>{ip}</code>\n"
             msg += f"  ISP: {escape_html(isp)}\n"
             msg += f"  Config: {escape_html(tag)}\n"
-            msg += f"  Бан: {duration} мин\n"
+            msg += f"  Ограничение: {duration} мин\n"
     
     # Активные трекеры
     trackers = await db.fetch_all("SELECT key, start_time FROM active_trackers WHERE key LIKE ?", (f"{uuid}:%",))
@@ -1786,20 +1985,39 @@ async def handle_violation(user: Dict, tag: str, bundle: DecisionBundle, warning
     )
 
     row = await db.fetch_one(
-        "SELECT strikes, unban_time, warning_time, warning_count FROM violations WHERE uuid=?",
+        """
+        SELECT strikes, unban_time, warning_time, warning_count,
+               restriction_mode, saved_traffic_limit_bytes,
+               saved_traffic_limit_strategy, applied_traffic_limit_bytes
+        FROM violations WHERE uuid=?
+        """,
         (uuid,),
     )
     strikes = row[0] if row else 0
     unban_time_str = row[1] if row else None
     warning_time_str = row[2] if row else None
     warning_count = row[3] if row and len(row) > 3 else 0
+    active_restriction_state = _violation_state_from_row(row)
 
     if unban_time_str:
         unban_dt = datetime.fromisoformat(unban_time_str)
         if unban_dt > now:
             _dbg('IMPORTANT', f"[ENFORCEMENT] User {uuid} active while banned. Re-disabling.")
             if not DRY_RUN:
-                await panel.toggle_user(uuid, False)
+                reapplied = await apply_remote_restriction_state_async(
+                    panel,
+                    uuid,
+                    settings(),
+                    active_restriction_state,
+                )
+                if not reapplied:
+                    mode = active_restriction_state["restriction_mode"]
+                    logger.error(
+                        "[ENFORCEMENT] Failed to re-apply %s restriction for %s: %s",
+                        mode,
+                        uuid,
+                        panel.last_error or "unknown error",
+                    )
             return
 
     start_time = await db.get_tracker_start(tracker_key)
@@ -1891,13 +2109,25 @@ async def handle_violation(user: Dict, tag: str, bundle: DecisionBundle, warning
 
         ban_min = int(ban_durations[min(strikes - 1, len(ban_durations) - 1)])
         ban_text = format_duration_text(ban_min)
+        restriction_state = build_auto_restriction_state(user, settings())
 
         unban_dt = now + timedelta(minutes=ban_min)
         await db.execute(
             """INSERT OR REPLACE INTO violations
-                          (uuid, strikes, unban_time, last_strike_time, last_forgiven, warning_time, warning_count)
-                          VALUES (?, ?, ?, ?, ?, NULL, 0)""",
-            (uuid, strikes, unban_dt.isoformat(), now.isoformat(), now.isoformat()),
+                          (uuid, strikes, unban_time, last_strike_time, last_forgiven, warning_time, warning_count,
+                           restriction_mode, saved_traffic_limit_bytes, saved_traffic_limit_strategy, applied_traffic_limit_bytes)
+                          VALUES (?, ?, ?, ?, ?, NULL, 0, ?, ?, ?, ?)""",
+            (
+                uuid,
+                strikes,
+                unban_dt.isoformat(),
+                now.isoformat(),
+                now.isoformat(),
+                restriction_state["restriction_mode"],
+                restriction_state["saved_traffic_limit_bytes"],
+                restriction_state["saved_traffic_limit_strategy"],
+                restriction_state["applied_traffic_limit_bytes"],
+            ),
         )
         await db.execute(
             """INSERT INTO violation_history
@@ -1929,7 +2159,10 @@ async def handle_violation(user: Dict, tag: str, bundle: DecisionBundle, warning
                     "ban_text": ban_text,
                 },
             )
-            admin_msg = admin_msg.replace("<b>БЛОКИРОВКА</b>", f"{status_icon} <b>БЛОКИРОВКА</b>")
+            admin_msg = admin_msg.replace(
+                "<b>ОГРАНИЧЕНИЕ ДОСТУПА</b>",
+                f"{status_icon} <b>ОГРАНИЧЕНИЕ ДОСТУПА</b>",
+            )
             admin_msg += "\n<b>Основание:</b>\n"
             for entry in log:
                 admin_msg += f"  • {escape_html(entry)}\n"
@@ -1939,11 +2172,37 @@ async def handle_violation(user: Dict, tag: str, bundle: DecisionBundle, warning
                 await notify_admin(admin_msg)
 
         if config_flag('manual_ban_approval_enabled', False):
-            _dbg('IMPORTANT', f"[MANUAL_REVIEW] Ban awaiting approval")
+            _dbg('IMPORTANT', f"[MANUAL_REVIEW] Access restriction awaiting approval")
             return
 
         if not DRY_RUN:
-            await panel.toggle_user(uuid, False)
+            if restriction_state["restriction_mode"] == TRAFFIC_CAP_RESTRICTION_MODE:
+                apply_result = await apply_remote_traffic_cap_async(
+                    panel,
+                    uuid,
+                    user,
+                    int(settings().get("traffic_cap_increment_gb", ENFORCEMENT_SETTINGS_DEFAULTS["traffic_cap_increment_gb"])),
+                )
+                restricted = bool(apply_result["remote_updated"])
+            else:
+                restricted = await apply_remote_access_state_async(
+                    panel,
+                    uuid,
+                    settings(),
+                    restricted=True,
+                )
+            if not restricted:
+                mode = restriction_state["restriction_mode"]
+                logger.error(
+                    "[ENFORCEMENT] Failed to apply %s restriction for %s: %s",
+                    mode,
+                    uuid,
+                    panel.last_error or "unknown error",
+                )
+                await notify_error(
+                    f"Не удалось применить ограничение доступа для {uuid}: {panel.last_error or 'unknown error'}"
+                )
+                return
             if user.get('telegramId') and user_event_notifications_enabled("ban"):
                 user_msg = render_runtime_template(
                     "user_ban_template",
@@ -2059,26 +2318,53 @@ async def unbanner_task():
         await asyncio.sleep(30)
         now = datetime.now()
         
-        rows = await db.fetch_all("SELECT uuid, unban_time FROM violations WHERE unban_time IS NOT NULL AND unban_time <= ?", (now.isoformat(),))
+        rows = await db.fetch_all(
+            """
+            SELECT uuid, unban_time, restriction_mode, saved_traffic_limit_bytes,
+                   saved_traffic_limit_strategy, applied_traffic_limit_bytes
+            FROM violations WHERE unban_time IS NOT NULL AND unban_time <= ?
+            """,
+            (now.isoformat(),),
+        )
         
-        for uuid, unban_time_str in rows:
+        for uuid, unban_time_str, restriction_mode, saved_limit_bytes, saved_strategy, applied_limit_bytes in rows:
+            if DRY_RUN:
+                await db.execute("UPDATE violations SET unban_time=NULL WHERE uuid=?", (uuid,))
+                continue
+
+            restore_result = await restore_remote_restriction_state_async(
+                panel,
+                uuid,
+                settings(),
+                {
+                    "restriction_mode": restriction_mode,
+                    "saved_traffic_limit_bytes": saved_limit_bytes,
+                    "saved_traffic_limit_strategy": saved_strategy,
+                    "applied_traffic_limit_bytes": applied_limit_bytes,
+                },
+            )
+            if not restore_result["remote_updated"]:
+                logger.error(
+                    "[UNBAN] Failed to restore restriction state %s for %s: %s",
+                    normalize_restriction_mode(restriction_mode),
+                    uuid,
+                    panel.last_error or "unknown error",
+                )
+                continue
+
             await db.execute("UPDATE violations SET unban_time=NULL WHERE uuid=?", (uuid,))
+            logger.info(f"[UNBAN] {uuid}")
+            user = await panel.get_user_data(uuid)
+            if user and user.get('telegramId'):
+                msg = "✅ Полный доступ восстановлен. Пожалуйста, соблюдайте правила использования."
+                await notify_user(int(user['telegramId']), msg)
             
-            if not DRY_RUN:
-                success = await panel.toggle_user(uuid, True)
-                if success:
-                    logger.info(f"[UNBAN] {uuid}")
-                    user = await panel.get_user_data(uuid)
-                    if user and user.get('telegramId'):
-                        msg = "✅ Ваш доступ восстановлен. Пожалуйста, соблюдайте правила использования."
-                        await notify_user(int(user['telegramId']), msg)
-                    
-                    await notify_admin(
-                        f"📶 <b>#mobguard</b>\n"
-                        f"➖➖➖➖➖➖➖➖➖\n"
-                        f"✅ <b>Автоматический разбан</b>\n"
-                        f"User: {escape_html(user.get('username', uuid)) if user else uuid}"
-                    )
+            await notify_admin(
+                f"📶 <b>#mobguard</b>\n"
+                f"➖➖➖➖➖➖➖➖➖\n"
+                f"✅ <b>Автоматическое восстановление доступа</b>\n"
+                f"User: {escape_html(user.get('username', uuid)) if user else uuid}"
+            )
 
 async def forgiveness_task():
     logger.info("Starting Forgiveness Worker...")
@@ -2142,9 +2428,9 @@ async def daily_report_task():
             f"💚 <b>Ежедневный отчёт • {now.strftime('%d.%m %H:%M')}</b>\n\n"
             f"📊 <b>Сводка за сутки:</b>\n"
             f"  • Новых страйков: {total_strikes_today[0]}\n"
-            f"  • Активных банов: {active_bans[0]}\n"
+            f"  • Активных ограничений: {active_bans[0]}\n"
             f"  • Активных предупреждений: {active_warnings[0]}\n"
-            f"  • Режим: {'⚠️ ОТЛАДКА' if DRY_RUN else '✅ БАНХАМЕР'}\n"
+            f"  • Режим: {'⚠️ ОТЛАДКА' if DRY_RUN else '✅ ОГРАНИЧЕНИЯ'}\n"
         )
 
         # Перед чтением статистики принудительно сбрасываем буфер,

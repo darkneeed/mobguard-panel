@@ -24,6 +24,10 @@ class UserExemptRequest(BaseModel):
     enabled: bool = True
 
 
+class UserTrafficCapRequest(BaseModel):
+    gigabytes: int = Field(default=10, gt=0)
+
+
 class OverrideUpsertRequest(BaseModel):
     decision: str
     ttl_days: int = Field(default=7, ge=1, le=3650)

@@ -56,7 +56,7 @@ export function normalizeRulesDraft(source: Record<string, unknown>): RulesDraft
 
 export function normalizeGeneralSettingsDraft(
   source: Record<string, string | number | boolean | string[]>,
-  fields: Array<{ key: string; inputType: "number" | "boolean" | "number-list" }>
+  fields: Array<{ key: string; inputType: "number" | "boolean" | "number-list" | "text" }>
 ): Record<string, string> {
   return Object.fromEntries(
     fields.map((field) => {

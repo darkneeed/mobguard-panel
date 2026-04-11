@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useNavigate, useParams } from "react-router-dom";
 
 import { api } from "../api/client";
 import { useToast } from "../components/ToastProvider";
@@ -18,10 +18,24 @@ type PendingKey =
   | "cacheSave"
   | "calibrationExport";
 
+const DATA_TABS: DataTab[] = [
+  "users",
+  "violations",
+  "overrides",
+  "cache",
+  "learning",
+  "cases",
+  "exports"
+];
+
 export function DataPage() {
   const { t, language } = useI18n();
   const { pushToast } = useToast();
-  const [tab, setTab] = useState<DataTab>("users");
+  const { section } = useParams();
+  const navigate = useNavigate();
+  const tab = useMemo<DataTab>(() => {
+    return DATA_TABS.includes(section as DataTab) ? (section as DataTab) : "users";
+  }, [section]);
   const [pageError, setPageError] = useState("");
   const [pending, setPending] = useState<Partial<Record<PendingKey, boolean>>>({});
 
@@ -30,6 +44,7 @@ export function DataPage() {
   const [userCard, setUserCard] = useState<Record<string, unknown> | null>(null);
   const [userCardExport, setUserCardExport] = useState<Record<string, unknown> | null>(null);
   const [banMinutes, setBanMinutes] = useState("15");
+  const [trafficCapGigabytes, setTrafficCapGigabytes] = useState("10");
   const [strikeCount, setStrikeCount] = useState("1");
   const [warningCount, setWarningCount] = useState("1");
 
@@ -57,8 +72,39 @@ export function DataPage() {
   const [lastCalibrationManifest, setLastCalibrationManifest] = useState<Record<string, unknown> | null>(null);
   const [lastCalibrationFilename, setLastCalibrationFilename] = useState("");
 
+  useEffect(() => {
+    if (section && DATA_TABS.includes(section as DataTab)) {
+      return;
+    }
+    navigate("/data/users", { replace: true });
+  }, [navigate, section]);
+
   function displayValue(value: unknown): string {
     return value === null || value === undefined || value === "" ? t("common.notAvailable") : String(value);
+  }
+
+  function formatPanelSquads(value: unknown): string {
+    if (!Array.isArray(value) || value.length === 0) {
+      return t("common.notAvailable");
+    }
+    const names = value
+      .map((item) => {
+        if (!item || typeof item !== "object") return "";
+        const squad = item as Record<string, unknown>;
+        return String(squad.name || squad.uuid || "").trim();
+      })
+      .filter(Boolean);
+    return names.length > 0 ? names.join(", ") : t("common.notAvailable");
+  }
+
+  function formatTrafficBytes(value: unknown): string {
+    const numeric =
+      typeof value === "number" ? value : typeof value === "string" && value.trim() ? Number(value) : NaN;
+    if (!Number.isFinite(numeric) || numeric < 0) {
+      return t("common.notAvailable");
+    }
+    const gib = numeric / (1024 ** 3);
+    return `${gib.toFixed(2)} GB`;
   }
 
   function setPendingKey(key: PendingKey, active: boolean) {
@@ -297,6 +343,7 @@ export function DataPage() {
     const history = (userCard?.history as Array<Record<string, unknown>> | undefined) || [];
     const analysisEvents = (userCard?.analysis_events as Array<Record<string, unknown>> | undefined) || [];
     const panelUser = userCard?.panel_user as Record<string, unknown> | undefined;
+    const userTraffic = (panelUser?.userTraffic as Record<string, unknown> | undefined) || undefined;
     const identifier = String(identity?.uuid || identity?.system_id || identity?.telegram_id || "");
 
     return (
@@ -344,6 +391,11 @@ export function DataPage() {
                 <div><dt>{t("data.users.fields.systemId")}</dt><dd>{displayValue(identity.system_id)}</dd></div>
                 <div><dt>{t("data.users.fields.telegramId")}</dt><dd>{displayValue(identity.telegram_id)}</dd></div>
                 <div><dt>{t("data.users.fields.panelStatus")}</dt><dd>{displayValue(panelUser?.status)}</dd></div>
+                <div><dt>{t("data.users.fields.panelSquads")}</dt><dd>{formatPanelSquads(panelUser?.activeInternalSquads)}</dd></div>
+                <div><dt>{t("data.users.fields.trafficLimitBytes")}</dt><dd>{formatTrafficBytes(panelUser?.trafficLimitBytes)}</dd></div>
+                <div><dt>{t("data.users.fields.trafficLimitStrategy")}</dt><dd>{displayValue(panelUser?.trafficLimitStrategy)}</dd></div>
+                <div><dt>{t("data.users.fields.usedTrafficBytes")}</dt><dd>{formatTrafficBytes(userTraffic?.usedTrafficBytes)}</dd></div>
+                <div><dt>{t("data.users.fields.lifetimeUsedTrafficBytes")}</dt><dd>{formatTrafficBytes(userTraffic?.lifetimeUsedTrafficBytes)}</dd></div>
                 <div><dt>{t("data.users.fields.exemptSystemId")}</dt><dd>{displayValue(flags?.exempt_system_id)}</dd></div>
                 <div><dt>{t("data.users.fields.exemptTelegramId")}</dt><dd>{displayValue(flags?.exempt_telegram_id)}</dd></div>
                 <div><dt>{t("data.users.fields.activeBan")}</dt><dd>{displayValue(flags?.active_ban)}</dd></div>
@@ -359,6 +411,14 @@ export function DataPage() {
                   <input value={banMinutes} onChange={(event) => setBanMinutes(event.target.value)} />
                   <button disabled={isPending("userAction")} onClick={() => runUserAction(() => api.banUser(identifier, Number(banMinutes)), t("data.saved.userUpdated"))}>{t("data.users.actions.startBan")}</button>
                   <button className="ghost" disabled={isPending("userAction")} onClick={() => runUserAction(() => api.unbanUser(identifier), t("data.saved.userUpdated"))}>{t("data.users.actions.unban")}</button>
+                </div>
+                <div className="rule-field">
+                  <strong>{t("data.users.actions.trafficCapGigabytes")}</strong>
+                  <input value={trafficCapGigabytes} onChange={(event) => setTrafficCapGigabytes(event.target.value)} />
+                  <div className="action-row">
+                    <button disabled={isPending("userAction")} onClick={() => runUserAction(() => api.applyUserTrafficCap(identifier, Number(trafficCapGigabytes)), t("data.saved.userUpdated"))}>{t("data.users.actions.applyTrafficCap")}</button>
+                    <button className="ghost" disabled={isPending("userAction")} onClick={() => runUserAction(() => api.restoreUserTrafficCap(identifier), t("data.saved.userUpdated"))}>{t("data.users.actions.restoreTrafficCap")}</button>
+                  </div>
                 </div>
                 <div className="rule-field">
                   <strong>{t("data.users.actions.strikes")}</strong>
@@ -810,19 +870,13 @@ export function DataPage() {
 
   return (
     <section className="page">
-      <div className="page-header">
+      <div className="page-header page-header-stack">
         <div>
           <span className="eyebrow">{t("data.eyebrow")}</span>
           <h1>{t("data.title")}</h1>
+          <p className="page-lede">{t(`data.sectionDescriptions.${tab}`)}</p>
         </div>
-      </div>
-
-      <div className="panel tab-row">
-        {(["users", "violations", "overrides", "cache", "learning", "cases", "exports"] as DataTab[]).map((item) => (
-          <button key={item} className={tab === item ? "" : "ghost"} onClick={() => setTab(item)}>
-            {t(`data.tabs.${item}`)}
-          </button>
-        ))}
+        <span className="chip">{t(`data.tabs.${tab}`)}</span>
       </div>
 
       {pageError ? <div className="error-box">{pageError}</div> : null}

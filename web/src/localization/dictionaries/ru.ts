@@ -19,17 +19,53 @@ export const ruDictionary: TranslationDictionary = {
     on: "ON",
     off: "OFF",
     showHint: "Показать подсказку",
-    fieldHintLabel: "Подсказка для поля {field}"
+    fieldHintLabel: "Подсказка для поля {field}",
+    present: "задано",
+    missing: "не задано",
+    writable: "можно писать",
+    readOnly: "только чтение",
+    envFile: "Файл .env",
+    currentValue: "Текущее значение",
+    secretValueStored: "На сервере значение хранится как скрытый секрет.",
+    runtimeValue: "Runtime-значение, управляемое через .env.",
+    leaveBlankToKeep: "Оставьте пустым, чтобы сохранить текущее секретное значение",
+    restartRequired: "нужен перезапуск"
   },
   layout: {
     brandSubtitle: "Панель администратора",
+    consoleBadge: "Hybrid console",
+    consoleDescription: "Операторский поток в духе Remnawave с более polished подачей Bedolaga.",
+    groups: {
+      monitor: "Мониторинг",
+      configure: "Настройки",
+      operate: "Операции"
+    },
     nav: {
+      overview: "Обзор",
       queue: "Очередь",
       rules: "Правила детекта",
       telegram: "Telegram",
       access: "Доступ",
       data: "Данные",
       quality: "Качество"
+    },
+    subnav: {
+      rules: {
+        thresholds: "Пороги",
+        lists: "Списки",
+        providers: "Провайдеры",
+        policy: "Политика",
+        learning: "Learning"
+      },
+      data: {
+        users: "Пользователи",
+        violations: "Нарушения",
+        overrides: "Оверрайды",
+        cache: "Кэш",
+        learning: "Learning",
+        cases: "Кейсы",
+        exports: "Экспорты"
+      }
     },
     theme: {
       label: "Тема",
@@ -43,6 +79,53 @@ export const ruDictionary: TranslationDictionary = {
       en: "eng"
     },
     logout: "Выйти"
+  },
+  overview: {
+    eyebrow: "Operator Overview",
+    title: "Здоровье системы, давление очереди и runtime-поза",
+    description: "Один экран для live-state, модерационной нагрузки, качества learning и рискованных зон.",
+    lastUpdated: "Последняя синхронизация {value}",
+    errors: {
+      loadFailed: "Не удалось загрузить обзорный экран"
+    },
+    systemStatusTitle: "Live-состояние операторской панели",
+    systemStatusDescription: "Core, очередь, live rules и готовность экспортов на одном экране.",
+    healthTitle: "Снимок здоровья",
+    healthDescription: "Heartbeat backend-сервисов и статус control-plane.",
+    health: {
+      core: "Heartbeat core",
+      db: "База данных",
+      rules: "Live rules",
+      updated: "Обновлено {value}",
+      rulesBy: "Обновил {value}"
+    },
+    cards: {
+      openQueue: "Открытая очередь",
+      core: "Core healthy",
+      ipinfo: "IPINFO token",
+      adminSessions: "Админ-сессии",
+      scoreZeroRatio: "Доля score=0 (24ч)",
+      asnMissingRatio: "Доля ASN-missing (24ч)",
+      mixedConflicts: "Конфликты mixed-провайдеров",
+      promotedPatterns: "Promoted patterns"
+    },
+    quickLinks: {
+      queue: "Открыть очередь",
+      quality: "Перейти в quality",
+      policy: "Проверить policy",
+      exports: "Calibration exports"
+    },
+    mixedProvidersTitle: "Проблемные mixed-провайдеры",
+    mixedProvidersDescription: "Провайдеры, которые чаще всего приводят к review-first и конфликтам.",
+    mixedProvidersItem: "{open} open · {conflict} conflicts · {home} HOME · {mobile} MOBILE",
+    emptyMixedProviders: "Сейчас нет проблемных mixed-провайдеров.",
+    noisyAsnTitle: "Шумные ASN",
+    noisyAsnDescription: "ASN, дающие наибольшую нагрузку на модерацию.",
+    noisyAsnItem: "{count} кейсов ревью",
+    emptyNoisyAsn: "Данных по шумным ASN пока нет.",
+    latestCasesTitle: "Последние кейсы очереди",
+    latestCasesDescription: "Свежие спорные кейсы, готовые к обработке оператором.",
+    emptyLatestCases: "Сейчас открытых кейсов нет."
   },
   login: {
     eyebrow: "Remnawave + MobGuard",
@@ -64,15 +147,25 @@ export const ruDictionary: TranslationDictionary = {
   reviewQueue: {
     eyebrow: "Очередь ревью",
     title: "Спорные решения и ручная модерация",
+    description: "Явные фильтры, bulk-решения и более плотный операторский workflow для живой очереди.",
     countSummary: "{count} кейсов · страница {page}",
+    lastUpdated: "Обновлено {value}",
     searchPlaceholder: "Быстрый поиск по IP / username / ISP / UUID / IDs",
+    clearFilters: "Сбросить фильтры",
     toggleFiltersTitle: "Переключить фильтры",
+    presets: {
+      open: "Только open",
+      providerConflict: "Provider conflict",
+      critical: "Critical",
+      punitive: "Punitive"
+    },
     filters: {
       username: "Имя пользователя",
       systemId: "System ID",
       telegramId: "Telegram ID",
       repeatMin: "Минимум повторов",
       repeatMax: "Максимум повторов",
+      allStatus: "Любой статус",
       allConfidence: "Любая confidence",
       allReasons: "Все причины",
       allSeverity: "Любая severity",
@@ -107,8 +200,18 @@ export const ruDictionary: TranslationDictionary = {
       mobile: "Mobile",
       home: "Home",
       skip: "Skip",
+      openCase: "Открыть кейс",
+      bulkMobile: "Поставить selected в MOBILE",
+      bulkHome: "Поставить selected в HOME",
+      bulkSkip: "Пропустить selected",
       processing: "Обработка…",
-      saved: "Решение по кейсу сохранено"
+      saved: "Решение по кейсу сохранено",
+      bulkSaved: "Применено решение к {count} выбранным кейсам"
+    },
+    selection: {
+      selectPage: "Выбрать страницу",
+      clearPage: "Снять выбор со страницы",
+      selectedCount: "Выбрано {count}"
     },
     footer: {
       previous: "Назад",
@@ -119,7 +222,11 @@ export const ruDictionary: TranslationDictionary = {
   reviewDetail: {
     eyebrow: "Детали кейса",
     title: "Кейс ревью #{caseId}",
+    description: "Evidence, связанная история и sticky-зона решения для быстрой модерации.",
     loading: "Загрузка…",
+    backToQueue: "Назад в очередь",
+    copySuccess: "Скопировано в буфер",
+    copyFailed: "Не удалось скопировать",
     errors: {
       resolveFailed: "Не удалось применить решение"
     },
@@ -161,6 +268,12 @@ export const ruDictionary: TranslationDictionary = {
       skip: "Skip",
       saved: "Решение по кейсу сохранено"
     },
+    summaryHint: "Быстрые идентификаторы и контекст ревью без провала в raw payload.",
+    resolutionHint: "Эта заметка попадёт в audit trail вместе с выбранным результатом.",
+    copyIp: "Скопировать IP",
+    copyUuid: "Скопировать UUID",
+    copyTelegram: "Скопировать Telegram ID",
+    openReviewUrl: "Открыть review URL",
     providerEvidence: {
       conflict: "Конфликт service markers",
       clear: "Прямого конфликта markers нет",
@@ -186,8 +299,20 @@ export const ruDictionary: TranslationDictionary = {
     updatedBy: "Кем обновлено: {value}",
     general: {
       title: "Общие настройки",
-      description: "Параметры эскалации runtime и контроля санкций.",
+      description: "Параметры эскалации runtime и переключения уровней доступа.",
       save: "Сохранить общие настройки"
+    },
+    sectionTitles: {
+      thresholds: "Пороги, скоринг и поведение",
+      policy: "Политика детекта",
+      learning: "Контроль learning"
+    },
+    sectionDescriptions: {
+      thresholds: "Пороговые значения, веса скоринга и окна поведенческих сигналов в одном месте.",
+      lists: "ASN- и keyword-списки, формирующие первичное доказательство и исключения.",
+      providers: "Алиасы, markers и операторские подсказки для review-first сценариев.",
+      policy: "Живая policy-логика детекта плюс enforcement-настройки переключения доступа.",
+      learning: "Пороги, при которых runtime-learning становится доверенным."
     },
     providerProfiles: {
       description: "Профили операторов с alias и service markers для осторожного review-first скоринга.",
@@ -240,8 +365,10 @@ export const ruDictionary: TranslationDictionary = {
     eyebrow: "Telegram",
     title: "Настройки runtime-ботов и доставки сообщений",
     saveSettings: "Сохранить настройки Telegram",
+    saveEnv: "Сохранить .env настройки",
     saveTemplates: "Сохранить шаблоны сообщений",
     settingsSaved: "Настройки Telegram сохранены",
+    envSaved: ".env настройки Telegram сохранены",
     templatesSaved: "Шаблоны сообщений сохранены",
     loadFailed: "Не удалось загрузить настройки Telegram",
     saveFailed: "Не удалось сохранить изменения",
@@ -260,11 +387,14 @@ export const ruDictionary: TranslationDictionary = {
       "Многострочный текст сохраняется.\n\nПлейсхолдеры: {{username}}, {{warning_count}}, {{warnings_left}}, {{ban_text}}, {{review_url}}.",
     userTemplates: "Пользовательские шаблоны",
     adminTemplates: "Админские шаблоны",
+    envTitle: "Telegram .env",
+    envDescription: "Токены и usernames ботов редактируются отдельно от live runtime-настроек.",
     cards: {
       adminBot: "Админ-бот",
       userBot: "Пользовательский бот",
       adminBotConfigured: "Токен и username админ-бота",
-      userBotConfigured: "Токен пользовательского бота"
+      userBotConfigured: "Токен пользовательского бота",
+      envFile: "Состояние env-файла"
     },
     sections: {
       delivery: "Доставка",
@@ -276,13 +406,16 @@ export const ruDictionary: TranslationDictionary = {
     eyebrow: "Доступ",
     title: "Способы входа и списки доступа",
     save: "Сохранить настройки доступа",
+    saveEnv: "Сохранить .env настройки",
     saved: "Настройки доступа сохранены",
+    envSaved: ".env настройки доступа сохранены",
     loadFailed: "Не удалось загрузить настройки доступа",
     saveFailed: "Не удалось сохранить изменения",
     invalidNumericValue: "Некорректное числовое значение '{value}'",
     cards: {
       telegramLogin: "Telegram вход",
-      localFallback: "Local fallback вход"
+      localFallback: "Local fallback вход",
+      envFile: "Состояние env-файла"
     },
     authStatusTitle: "Статус аутентификации",
     authStatusDescription: "Учётные данные управляются только через `.env` на сервере.",
@@ -291,11 +424,22 @@ export const ruDictionary: TranslationDictionary = {
       localFallback: "Local fallback auth"
     },
     listsTitle: "Списки доступа",
-    listsDescription: "Администраторы панели и runtime-исключения управляются отдельно."
+    listsDescription: "Администраторы панели и runtime-исключения управляются отдельно.",
+    envTitle: "Access .env",
+    envDescription: "Локальные fallback-учётки живут в `.env`, а секреты меняются только явной заменой."
   },
   data: {
     eyebrow: "Данные",
     title: "Оперативный data-admin для runtime",
+    sectionDescriptions: {
+      users: "Основной operator-flow для поиска пользователя, разбора карточки, ограничений, исключений и export-снимков.",
+      violations: "Глобальный обзор активных ограничений и истории нарушений из runtime state.",
+      overrides: "Ручные IP- и unsure-override правила, которые шорткатят detection-решения.",
+      cache: "Live cache-записи, которые можно исправить или удалить без ожидания естественного TTL.",
+      learning: "Promoted patterns, legacy confidence и provider-learning срезы.",
+      cases: "Недавние кейсы ревью с быстрым переходом в полный detail.",
+      exports: "Генерация calibration-архива с видимостью dataset readiness и manifest."
+    },
     tabs: {
       users: "Пользователи",
       violations: "Нарушения",
@@ -373,15 +517,23 @@ export const ruDictionary: TranslationDictionary = {
         systemId: "System ID",
         telegramId: "Telegram ID",
         panelStatus: "Статус в панели",
+        panelSquads: "Активные squads",
+        trafficLimitBytes: "Лимит трафика",
+        trafficLimitStrategy: "Стратегия лимита",
+        usedTrafficBytes: "Текущий потраченный трафик",
+        lifetimeUsedTrafficBytes: "Трафик за всё время",
         exemptSystemId: "Исключённый System ID",
         exemptTelegramId: "Исключённый Telegram ID",
-        activeBan: "Активный бан",
+        activeBan: "Активное ограничение",
         activeWarning: "Активное предупреждение"
       },
       actions: {
-        banMinutes: "Минуты бана",
-        startBan: "Выдать бан",
-        unban: "Снять бан",
+        banMinutes: "Минуты ограничения",
+        startBan: "Ограничить доступ",
+        unban: "Восстановить полный доступ",
+        trafficCapGigabytes: "Traffic cap: +GB от текущего расхода",
+        applyTrafficCap: "Поставить traffic cap",
+        restoreTrafficCap: "Восстановить прежний лимит",
         strikes: "Страйки",
         add: "Добавить",
         remove: "Удалить",
@@ -397,11 +549,11 @@ export const ruDictionary: TranslationDictionary = {
       }
     },
     violations: {
-      activeTitle: "Активные нарушения / баны",
+      activeTitle: "Активные нарушения / ограничения доступа",
       historyTitle: "История нарушений",
       strikes: "strikes {value}",
       warningCount: "warning_count {value}",
-      unban: "разбан {value}",
+      unban: "восстановление {value}",
       historyRow: "strike {strike} · {duration} min"
     },
     overrides: {
@@ -494,6 +646,7 @@ export const ruDictionary: TranslationDictionary = {
   quality: {
     eyebrow: "Качество",
     title: "Шумные ASN, объём ревью и активные паттерны",
+    description: "Графики и ranked cards для resolution mix, шумных ASN и здоровья learning.",
     loadFailed: "Не удалось загрузить метрики качества",
     cards: {
       openCases: "Открытые кейсы",
@@ -513,8 +666,12 @@ export const ruDictionary: TranslationDictionary = {
     by: "Кем: {value}",
     asnSourceTitle: "Источник ASN",
     noAsnSource: "Источник ASN недоступен",
+    resolutionMixTitle: "Смесь решений",
+    resolutionMixDescription: "Как именно операторы сейчас разрешают спорные кейсы.",
     topNoisyAsnTitle: "Самые шумные ASN",
+    noisyAsnDescription: "ASN, которые сейчас создают наибольшее давление на очередь ревью.",
     topMixedProvidersTitle: "Mixed providers с наибольшим backlog",
+    mixedProvidersDescription: "Провайдеры с наибольшей нагрузкой по open-кейсам и конфликтам.",
     noMixedProviders: "Mixed-provider backlog пока пуст",
     mixedProviderStats: "{open} open · {conflict} conflicts · HOME {home} · MOBILE {mobile} · UNSURE {unsure}",
     reviewCases: "{count} кейсов ревью",
@@ -793,28 +950,44 @@ export const ruDictionary: TranslationDictionary = {
         description: "Минимальная задержка перед следующим предупреждением."
       },
       warnings_before_ban: {
-        label: "Warnings before first ban",
-        description: "Сколько предупреждений нужно до первого бана."
+        label: "Предупреждений до первого ограничения",
+        description: "Сколько предупреждений нужно до первого ограничения доступа."
       },
       warning_only_mode: {
         label: "Only warnings mode",
-        description: "Никогда не повышать санкции до банов автоматически."
+        description: "Никогда не повышать санкции до ограничений доступа автоматически."
       },
       manual_review_mixed_home_enabled: {
         label: "Review mixed HOME cases manually",
         description: "Отправлять смешанные HOME-результаты в ручное ревью до действия."
       },
       manual_ban_approval_enabled: {
-        label: "Require admin approval for bans",
-        description: "Останавливать выполнение бана до ручного одобрения админом."
+        label: "Требовать одобрение ограничения",
+        description: "Останавливать применение ограничения до ручного одобрения админом."
       },
       dry_run: {
         label: "Dry run",
-        description: "Анализировать и уведомлять без применения удалённых disable-действий."
+        description: "Анализировать и уведомлять без удалённого переключения squads."
       },
       ban_durations_minutes: {
-        label: "Ban durations ladder (minutes)",
-        description: "Одно значение на строку: первый бан, второй бан, третий бан и так далее."
+        label: "Лестница ограничений (минуты)",
+        description: "Одно значение на строку: первое ограничение, второе, третье и так далее."
+      },
+      full_access_squad_name: {
+        label: "Имя squad полного доступа",
+        description: "Точное имя internal squad Remnawave, которое означает полный доступ."
+      },
+      restricted_access_squad_name: {
+        label: "Имя squad ограничения",
+        description: "Точное имя internal squad Remnawave, которое выдаётся при нарушении."
+      },
+      traffic_cap_increment_gb: {
+        label: "Прирост traffic cap (GB)",
+        description: "На сколько гигабайт увеличить лимит относительно текущего used traffic."
+      },
+      traffic_cap_threshold_gb: {
+        label: "Порог traffic cap (GB)",
+        description: "Если пользователь уже израсходовал не меньше этого объёма, вместо скрытия мобильных конфигов применяется traffic cap."
       }
     },
     telegramFields: {
@@ -855,8 +1028,8 @@ export const ruDictionary: TranslationDictionary = {
         description: "Отправлять админские сообщения при выдаче предупреждения."
       },
       telegram_notify_admin_ban_enabled: {
-        label: "Notify bans",
-        description: "Отправлять админские сообщения при выдаче бана."
+        label: "Notify access restrictions",
+        description: "Отправлять админские сообщения при применении ограничения доступа."
       },
       telegram_notify_user_warning_only_enabled: {
         label: "Send warning-only messages",
@@ -867,8 +1040,8 @@ export const ruDictionary: TranslationDictionary = {
         description: "Отправлять пользовательские сообщения при выдаче предупреждения."
       },
       telegram_notify_user_ban_enabled: {
-        label: "Send ban messages",
-        description: "Отправлять пользовательские сообщения при выдаче бана."
+        label: "Send access restriction messages",
+        description: "Отправлять пользовательские сообщения при применении ограничения доступа."
       }
     },
     telegramTemplateFields: {
@@ -878,11 +1051,11 @@ export const ruDictionary: TranslationDictionary = {
       },
       user_warning_template: {
         label: "Warning message",
-        description: "Пользовательское сообщение для обычных предупреждений перед баном."
+        description: "Пользовательское сообщение для обычных предупреждений перед ограничением доступа."
       },
       user_ban_template: {
-        label: "Ban message",
-        description: "Пользовательское сообщение, отправляемое при бане."
+        label: "Access restriction message",
+        description: "Пользовательское сообщение, отправляемое при ограничении доступа."
       },
       admin_warning_only_template: {
         label: "Warning-only message",
@@ -893,8 +1066,8 @@ export const ruDictionary: TranslationDictionary = {
         description: "Текст админского уведомления по предупреждениям."
       },
       admin_ban_template: {
-        label: "Ban message",
-        description: "Текст админского уведомления по банам."
+        label: "Access restriction message",
+        description: "Текст админского уведомления по ограничениям доступа."
       },
       admin_review_template: {
         label: "Review message",

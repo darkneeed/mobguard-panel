@@ -2,6 +2,13 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
+from .panel_client import (
+    DEFAULT_FULL_ACCESS_SQUAD_NAME,
+    DEFAULT_RESTRICTED_ACCESS_SQUAD_NAME,
+    DEFAULT_TRAFFIC_CAP_INCREMENT_GB,
+    DEFAULT_TRAFFIC_CAP_THRESHOLD_GB,
+)
+
 
 ENFORCEMENT_SETTINGS_DEFAULTS = {
     "usage_time_threshold": 900,
@@ -13,6 +20,10 @@ ENFORCEMENT_SETTINGS_DEFAULTS = {
     "manual_ban_approval_enabled": False,
     "dry_run": True,
     "report_time": "06:00",
+    "full_access_squad_name": DEFAULT_FULL_ACCESS_SQUAD_NAME,
+    "restricted_access_squad_name": DEFAULT_RESTRICTED_ACCESS_SQUAD_NAME,
+    "traffic_cap_increment_gb": DEFAULT_TRAFFIC_CAP_INCREMENT_GB,
+    "traffic_cap_threshold_gb": DEFAULT_TRAFFIC_CAP_THRESHOLD_GB,
 }
 
 
@@ -107,15 +118,15 @@ ENFORCEMENT_TEMPLATE_DEFAULTS = {
         "⚠️ <b>Предупреждение</b>\n\n"
         "Система анализа выявила признаки использования конфига <b>«Мобильный интернет»</b> "
         "через не-мобильную сеть.\n"
-        "Это запрещено пунктом 6 правил пользования, <b>доступ к сервису может быть ограничен.</b>\n\n"
+        "Это запрещено пунктом 6 правил пользования, <b>доступ к части серверов может быть ограничен.</b>\n\n"
         "📱 Пожалуйста, используйте эту конфигурацию только через мобильный интернет.\n"
     ),
     "user_ban_template": (
-        "⛔️ <b>Доступ временно ограничен</b>\n\n"
+        "⛔️ <b>Доступ ограничен</b>\n\n"
         "Вы не отреагировали на предупреждение и продолжили использование конфигурации "
         "<b>«Мобильный интернет»</b> через не-мобильную сеть.\n\n"
-        "⏳ <b>Блокировка на {{ban_text}}.</b>\n"
-        "Доступ восстановится автоматически по истечении срока блокировки."
+        "⏳ <b>Ограничение на {{ban_text}}.</b>\n"
+        "Полный доступ восстановится автоматически по истечении срока ограничения."
     ),
     "admin_warning_only_template": (
         "📶 <b>#mobguard</b>\n"
@@ -148,7 +159,7 @@ ENFORCEMENT_TEMPLATE_DEFAULTS = {
     "admin_ban_template": (
         "📶 <b>#mobguard</b>\n"
         "➖➖➖➖➖➖➖➖➖\n"
-        "⛔️ <b>БЛОКИРОВКА</b>\n"
+        "⛔️ <b>ОГРАНИЧЕНИЕ ДОСТУПА</b>\n"
         "<b>Username:</b> {{username}}\n"
         "<b>System ID:</b> {{system_id}}\n"
         "<b>Telegram ID:</b> {{telegram_id}}\n"
@@ -157,7 +168,7 @@ ENFORCEMENT_TEMPLATE_DEFAULTS = {
         "<b>ISP:</b> {{isp}}\n"
         "<b>Config:</b> {{tag}}\n"
         "<b>Warning count:</b> {{warning_count}}\n"
-        "<b>Ban:</b> {{ban_minutes}} мин ({{ban_text}})\n"
+        "<b>Restriction:</b> {{ban_minutes}} мин ({{ban_text}})\n"
         "<b>Review URL:</b> <code>{{review_url}}</code>\n"
     ),
     "admin_review_template": (

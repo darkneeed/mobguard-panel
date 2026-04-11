@@ -1,6 +1,35 @@
+from .access_control import (
+    apply_remote_restriction_state,
+    apply_remote_restriction_state_async,
+    apply_remote_access_state,
+    apply_remote_access_state_async,
+    apply_remote_traffic_cap,
+    apply_remote_traffic_cap_async,
+    build_auto_restriction_state,
+    build_traffic_cap_plan,
+    normalize_restriction_mode,
+    remote_access_squad_name,
+    restore_remote_restriction_state,
+    restore_remote_restriction_state_async,
+    should_use_traffic_cap,
+    SQUAD_RESTRICTION_MODE,
+    TRAFFIC_CAP_RESTRICTION_MODE,
+    traffic_cap_bytes,
+)
 from .asn_sources import detect_asn_source, extract_asn_fields, resolve_asn_source
 from .auth import verify_telegram_auth
 from .models import DecisionBundle, DecisionReason, ReviewCaseSummary
+from .panel_client import (
+    DEFAULT_FULL_ACCESS_SQUAD_NAME,
+    DEFAULT_RESTRICTED_ACCESS_SQUAD_NAME,
+    DEFAULT_TRAFFIC_CAP_INCREMENT_GB,
+    DEFAULT_TRAFFIC_CAP_THRESHOLD_GB,
+    DEFAULT_TRAFFIC_LIMIT_STRATEGY,
+    get_full_access_squad_name,
+    get_restricted_access_squad_name,
+    get_traffic_cap_increment_gb,
+    get_traffic_cap_threshold_gb,
+)
 from .policy import derive_punitive_eligibility, review_reason_for_bundle, should_warning_only
 from .runtime import (
     DetectionRules,
@@ -18,6 +47,19 @@ from .runtime import (
 from .store import PlatformStore, validate_live_rules_patch
 
 __all__ = [
+    "apply_remote_access_state",
+    "apply_remote_access_state_async",
+    "apply_remote_restriction_state",
+    "apply_remote_restriction_state_async",
+    "apply_remote_traffic_cap",
+    "apply_remote_traffic_cap_async",
+    "build_auto_restriction_state",
+    "build_traffic_cap_plan",
+    "DEFAULT_FULL_ACCESS_SQUAD_NAME",
+    "DEFAULT_RESTRICTED_ACCESS_SQUAD_NAME",
+    "DEFAULT_TRAFFIC_CAP_INCREMENT_GB",
+    "DEFAULT_TRAFFIC_CAP_THRESHOLD_GB",
+    "DEFAULT_TRAFFIC_LIMIT_STRATEGY",
     "DecisionBundle",
     "DecisionReason",
     "DetectionRules",
@@ -36,9 +78,21 @@ __all__ = [
     "ScoreWeights",
     "Thresholds",
     "derive_punitive_eligibility",
+    "get_traffic_cap_increment_gb",
+    "get_traffic_cap_threshold_gb",
     "load_runtime_context",
+    "get_full_access_squad_name",
+    "get_restricted_access_squad_name",
+    "normalize_restriction_mode",
+    "remote_access_squad_name",
+    "restore_remote_restriction_state",
+    "restore_remote_restriction_state_async",
     "review_reason_for_bundle",
     "should_warning_only",
+    "should_use_traffic_cap",
+    "SQUAD_RESTRICTION_MODE",
+    "TRAFFIC_CAP_RESTRICTION_MODE",
+    "traffic_cap_bytes",
     "validate_live_rules_patch",
     "verify_telegram_auth",
 ]

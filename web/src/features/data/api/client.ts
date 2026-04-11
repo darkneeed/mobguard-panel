@@ -17,6 +17,15 @@ export const dataApi = {
     request<Record<string, unknown>>(`/admin/data/users/${encodeURIComponent(identifier)}/unban`, {
       method: "POST"
     }),
+  applyUserTrafficCap: (identifier: string, gigabytes: number) =>
+    request<Record<string, unknown>>(`/admin/data/users/${encodeURIComponent(identifier)}/traffic-cap`, {
+      method: "POST",
+      body: JSON.stringify({ gigabytes })
+    }),
+  restoreUserTrafficCap: (identifier: string) =>
+    request<Record<string, unknown>>(`/admin/data/users/${encodeURIComponent(identifier)}/traffic-cap/restore`, {
+      method: "POST"
+    }),
   updateUserWarnings: (identifier: string, action: string, count = 1) =>
     request<Record<string, unknown>>(`/admin/data/users/${encodeURIComponent(identifier)}/warnings`, {
       method: "POST",

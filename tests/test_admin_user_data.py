@@ -198,6 +198,87 @@ class PanelClientTests(unittest.TestCase):
         self.assertEqual(payload["username"], "alice")
         self.assertEqual([endpoint for _, endpoint, _ in calls], ["/api/users/by-username/alice"])
 
+    def test_resolve_internal_squad_uuid_uses_exact_name(self):
+        client = PanelClient("https://panel.example.com", "secret")
+
+        with patch.object(
+            client,
+            "_request",
+            return_value={
+                "response": {
+                    "internalSquads": [
+                        {"uuid": "uuid-full", "name": "FULL"},
+                        {"uuid": "uuid-limited", "name": "MOBILE_BLOCKED"},
+                    ]
+                }
+            },
+        ):
+            squad_uuid = client.resolve_internal_squad_uuid("MOBILE_BLOCKED")
+
+        self.assertEqual(squad_uuid, "uuid-limited")
+
+    def test_apply_access_squad_updates_active_internal_squads(self):
+        client = PanelClient("https://panel.example.com", "secret")
+        calls = []
+
+        def fake_request(method, endpoint, body=None):
+            calls.append((method, endpoint, body))
+            if endpoint == "/api/internal-squads":
+                return {
+                    "response": {
+                        "internalSquads": [
+                            {"uuid": "uuid-full", "name": "FULL"},
+                            {"uuid": "uuid-limited", "name": "MOBILE_BLOCKED"},
+                        ]
+                    }
+                }
+            if endpoint == "/api/users":
+                return {"response": {"uuid": "user-uuid"}}
+            return None
+
+        with patch.object(client, "_request", side_effect=fake_request):
+            updated = client.apply_access_squad("user-uuid", "MOBILE_BLOCKED")
+
+        self.assertTrue(updated)
+        self.assertEqual(
+            calls,
+            [
+                ("GET", "/api/internal-squads", None),
+                (
+                    "PATCH",
+                    "/api/users",
+                    {"uuid": "user-uuid", "activeInternalSquads": ["uuid-limited"]},
+                ),
+            ],
+        )
+
+    def test_update_user_traffic_limit_preserves_patch_shape(self):
+        client = PanelClient("https://panel.example.com", "secret")
+        calls = []
+
+        def fake_request(method, endpoint, body=None):
+            calls.append((method, endpoint, body))
+            return {"response": {"uuid": "user-uuid", "trafficLimitBytes": 123}}
+
+        with patch.object(client, "_request", side_effect=fake_request):
+            updated = client.update_user_traffic_limit("user-uuid", 123, "NO_RESET")
+
+        self.assertTrue(updated)
+        self.assertEqual(
+            calls,
+            [
+                (
+                    "PATCH",
+                    "/api/users",
+                    {
+                        "uuid": "user-uuid",
+                        "trafficLimitBytes": 123,
+                        "trafficLimitStrategy": "NO_RESET",
+                    },
+                )
+            ],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

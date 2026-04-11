@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 
 import { api, RulesState } from "../api/client";
 import { FieldLabel } from "../components/FieldLabel";
@@ -16,6 +17,7 @@ import {
   RULE_SETTING_FIELDS,
   RuleListFieldMeta,
   RuleSettingFieldMeta,
+  RuleSettingSectionKey,
   RuleSettingValue,
   RulesDraft
 } from "../rulesMeta";
@@ -33,11 +35,15 @@ type GeneralSettingKey =
   | "manual_review_mixed_home_enabled"
   | "manual_ban_approval_enabled"
   | "dry_run"
-  | "ban_durations_minutes";
+  | "ban_durations_minutes"
+  | "full_access_squad_name"
+  | "restricted_access_squad_name"
+  | "traffic_cap_increment_gb"
+  | "traffic_cap_threshold_gb";
 
 type GeneralSettingField = {
   key: GeneralSettingKey;
-  inputType: "number" | "boolean" | "number-list";
+  inputType: "number" | "boolean" | "number-list" | "text";
   step?: number;
 };
 
@@ -49,13 +55,19 @@ const GENERAL_SETTINGS_FIELDS: GeneralSettingField[] = [
   { key: "manual_review_mixed_home_enabled", inputType: "boolean" },
   { key: "manual_ban_approval_enabled", inputType: "boolean" },
   { key: "dry_run", inputType: "boolean" },
-  { key: "ban_durations_minutes", inputType: "number-list" }
+  { key: "ban_durations_minutes", inputType: "number-list" },
+  { key: "full_access_squad_name", inputType: "text" },
+  { key: "restricted_access_squad_name", inputType: "text" },
+  { key: "traffic_cap_increment_gb", inputType: "number" },
+  { key: "traffic_cap_threshold_gb", inputType: "number" }
 ];
 
 const LIST_SECTIONS = Array.from(
   new Set(RULE_LIST_FIELDS.filter((field) => field.sectionKey !== "access").map((field) => field.sectionKey))
 );
 const SETTING_SECTIONS = Array.from(new Set(RULE_SETTING_FIELDS.map((field) => field.sectionKey)));
+const RULES_SECTIONS = ["thresholds", "lists", "providers", "policy", "learning"] as const;
+type RulesSection = (typeof RULES_SECTIONS)[number];
 
 function blankProviderProfile(): ProviderProfileDraft {
   return {
@@ -70,6 +82,11 @@ function blankProviderProfile(): ProviderProfileDraft {
 
 export function RulesPage() {
   const { t, language } = useI18n();
+  const { section } = useParams();
+  const navigate = useNavigate();
+  const activeSection = useMemo<RulesSection>(() => {
+    return RULES_SECTIONS.includes(section as RulesSection) ? (section as RulesSection) : "thresholds";
+  }, [section]);
   const [state, setState] = useState<RulesState | null>(null);
   const [draft, setDraft] = useState<RulesDraft | null>(null);
   const [savedDraft, setSavedDraft] = useState<RulesDraft | null>(null);
@@ -80,6 +97,13 @@ export function RulesPage() {
   const [savedGeneralDraft, setSavedGeneralDraft] = useState<Record<string, string> | null>(null);
   const [generalError, setGeneralError] = useState("");
   const [generalSaved, setGeneralSaved] = useState("");
+
+  useEffect(() => {
+    if (section && RULES_SECTIONS.includes(section as RulesSection)) {
+      return;
+    }
+    navigate("/rules/thresholds", { replace: true });
+  }, [navigate, section]);
 
   useEffect(() => {
     let cancelled = false;
@@ -203,6 +227,10 @@ export function RulesPage() {
             }
             return parsed;
           });
+        continue;
+      }
+      if (field.inputType === "text") {
+        payload[field.key] = rawValue.trim();
         continue;
       }
 
@@ -359,23 +387,79 @@ export function RulesPage() {
     setSaved("");
   }
 
+  function renderRulesSaveAction() {
+    return (
+      <div className="action-row">
+        <span className={dirty ? "tag review-only" : "tag severity-low"}>
+          {dirty ? t("common.unsavedChanges") : t("common.saved")}
+        </span>
+        <button disabled={!dirty} onClick={save}>
+          {t("rules.saveRules")}
+        </button>
+      </div>
+    );
+  }
+
+  function renderSettingPanel(
+    title: string,
+    description: string,
+    sectionKeys: RuleSettingSectionKey[]
+  ) {
+    if (!draft) return null;
+    return (
+      <div className="panel">
+        <div className="panel-heading panel-heading-row">
+          <div>
+            <h2>{title}</h2>
+            <p className="muted">{description}</p>
+          </div>
+          {renderRulesSaveAction()}
+        </div>
+        <div className="form-grid">
+          {RULE_SETTING_FIELDS.filter((field) => sectionKeys.includes(field.sectionKey)).map((field) => {
+            const meta = settingFieldMeta(field);
+            return (
+              <div className="rule-field" key={field.key}>
+                <FieldLabel
+                  label={meta.label}
+                  description={meta.description}
+                  recommendation={meta.recommendation}
+                />
+                {field.inputType === "boolean" ? (
+                  <select
+                    value={getSettingInputValue(field, draft.settings?.[field.key])}
+                    onChange={(event) => updateSettingField(field, event.target.value)}
+                  >
+                    <option value="true">{t("common.true")}</option>
+                    <option value="false">{t("common.false")}</option>
+                  </select>
+                ) : (
+                  <input
+                    type={field.inputType === "number" ? "number" : "text"}
+                    step={field.step}
+                    value={getSettingInputValue(field, draft.settings?.[field.key])}
+                    onChange={(event) => updateSettingField(field, event.target.value)}
+                  />
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
   const updatedBy = !state?.updated_by || state.updated_by === "bootstrap" ? t("common.system") : state.updated_by;
 
   return (
     <section className="page">
-      <div className="page-header">
+      <div className="page-header page-header-stack">
         <div>
           <span className="eyebrow">{t("rules.eyebrow")}</span>
           <h1>{t("rules.title")}</h1>
+          <p className="page-lede">{t(`rules.sectionDescriptions.${activeSection}`)}</p>
         </div>
-        <div className="action-row">
-          <span className={dirty ? "tag review-only" : "tag severity-low"}>
-            {dirty ? t("common.unsavedChanges") : t("common.saved")}
-          </span>
-          <button disabled={!dirty} onClick={save}>
-            {t("rules.saveRules")}
-          </button>
-        </div>
+        <span className="chip">{t(`layout.subnav.rules.${activeSection}`)}</span>
       </div>
       {error ? <div className="error-box">{error}</div> : null}
       {saved ? <div className="ok-box">{saved}</div> : null}
@@ -442,6 +526,12 @@ export function RulesPage() {
                       value={generalDraft[field.key] || ""}
                       onChange={(event) => updateGeneralField(field.key, event.target.value)}
                     />
+                  ) : field.inputType === "text" ? (
+                    <input
+                      type="text"
+                      value={generalDraft[field.key] || ""}
+                      onChange={(event) => updateGeneralField(field.key, event.target.value)}
+                    />
                   ) : (
                     <input
                       type="number"
@@ -459,188 +549,247 @@ export function RulesPage() {
 
       {draft ? (
         <div className="page">
-          {LIST_SECTIONS.map((section) => (
-            <div className="panel" key={section}>
-              <div className="panel-heading">
-                <h2>{t(`rulesMeta.sections.${section}`)}</h2>
-                <p className="muted">{t("rules.listSectionDescription")}</p>
-              </div>
-              <div className="detail-grid">
-                {RULE_LIST_FIELDS.filter((field) => field.sectionKey === section).map((field) => {
-                  const meta = listFieldMeta(field);
-                  return (
-                    <div className="rule-field" key={field.key}>
-                      <FieldLabel
-                        label={meta.label}
-                        description={meta.description}
-                        recommendation={meta.recommendation}
-                      />
-                      <textarea
-                        className="note-box tall"
-                        value={listValuesToText(draft[field.key])}
-                        onChange={(event) => updateListField(field, event.target.value)}
-                      />
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
-
-          <div className="panel">
-            <div className="panel-heading panel-heading-row">
-              <div>
-                <h2>{t("rulesMeta.sections.providers")}</h2>
-                <p className="muted">{t("rules.providerProfiles.description")}</p>
-              </div>
-              <button className="ghost" onClick={addProviderProfile}>
-                {t("rules.providerProfiles.add")}
-              </button>
-            </div>
-            <div className="provider-profiles">
-              {(draft.provider_profiles || []).map((profile, index) => (
-                <div className="provider-card" key={`${profile.key || "provider"}-${index}`}>
-                  <div className="provider-card-header">
+          {activeSection === "lists"
+            ? LIST_SECTIONS.map((section) => (
+                <div className="panel" key={section}>
+                  <div className="panel-heading panel-heading-row">
                     <div>
-                      <strong>
-                        {profile.key || t("rules.providerProfiles.cardTitle", { index: index + 1 })}
-                      </strong>
-                      <p className="muted">{t("rules.providerProfiles.cardSubtitle")}</p>
+                      <h2>{t(`rulesMeta.sections.${section}`)}</h2>
+                      <p className="muted">{t("rules.listSectionDescription")}</p>
                     </div>
-                    <button className="ghost small-button" onClick={() => removeProviderProfile(index)}>
-                      {t("rules.providerProfiles.remove")}
-                    </button>
+                    {renderRulesSaveAction()}
                   </div>
-                  <div className="form-grid">
-                    <div className="rule-field">
-                      <FieldLabel
-                        label={providerFieldMeta("key").label}
-                        description={providerFieldMeta("key").description}
-                      />
-                      <input
-                        value={profile.key}
-                        onChange={(event) => updateProviderProfile(index, { key: event.target.value })}
-                      />
-                    </div>
-                    <div className="rule-field">
-                      <FieldLabel
-                        label={providerFieldMeta("classification").label}
-                        description={providerFieldMeta("classification").description}
-                      />
-                      <select
-                        value={profile.classification}
-                        onChange={(event) =>
-                          updateProviderProfile(index, {
-                            classification: event.target.value as ProviderProfileDraft["classification"]
-                          })
-                        }
-                      >
-                        <option value="mixed">{t("rules.providerProfiles.classifications.mixed")}</option>
-                        <option value="mobile">{t("rules.providerProfiles.classifications.mobile")}</option>
-                        <option value="home">{t("rules.providerProfiles.classifications.home")}</option>
-                      </select>
-                    </div>
-                    <div className="rule-field rule-field-wide">
-                      <FieldLabel
-                        label={providerFieldMeta("aliases").label}
-                        description={providerFieldMeta("aliases").description}
-                      />
-                      <textarea
-                        className="note-box"
-                        value={listValuesToText(profile.aliases)}
-                        onChange={(event) =>
-                          updateProviderProfile(index, { aliases: parseListText(event.target.value) })
-                        }
-                      />
-                    </div>
-                    <div className="rule-field">
-                      <FieldLabel
-                        label={providerFieldMeta("mobile_markers").label}
-                        description={providerFieldMeta("mobile_markers").description}
-                      />
-                      <textarea
-                        className="note-box"
-                        value={listValuesToText(profile.mobile_markers)}
-                        onChange={(event) =>
-                          updateProviderProfile(index, { mobile_markers: parseListText(event.target.value) })
-                        }
-                      />
-                    </div>
-                    <div className="rule-field">
-                      <FieldLabel
-                        label={providerFieldMeta("home_markers").label}
-                        description={providerFieldMeta("home_markers").description}
-                      />
-                      <textarea
-                        className="note-box"
-                        value={listValuesToText(profile.home_markers)}
-                        onChange={(event) =>
-                          updateProviderProfile(index, { home_markers: parseListText(event.target.value) })
-                        }
-                      />
-                    </div>
-                    <div className="rule-field rule-field-wide">
-                      <FieldLabel
-                        label={providerFieldMeta("asns").label}
-                        description={providerFieldMeta("asns").description}
-                      />
-                      <textarea
-                        className="note-box"
-                        value={listValuesToText(profile.asns)}
-                        onChange={(event) =>
-                          updateProviderProfile(index, { asns: parseListText(event.target.value) })
-                        }
-                      />
-                    </div>
+                  <div className="detail-grid">
+                    {RULE_LIST_FIELDS.filter((field) => field.sectionKey === section).map((field) => {
+                      const meta = listFieldMeta(field);
+                      return (
+                        <div className="rule-field" key={field.key}>
+                          <FieldLabel
+                            label={meta.label}
+                            description={meta.description}
+                            recommendation={meta.recommendation}
+                          />
+                          <textarea
+                            className="note-box tall"
+                            value={listValuesToText(draft[field.key])}
+                            onChange={(event) => updateListField(field, event.target.value)}
+                          />
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
-              ))}
-              {(draft.provider_profiles || []).length === 0 ? (
-                <div className="provider-empty">
-                  <span>{t("rules.providerProfiles.empty")}</span>
+              ))
+            : null}
+
+          {activeSection === "providers" ? (
+            <div className="panel">
+              <div className="panel-heading panel-heading-row">
+                <div>
+                  <h2>{t("rulesMeta.sections.providers")}</h2>
+                  <p className="muted">{t("rules.providerProfiles.description")}</p>
+                </div>
+                <div className="action-row">
+                  <button className="ghost" onClick={addProviderProfile}>
+                    {t("rules.providerProfiles.add")}
+                  </button>
+                  {renderRulesSaveAction()}
+                </div>
+              </div>
+              <div className="provider-profiles">
+                {(draft.provider_profiles || []).map((profile, index) => (
+                  <div className="provider-card" key={`${profile.key || "provider"}-${index}`}>
+                    <div className="provider-card-header">
+                      <div>
+                        <strong>
+                          {profile.key || t("rules.providerProfiles.cardTitle", { index: index + 1 })}
+                        </strong>
+                        <p className="muted">{t("rules.providerProfiles.cardSubtitle")}</p>
+                      </div>
+                      <button className="ghost small-button" onClick={() => removeProviderProfile(index)}>
+                        {t("rules.providerProfiles.remove")}
+                      </button>
+                    </div>
+                    <div className="form-grid">
+                      <div className="rule-field">
+                        <FieldLabel
+                          label={providerFieldMeta("key").label}
+                          description={providerFieldMeta("key").description}
+                        />
+                        <input
+                          value={profile.key}
+                          onChange={(event) => updateProviderProfile(index, { key: event.target.value })}
+                        />
+                      </div>
+                      <div className="rule-field">
+                        <FieldLabel
+                          label={providerFieldMeta("classification").label}
+                          description={providerFieldMeta("classification").description}
+                        />
+                        <select
+                          value={profile.classification}
+                          onChange={(event) =>
+                            updateProviderProfile(index, {
+                              classification: event.target.value as ProviderProfileDraft["classification"]
+                            })
+                          }
+                        >
+                          <option value="mixed">{t("rules.providerProfiles.classifications.mixed")}</option>
+                          <option value="mobile">{t("rules.providerProfiles.classifications.mobile")}</option>
+                          <option value="home">{t("rules.providerProfiles.classifications.home")}</option>
+                        </select>
+                      </div>
+                      <div className="rule-field rule-field-wide">
+                        <FieldLabel
+                          label={providerFieldMeta("aliases").label}
+                          description={providerFieldMeta("aliases").description}
+                        />
+                        <textarea
+                          className="note-box"
+                          value={listValuesToText(profile.aliases)}
+                          onChange={(event) =>
+                            updateProviderProfile(index, { aliases: parseListText(event.target.value) })
+                          }
+                        />
+                      </div>
+                      <div className="rule-field">
+                        <FieldLabel
+                          label={providerFieldMeta("mobile_markers").label}
+                          description={providerFieldMeta("mobile_markers").description}
+                        />
+                        <textarea
+                          className="note-box"
+                          value={listValuesToText(profile.mobile_markers)}
+                          onChange={(event) =>
+                            updateProviderProfile(index, { mobile_markers: parseListText(event.target.value) })
+                          }
+                        />
+                      </div>
+                      <div className="rule-field">
+                        <FieldLabel
+                          label={providerFieldMeta("home_markers").label}
+                          description={providerFieldMeta("home_markers").description}
+                        />
+                        <textarea
+                          className="note-box"
+                          value={listValuesToText(profile.home_markers)}
+                          onChange={(event) =>
+                            updateProviderProfile(index, { home_markers: parseListText(event.target.value) })
+                          }
+                        />
+                      </div>
+                      <div className="rule-field rule-field-wide">
+                        <FieldLabel
+                          label={providerFieldMeta("asns").label}
+                          description={providerFieldMeta("asns").description}
+                        />
+                        <textarea
+                          className="note-box"
+                          value={listValuesToText(profile.asns)}
+                          onChange={(event) =>
+                            updateProviderProfile(index, { asns: parseListText(event.target.value) })
+                          }
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                {(draft.provider_profiles || []).length === 0 ? (
+                  <div className="provider-empty">
+                    <span>{t("rules.providerProfiles.empty")}</span>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
+
+          {activeSection === "thresholds"
+            ? renderSettingPanel(
+                t("rules.sectionTitles.thresholds"),
+                t("rules.sectionDescriptions.thresholds"),
+                ["thresholds", "scores", "behavior"]
+              )
+            : null}
+
+          {activeSection === "policy" ? (
+            <>
+              {generalDraft ? (
+                <div className="panel">
+                  <div className="panel-heading panel-heading-row">
+                    <div>
+                      <h2>{t("rules.general.title")}</h2>
+                      <p className="muted">{t("rules.general.description")}</p>
+                    </div>
+                    <div className="action-row">
+                      <span className={generalDirty ? "tag review-only" : "tag severity-low"}>
+                        {generalDirty ? t("common.unsavedChanges") : t("common.saved")}
+                      </span>
+                      <button disabled={!generalDirty} onClick={saveGeneralSettings}>
+                        {t("rules.general.save")}
+                      </button>
+                    </div>
+                  </div>
+                  {generalError ? <div className="error-box">{generalError}</div> : null}
+                  {generalSaved ? <div className="ok-box">{generalSaved}</div> : null}
+                  <div className="form-grid">
+                    {GENERAL_SETTINGS_FIELDS.map((field) => {
+                      const meta = generalFieldMeta(field.key);
+                      return (
+                        <div
+                          className={field.inputType === "number-list" ? "rule-field rule-field-wide" : "rule-field"}
+                          key={field.key}
+                        >
+                          <FieldLabel label={meta.label} description={meta.description} />
+                          {field.inputType === "boolean" ? (
+                            <select
+                              value={generalDraft[field.key] || "false"}
+                              onChange={(event) => updateGeneralField(field.key, event.target.value)}
+                            >
+                              <option value="true">{t("common.true")}</option>
+                              <option value="false">{t("common.false")}</option>
+                            </select>
+                          ) : field.inputType === "number-list" ? (
+                            <textarea
+                              className="note-box tall"
+                              value={generalDraft[field.key] || ""}
+                              onChange={(event) => updateGeneralField(field.key, event.target.value)}
+                            />
+                          ) : field.inputType === "text" ? (
+                            <input
+                              type="text"
+                              value={generalDraft[field.key] || ""}
+                              onChange={(event) => updateGeneralField(field.key, event.target.value)}
+                            />
+                          ) : (
+                            <input
+                              type="number"
+                              step={field.step}
+                              value={generalDraft[field.key] || ""}
+                              onChange={(event) => updateGeneralField(field.key, event.target.value)}
+                            />
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               ) : null}
-            </div>
-          </div>
 
-          {SETTING_SECTIONS.map((section) => (
-            <div className="panel" key={section}>
-              <div className="panel-heading">
-                <h2>{t(`rulesMeta.sections.${section}`)}</h2>
-                <p className="muted">{t("rules.settingSectionDescription")}</p>
-              </div>
-              <div className="form-grid">
-                {RULE_SETTING_FIELDS.filter((field) => field.sectionKey === section).map((field) => {
-                  const meta = settingFieldMeta(field);
-                  return (
-                    <div className="rule-field" key={field.key}>
-                      <FieldLabel
-                        label={meta.label}
-                        description={meta.description}
-                        recommendation={meta.recommendation}
-                      />
-                      {field.inputType === "boolean" ? (
-                        <select
-                          value={getSettingInputValue(field, draft.settings?.[field.key])}
-                          onChange={(event) => updateSettingField(field, event.target.value)}
-                        >
-                          <option value="true">{t("common.true")}</option>
-                          <option value="false">{t("common.false")}</option>
-                        </select>
-                      ) : (
-                        <input
-                          type={field.inputType === "number" ? "number" : "text"}
-                          step={field.step}
-                          value={getSettingInputValue(field, draft.settings?.[field.key])}
-                          onChange={(event) => updateSettingField(field, event.target.value)}
-                        />
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
+              {renderSettingPanel(
+                t("rules.sectionTitles.policy"),
+                t("rules.sectionDescriptions.policy"),
+                ["policy"]
+              )}
+            </>
+          ) : null}
+
+          {activeSection === "learning"
+            ? renderSettingPanel(
+                t("rules.sectionTitles.learning"),
+                t("rules.sectionDescriptions.learning"),
+                ["learning"]
+              )
+            : null}
         </div>
       ) : null}
     </section>

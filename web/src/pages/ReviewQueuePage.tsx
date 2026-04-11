@@ -1,9 +1,10 @@
-import { MouseEvent, useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { MouseEvent, useEffect, useMemo, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 
 import { api, ReviewItem, ReviewListResponse } from "../api/client";
 import { useToast } from "../components/ToastProvider";
 import { useI18n } from "../localization";
+import { buildSearchParams } from "../shared/api/request";
 import { formatDisplayDateTime } from "../utils/datetime";
 
 type ReviewFilters = {
@@ -25,9 +26,50 @@ type ReviewFilters = {
   sort: string;
 };
 
+const DEFAULT_FILTERS: ReviewFilters = {
+  status: "OPEN",
+  confidence_band: "",
+  review_reason: "",
+  severity: "",
+  punitive_eligible: "",
+  q: "",
+  username: "",
+  system_id: "",
+  telegram_id: "",
+  opened_from: "",
+  opened_to: "",
+  repeat_count_min: "",
+  repeat_count_max: "",
+  page: 1,
+  page_size: 25,
+  sort: "updated_desc"
+};
+
+function normalizeFilters(searchParams: URLSearchParams): ReviewFilters {
+  return {
+    status: searchParams.get("status") ?? DEFAULT_FILTERS.status,
+    confidence_band: searchParams.get("confidence_band") ?? "",
+    review_reason: searchParams.get("review_reason") ?? "",
+    severity: searchParams.get("severity") ?? "",
+    punitive_eligible: searchParams.get("punitive_eligible") ?? "",
+    q: searchParams.get("q") ?? "",
+    username: searchParams.get("username") ?? "",
+    system_id: searchParams.get("system_id") ?? "",
+    telegram_id: searchParams.get("telegram_id") ?? "",
+    opened_from: searchParams.get("opened_from") ?? "",
+    opened_to: searchParams.get("opened_to") ?? "",
+    repeat_count_min: searchParams.get("repeat_count_min") ?? "",
+    repeat_count_max: searchParams.get("repeat_count_max") ?? "",
+    page: Number(searchParams.get("page") || DEFAULT_FILTERS.page),
+    page_size: Number(searchParams.get("page_size") || DEFAULT_FILTERS.page_size),
+    sort: searchParams.get("sort") ?? DEFAULT_FILTERS.sort
+  };
+}
+
 export function ReviewQueuePage() {
   const { t, language } = useI18n();
   const { pushToast } = useToast();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [list, setList] = useState<ReviewListResponse>({
     items: [],
@@ -37,25 +79,21 @@ export function ReviewQueuePage() {
   });
   const [error, setError] = useState("");
   const [resolvingId, setResolvingId] = useState<number | null>(null);
-  const [showFilters, setShowFilters] = useState(false);
-  const [filters, setFilters] = useState<ReviewFilters>({
-    status: "OPEN",
-    confidence_band: "",
-    review_reason: "",
-    severity: "",
-    punitive_eligible: "",
-    q: "",
-    username: "",
-    system_id: "",
-    telegram_id: "",
-    opened_from: "",
-    opened_to: "",
-    repeat_count_min: "",
-    repeat_count_max: "",
-    page: 1,
-    page_size: 25,
-    sort: "updated_desc"
-  });
+  const [filters, setFilters] = useState<ReviewFilters>(() => normalizeFilters(searchParams));
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  const [lastUpdatedAt, setLastUpdatedAt] = useState("");
+
+  useEffect(() => {
+    const nextFilters = normalizeFilters(searchParams);
+    setFilters((prev) =>
+      JSON.stringify(prev) === JSON.stringify(nextFilters) ? prev : nextFilters
+    );
+  }, [searchParams]);
+
+  useEffect(() => {
+    const query = buildSearchParams(filters);
+    setSearchParams(new URLSearchParams(query), { replace: true });
+  }, [filters, setSearchParams]);
 
   function formatIdentifier(label: string, value: string | number | null | undefined) {
     return `${label}: ${value === null || value === undefined || value === "" ? t("common.notAvailable") : value}`;
@@ -70,6 +108,7 @@ export function ReviewQueuePage() {
         if (!cancelled) {
           setList(payload);
           setError("");
+          setLastUpdatedAt(new Date().toISOString());
         }
       } catch (err) {
         if (!cancelled) {
@@ -89,6 +128,10 @@ export function ReviewQueuePage() {
       window.clearInterval(timer);
     };
   }, [filters, t]);
+
+  useEffect(() => {
+    setSelectedIds((prev) => prev.filter((id) => list.items.some((item) => item.id === id)));
+  }, [list.items]);
 
   async function quickResolve(
     event: MouseEvent<HTMLButtonElement>,
@@ -112,154 +155,275 @@ export function ReviewQueuePage() {
     }
   }
 
+  async function resolveSelected(resolution: "MOBILE" | "HOME" | "SKIP") {
+    if (selectedIds.length === 0) return;
+    try {
+      setResolvingId(-1);
+      for (const id of selectedIds) {
+        await api.resolveReview(String(id), resolution, `bulk action from queue (${selectedIds.length})`);
+      }
+      const payload = await api.listReviews(filters);
+      setList(payload);
+      setSelectedIds([]);
+      pushToast("success", t("reviewQueue.actions.bulkSaved", { count: selectedIds.length }));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : t("reviewQueue.errors.resolveFailed");
+      setError(message);
+      pushToast("error", message);
+    } finally {
+      setResolvingId(null);
+    }
+  }
+
+  const allSelected = list.items.length > 0 && selectedIds.length === list.items.length;
+  const presets = useMemo(
+    () => [
+      {
+        key: "open",
+        label: t("reviewQueue.presets.open"),
+        apply: () =>
+          setFilters((prev) => ({
+            ...DEFAULT_FILTERS,
+            q: prev.q,
+            status: "OPEN",
+            page_size: prev.page_size
+          }))
+      },
+      {
+        key: "conflict",
+        label: t("reviewQueue.presets.providerConflict"),
+        apply: () =>
+          setFilters((prev) => ({
+            ...DEFAULT_FILTERS,
+            review_reason: "provider_conflict",
+            status: "OPEN",
+            page_size: prev.page_size
+          }))
+      },
+      {
+        key: "critical",
+        label: t("reviewQueue.presets.critical"),
+        apply: () =>
+          setFilters((prev) => ({
+            ...DEFAULT_FILTERS,
+            severity: "critical",
+            status: "OPEN",
+            page_size: prev.page_size
+          }))
+      },
+      {
+        key: "punitive",
+        label: t("reviewQueue.presets.punitive"),
+        apply: () =>
+          setFilters((prev) => ({
+            ...DEFAULT_FILTERS,
+            punitive_eligible: "true",
+            status: "OPEN",
+            page_size: prev.page_size
+          }))
+      }
+    ],
+    [t]
+  );
+
   return (
     <section className="page">
-      <div className="page-header">
+      <div className="page-header page-header-stack">
         <div>
           <span className="eyebrow">{t("reviewQueue.eyebrow")}</span>
           <h1>{t("reviewQueue.title")}</h1>
+          <p className="page-lede">{t("reviewQueue.description")}</p>
         </div>
-        <div className="chip">
-          {t("reviewQueue.countSummary", { count: list.count, page: list.page })}
+        <div className="dashboard-meta">
+          <div className="chip">
+            {t("reviewQueue.countSummary", { count: list.count, page: list.page })}
+          </div>
+          <span className="muted">
+            {t("reviewQueue.lastUpdated", {
+              value: formatDisplayDateTime(lastUpdatedAt, t("common.notAvailable"), language)
+            })}
+          </span>
         </div>
       </div>
 
-      <div className="panel search-strip">
+      <div className="panel queue-toolbar">
+        <div className="search-strip">
+          <input
+            placeholder={t("reviewQueue.searchPlaceholder")}
+            value={filters.q}
+            onChange={(event) => setFilters((prev) => ({ ...prev, q: event.target.value, page: 1 }))}
+          />
+          <button className="ghost icon-button" onClick={() => setFilters(DEFAULT_FILTERS)} title={t("reviewQueue.clearFilters")}>
+            {t("reviewQueue.clearFilters")}
+          </button>
+        </div>
+        <div className="queue-presets">
+          {presets.map((preset) => (
+            <button className="ghost small-button" key={preset.key} onClick={preset.apply}>
+              {preset.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="panel filters reveal-panel">
         <input
-          placeholder={t("reviewQueue.searchPlaceholder")}
-          value={filters.q}
-          onChange={(event) => setFilters((prev) => ({ ...prev, q: event.target.value, page: 1 }))}
+          placeholder={t("reviewQueue.filters.username")}
+          value={String(filters.username ?? "")}
+          onChange={(event) =>
+            setFilters((prev) => ({ ...prev, username: event.target.value, page: 1 }))
+          }
         />
-        <button
-          className="ghost icon-button"
-          onClick={() => setShowFilters((prev) => !prev)}
-          title={t("reviewQueue.toggleFiltersTitle")}
+        <input
+          placeholder={t("reviewQueue.filters.systemId")}
+          value={String(filters.system_id ?? "")}
+          onChange={(event) =>
+            setFilters((prev) => ({ ...prev, system_id: event.target.value, page: 1 }))
+          }
+        />
+        <input
+          placeholder={t("reviewQueue.filters.telegramId")}
+          value={String(filters.telegram_id ?? "")}
+          onChange={(event) =>
+            setFilters((prev) => ({ ...prev, telegram_id: event.target.value, page: 1 }))
+          }
+        />
+        <input
+          type="date"
+          value={String(filters.opened_from ?? "")}
+          onChange={(event) =>
+            setFilters((prev) => ({ ...prev, opened_from: event.target.value, page: 1 }))
+          }
+        />
+        <input
+          type="date"
+          value={String(filters.opened_to ?? "")}
+          onChange={(event) =>
+            setFilters((prev) => ({ ...prev, opened_to: event.target.value, page: 1 }))
+          }
+        />
+        <input
+          type="number"
+          min={0}
+          placeholder={t("reviewQueue.filters.repeatMin")}
+          value={String(filters.repeat_count_min ?? "")}
+          onChange={(event) =>
+            setFilters((prev) => ({ ...prev, repeat_count_min: event.target.value, page: 1 }))
+          }
+        />
+        <input
+          type="number"
+          min={0}
+          placeholder={t("reviewQueue.filters.repeatMax")}
+          value={String(filters.repeat_count_max ?? "")}
+          onChange={(event) =>
+            setFilters((prev) => ({ ...prev, repeat_count_max: event.target.value, page: 1 }))
+          }
+        />
+        <select
+          value={filters.status}
+          onChange={(event) => setFilters((prev) => ({ ...prev, status: event.target.value, page: 1 }))}
         >
-          ⚲
-        </button>
+          <option value="OPEN">OPEN</option>
+          <option value="RESOLVED">RESOLVED</option>
+          <option value="SKIPPED">SKIPPED</option>
+          <option value="">{t("reviewQueue.filters.allStatus")}</option>
+        </select>
+        <select
+          value={filters.confidence_band}
+          onChange={(event) =>
+            setFilters((prev) => ({ ...prev, confidence_band: event.target.value, page: 1 }))
+          }
+        >
+          <option value="">{t("reviewQueue.filters.allConfidence")}</option>
+          <option value="UNSURE">UNSURE</option>
+          <option value="PROBABLE_HOME">PROBABLE_HOME</option>
+          <option value="HIGH_HOME">HIGH_HOME</option>
+        </select>
+        <select
+          value={filters.review_reason}
+          onChange={(event) =>
+            setFilters((prev) => ({ ...prev, review_reason: event.target.value, page: 1 }))
+          }
+        >
+          <option value="">{t("reviewQueue.filters.allReasons")}</option>
+          <option value="unsure">unsure</option>
+          <option value="probable_home">probable_home</option>
+          <option value="home_requires_review">home_requires_review</option>
+          <option value="manual_review_mixed_home">manual_review_mixed_home</option>
+          <option value="provider_conflict">provider_conflict</option>
+        </select>
+        <select
+          value={filters.severity}
+          onChange={(event) => setFilters((prev) => ({ ...prev, severity: event.target.value, page: 1 }))}
+        >
+          <option value="">{t("reviewQueue.filters.allSeverity")}</option>
+          <option value="critical">critical</option>
+          <option value="high">high</option>
+          <option value="medium">medium</option>
+          <option value="low">low</option>
+        </select>
+        <select
+          value={filters.punitive_eligible}
+          onChange={(event) =>
+            setFilters((prev) => ({ ...prev, punitive_eligible: event.target.value, page: 1 }))
+          }
+        >
+          <option value="">{t("reviewQueue.filters.punitiveAny")}</option>
+          <option value="true">{t("reviewQueue.filters.punitiveOnly")}</option>
+          <option value="false">{t("reviewQueue.filters.reviewOnly")}</option>
+        </select>
+        <select
+          value={filters.sort}
+          onChange={(event) => setFilters((prev) => ({ ...prev, sort: event.target.value }))}
+        >
+          <option value="updated_desc">{t("reviewQueue.filters.sortUpdatedDesc")}</option>
+          <option value="score_desc">{t("reviewQueue.filters.sortScoreDesc")}</option>
+          <option value="repeat_desc">{t("reviewQueue.filters.sortRepeatDesc")}</option>
+          <option value="updated_asc">{t("reviewQueue.filters.sortUpdatedAsc")}</option>
+        </select>
       </div>
-
-      {showFilters ? (
-        <div className="panel filters reveal-panel">
-          <input
-            placeholder={t("reviewQueue.filters.username")}
-            value={String(filters.username ?? "")}
-            onChange={(event) =>
-              setFilters((prev) => ({ ...prev, username: event.target.value, page: 1 }))
-            }
-          />
-          <input
-            placeholder={t("reviewQueue.filters.systemId")}
-            value={String(filters.system_id ?? "")}
-            onChange={(event) =>
-              setFilters((prev) => ({ ...prev, system_id: event.target.value, page: 1 }))
-            }
-          />
-          <input
-            placeholder={t("reviewQueue.filters.telegramId")}
-            value={String(filters.telegram_id ?? "")}
-            onChange={(event) =>
-              setFilters((prev) => ({ ...prev, telegram_id: event.target.value, page: 1 }))
-            }
-          />
-          <input
-            type="date"
-            value={String(filters.opened_from ?? "")}
-            onChange={(event) =>
-              setFilters((prev) => ({ ...prev, opened_from: event.target.value, page: 1 }))
-            }
-          />
-          <input
-            type="date"
-            value={String(filters.opened_to ?? "")}
-            onChange={(event) =>
-              setFilters((prev) => ({ ...prev, opened_to: event.target.value, page: 1 }))
-            }
-          />
-          <input
-            type="number"
-            min={0}
-            placeholder={t("reviewQueue.filters.repeatMin")}
-            value={String(filters.repeat_count_min ?? "")}
-            onChange={(event) =>
-              setFilters((prev) => ({ ...prev, repeat_count_min: event.target.value, page: 1 }))
-            }
-          />
-          <input
-            type="number"
-            min={0}
-            placeholder={t("reviewQueue.filters.repeatMax")}
-            value={String(filters.repeat_count_max ?? "")}
-            onChange={(event) =>
-              setFilters((prev) => ({ ...prev, repeat_count_max: event.target.value, page: 1 }))
-            }
-          />
-          <select
-            value={filters.status}
-            onChange={(event) => setFilters((prev) => ({ ...prev, status: event.target.value, page: 1 }))}
-          >
-            <option value="OPEN">OPEN</option>
-            <option value="RESOLVED">RESOLVED</option>
-            <option value="SKIPPED">SKIPPED</option>
-            <option value="">ALL</option>
-          </select>
-          <select
-            value={filters.confidence_band}
-            onChange={(event) =>
-              setFilters((prev) => ({ ...prev, confidence_band: event.target.value, page: 1 }))
-            }
-          >
-            <option value="">{t("reviewQueue.filters.allConfidence")}</option>
-            <option value="UNSURE">UNSURE</option>
-            <option value="PROBABLE_HOME">PROBABLE_HOME</option>
-            <option value="HIGH_HOME">HIGH_HOME</option>
-          </select>
-          <select
-            value={filters.review_reason}
-            onChange={(event) =>
-              setFilters((prev) => ({ ...prev, review_reason: event.target.value, page: 1 }))
-            }
-          >
-            <option value="">{t("reviewQueue.filters.allReasons")}</option>
-            <option value="unsure">unsure</option>
-            <option value="probable_home">probable_home</option>
-            <option value="home_requires_review">home_requires_review</option>
-            <option value="manual_review_mixed_home">manual_review_mixed_home</option>
-            <option value="provider_conflict">provider_conflict</option>
-          </select>
-          <select
-            value={filters.severity}
-            onChange={(event) => setFilters((prev) => ({ ...prev, severity: event.target.value, page: 1 }))}
-          >
-            <option value="">{t("reviewQueue.filters.allSeverity")}</option>
-            <option value="critical">critical</option>
-            <option value="high">high</option>
-            <option value="medium">medium</option>
-            <option value="low">low</option>
-          </select>
-          <select
-            value={filters.punitive_eligible}
-            onChange={(event) =>
-              setFilters((prev) => ({ ...prev, punitive_eligible: event.target.value, page: 1 }))
-            }
-          >
-            <option value="">{t("reviewQueue.filters.punitiveAny")}</option>
-            <option value="true">{t("reviewQueue.filters.punitiveOnly")}</option>
-            <option value="false">{t("reviewQueue.filters.reviewOnly")}</option>
-          </select>
-          <select
-            value={filters.sort}
-            onChange={(event) => setFilters((prev) => ({ ...prev, sort: event.target.value }))}
-          >
-            <option value="updated_desc">{t("reviewQueue.filters.sortUpdatedDesc")}</option>
-            <option value="score_desc">{t("reviewQueue.filters.sortScoreDesc")}</option>
-            <option value="repeat_desc">{t("reviewQueue.filters.sortRepeatDesc")}</option>
-            <option value="updated_asc">{t("reviewQueue.filters.sortUpdatedAsc")}</option>
-          </select>
-        </div>
-      ) : null}
 
       {error ? <div className="error-box">{error}</div> : null}
+
+      <div className="panel queue-opsbar">
+        <div className="action-row">
+          <button
+            className="ghost small-button"
+            onClick={() =>
+              setSelectedIds(allSelected ? [] : list.items.map((item) => item.id))
+            }
+          >
+            {allSelected ? t("reviewQueue.selection.clearPage") : t("reviewQueue.selection.selectPage")}
+          </button>
+          <span className="chip">
+            {t("reviewQueue.selection.selectedCount", { count: selectedIds.length })}
+          </span>
+        </div>
+        <div className="action-row">
+          <button
+            className="small-button"
+            disabled={selectedIds.length === 0 || resolvingId !== null}
+            onClick={() => resolveSelected("MOBILE")}
+          >
+            {t("reviewQueue.actions.bulkMobile")}
+          </button>
+          <button
+            className="small-button"
+            disabled={selectedIds.length === 0 || resolvingId !== null}
+            onClick={() => resolveSelected("HOME")}
+          >
+            {t("reviewQueue.actions.bulkHome")}
+          </button>
+          <button
+            className="ghost small-button"
+            disabled={selectedIds.length === 0 || resolvingId !== null}
+            onClick={() => resolveSelected("SKIP")}
+          >
+            {t("reviewQueue.actions.bulkSkip")}
+          </button>
+        </div>
+      </div>
 
       {loading ? (
         <div className="queue-grid">
@@ -287,8 +451,19 @@ export function ReviewQueuePage() {
       {!loading ? (
         <div className="queue-grid">
         {list.items.map((item) => (
-          <Link key={item.id} to={`/reviews/${item.id}`} className="queue-card">
+          <article key={item.id} className="queue-card">
             <div className="queue-card-top">
+              <label className="inline-check queue-check">
+                <input
+                  type="checkbox"
+                  checked={selectedIds.includes(item.id)}
+                  onChange={(event) =>
+                    setSelectedIds((prev) =>
+                      event.target.checked ? [...prev, item.id] : prev.filter((value) => value !== item.id)
+                    )
+                  }
+                />
+              </label>
               <strong>{item.username || item.uuid || formatIdentifier(t("reviewQueue.identifiers.user"), item.system_id)}</strong>
               <span className={`status-badge status-${item.status.toLowerCase()}`}>{item.status}</span>
             </div>
@@ -325,6 +500,11 @@ export function ReviewQueuePage() {
                 </span>
               ))}
             </div>
+            <div className="action-row queue-card-actions">
+              <Link to={`/reviews/${item.id}`} className="button-link ghost small-button">
+                {t("reviewQueue.actions.openCase")}
+              </Link>
+            </div>
             {item.status === "OPEN" ? (
               <div className="action-row">
                 <button className="small-button" disabled={resolvingId === item.id} onClick={(event) => quickResolve(event, item, "MOBILE")}>
@@ -343,7 +523,7 @@ export function ReviewQueuePage() {
               <span>{t("reviewQueue.card.opened", { value: formatDisplayDateTime(item.opened_at, t("common.notAvailable"), language) })}</span>
               <span>{formatDisplayDateTime(item.updated_at, t("common.notAvailable"), language)}</span>
             </div>
-          </Link>
+          </article>
         ))}
         </div>
       ) : null}

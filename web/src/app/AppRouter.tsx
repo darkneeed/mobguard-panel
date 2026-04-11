@@ -6,6 +6,7 @@ import { Layout } from "../components/Layout";
 import { Language } from "../localization";
 import { AccessPage } from "../pages/AccessPage";
 import { DataPage } from "../pages/DataPage";
+import { OverviewPage } from "../pages/OverviewPage";
 import { QualityPage } from "../pages/QualityPage";
 import { ReviewDetailPage } from "../pages/ReviewDetailPage";
 import { ReviewQueuePage } from "../pages/ReviewQueuePage";
@@ -56,12 +57,16 @@ export function AppRouter({
           />
         }
       >
-        <Route path="/" element={<ReviewQueuePage />} />
+        <Route path="/" element={<Navigate to="/overview" replace />} />
+        <Route path="/overview" element={<OverviewPage />} />
+        <Route path="/queue" element={<ReviewQueuePage />} />
         <Route path="/reviews/:caseId" element={<ReviewDetailPage />} />
-        <Route path="/rules" element={<RulesPage />} />
+        <Route path="/rules" element={<Navigate to="/rules/thresholds" replace />} />
+        <Route path="/rules/:section" element={<RulesPage />} />
         <Route path="/telegram" element={<TelegramPage />} />
         <Route path="/access" element={<AccessPage />} />
-        <Route path="/data" element={<DataPage />} />
+        <Route path="/data" element={<Navigate to="/data/users" replace />} />
+        <Route path="/data/:section" element={<DataPage />} />
         <Route path="/quality" element={<QualityPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

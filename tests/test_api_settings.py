@@ -66,6 +66,55 @@ class APISettingsTests(unittest.TestCase):
         self.assertTrue(payload["capabilities"]["admin_bot_enabled"])
         self.assertTrue(payload["capabilities"]["user_bot_enabled"])
 
+    def test_enforcement_settings_roundtrip_includes_squad_names(self):
+        previous = os.environ.get("MOBGUARD_ENV_FILE")
+        os.environ["MOBGUARD_ENV_FILE"] = str(self.root / ".env")
+        try:
+            runtime = load_runtime_context(self.root, str(self.runtime_dir))
+        finally:
+            if previous is None:
+                os.environ.pop("MOBGUARD_ENV_FILE", None)
+            else:
+                os.environ["MOBGUARD_ENV_FILE"] = previous
+
+        synced = {}
+
+        class DummyStore:
+            def sync_runtime_config(self, config):
+                synced["config"] = config
+
+        container = SimpleNamespace(runtime=runtime, store=DummyStore())
+
+        initial = settings_service.get_enforcement_settings(container)
+        self.assertEqual(initial["settings"]["full_access_squad_name"], "FULL")
+        self.assertEqual(initial["settings"]["restricted_access_squad_name"], "MOBILE_BLOCKED")
+        self.assertEqual(initial["settings"]["traffic_cap_increment_gb"], 10)
+        self.assertEqual(initial["settings"]["traffic_cap_threshold_gb"], 100)
+
+        updated = settings_service.update_enforcement_settings(
+            container,
+            {
+                "settings": {
+                    "full_access_squad_name": "✨ все",
+                    "restricted_access_squad_name": "⚠ ограниченные",
+                    "traffic_cap_increment_gb": 12,
+                    "traffic_cap_threshold_gb": 140,
+                }
+            },
+        )
+
+        self.assertEqual(updated["settings"]["full_access_squad_name"], "✨ все")
+        self.assertEqual(updated["settings"]["restricted_access_squad_name"], "⚠ ограниченные")
+        self.assertEqual(updated["settings"]["traffic_cap_increment_gb"], 12)
+        self.assertEqual(updated["settings"]["traffic_cap_threshold_gb"], 140)
+        self.assertEqual(
+            synced["config"]["settings"]["full_access_squad_name"],
+            "✨ все",
+        )
+        config_payload = json.loads((self.runtime_dir / "config.json").read_text(encoding="utf-8"))
+        self.assertEqual(config_payload["settings"]["restricted_access_squad_name"], "⚠ ограниченные")
+        self.assertEqual(config_payload["settings"]["traffic_cap_increment_gb"], 12)
+
 
 if __name__ == "__main__":
     unittest.main()

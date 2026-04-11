@@ -1,4 +1,15 @@
 import { useEffect, useState } from "react";
+import {
+  Bar,
+  BarChart,
+  Cell,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis
+} from "recharts";
 
 import { api } from "../api/client";
 import { useI18n } from "../localization";
@@ -107,13 +118,30 @@ export function QualityPage() {
   const legacyProviderTypes = data?.learning.legacy.by_type.filter((item) =>
     item.pattern_type === "provider" || item.pattern_type === "provider_service"
   ) || [];
+  const resolutionChartData = data
+    ? [
+        { name: t("quality.cards.resolvedHome"), value: data.resolved_home, fill: "#0f766e" },
+        { name: t("quality.cards.resolvedMobile"), value: data.resolved_mobile, fill: "#155e75" },
+        { name: t("quality.cards.skipped"), value: data.skipped, fill: "#c77d1a" }
+      ]
+    : [];
+  const noisyAsnData = data?.top_noisy_asns.slice(0, 6).map((item) => ({
+    name: item.asn_key,
+    value: item.cnt
+  })) || [];
+  const mixedProviderData = data?.mixed_providers.top_open_cases.slice(0, 6).map((item) => ({
+    name: item.provider_key,
+    open: item.open_cases,
+    conflict: item.conflict_cases
+  })) || [];
 
   return (
     <section className="page">
-      <div className="page-header">
+      <div className="page-header page-header-stack">
         <div>
           <span className="eyebrow">{t("quality.eyebrow")}</span>
           <h1>{t("quality.title")}</h1>
+          <p className="page-lede">{t("quality.description")}</p>
         </div>
       </div>
       {error ? <div className="error-box">{error}</div> : null}
@@ -162,63 +190,84 @@ export function QualityPage() {
             <span>{t("quality.updated", { value: formatDisplayDateTime(data.live_rules_updated_at, t("common.notAvailable"), language) })}</span>
             <span>{t("quality.by", { value: updatedBy })}</span>
           </div>
-          <div className="panel">
-            <h2>{t("quality.asnSourceTitle")}</h2>
-            <ul className="reason-list">
-              <li>
-                <strong>{data.asn_source.label}</strong>
-                <span>{data.asn_source.type}</span>
-                <span>{data.asn_source.files.length > 0 ? data.asn_source.files.join(", ") : t("quality.noAsnSource")}</span>
-              </li>
-            </ul>
+          <div className="dashboard-grid">
+            <div className="panel chart-panel">
+              <div className="panel-heading">
+                <h2>{t("quality.resolutionMixTitle")}</h2>
+                <p className="muted">{t("quality.resolutionMixDescription")}</p>
+              </div>
+              <ResponsiveContainer width="100%" height={260}>
+                <PieChart>
+                  <Pie data={resolutionChartData} dataKey="value" nameKey="name" innerRadius={56} outerRadius={88}>
+                    {resolutionChartData.map((entry) => (
+                      <Cell key={entry.name} fill={entry.fill} />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+
+            <div className="panel chart-panel">
+              <div className="panel-heading">
+                <h2>{t("quality.topNoisyAsnTitle")}</h2>
+                <p className="muted">{t("quality.noisyAsnDescription")}</p>
+              </div>
+              <ResponsiveContainer width="100%" height={260}>
+                <BarChart data={noisyAsnData}>
+                  <XAxis dataKey="name" tickLine={false} axisLine={false} />
+                  <YAxis allowDecimals={false} tickLine={false} axisLine={false} />
+                  <Tooltip />
+                  <Bar dataKey="value" fill="#155e75" radius={[10, 10, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+
+            <div className="panel chart-panel">
+              <div className="panel-heading">
+                <h2>{t("quality.topMixedProvidersTitle")}</h2>
+                <p className="muted">{t("quality.mixedProvidersDescription")}</p>
+              </div>
+              <ResponsiveContainer width="100%" height={260}>
+                <BarChart data={mixedProviderData}>
+                  <XAxis dataKey="name" tickLine={false} axisLine={false} />
+                  <YAxis allowDecimals={false} tickLine={false} axisLine={false} />
+                  <Tooltip />
+                  <Bar dataKey="open" fill="#0f766e" radius={[10, 10, 0, 0]} />
+                  <Bar dataKey="conflict" fill="#c77d1a" radius={[10, 10, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
           </div>
-          <div className="panel">
-            <h2>{t("quality.topNoisyAsnTitle")}</h2>
-            <ul className="reason-list">
-              {data.top_noisy_asns.map((item) => (
-                <li key={item.asn_key}>
-                  <strong>{item.asn_key}</strong>
-                  <span>{t("quality.reviewCases", { count: item.cnt })}</span>
+
+          <div className="dashboard-grid">
+            <div className="panel">
+              <h2>{t("quality.asnSourceTitle")}</h2>
+              <ul className="reason-list">
+                <li>
+                  <strong>{data.asn_source.label}</strong>
+                  <span>{data.asn_source.type}</span>
+                  <span>{data.asn_source.files.length > 0 ? data.asn_source.files.join(", ") : t("quality.noAsnSource")}</span>
                 </li>
-              ))}
-            </ul>
-          </div>
-          <div className="panel">
-            <h2>{t("quality.topMixedProvidersTitle")}</h2>
-            <ul className="reason-list">
-              {data.mixed_providers.top_open_cases.length === 0 ? <li><span>{t("quality.noMixedProviders")}</span></li> : null}
-              {data.mixed_providers.top_open_cases.map((item) => (
-                <li key={item.provider_key}>
-                  <strong>{item.provider_key}</strong>
-                  <span>
-                    {t("quality.mixedProviderStats", {
-                      open: item.open_cases,
-                      conflict: item.conflict_cases,
-                      home: item.home_cases,
-                      mobile: item.mobile_cases,
-                      unsure: item.unsure_cases
-                    })}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </div>
-          <div className="panel">
-            <h2>{t("quality.topPromotedPatternsTitle")}</h2>
-            <ul className="reason-list">
-              {data.learning.promoted.top_patterns.map((item) => (
-                <li key={`${item.pattern_type}:${item.pattern_value}`}>
-                  <strong>{item.pattern_type}:{item.pattern_value}</strong>
-                  <span>
-                    {t("quality.topPatternDetails", {
-                      decision: item.decision,
-                      support: item.support,
-                      precision: `${Math.round(item.precision * 100)}%`
-                    })}
-                  </span>
-                </li>
-              ))}
-            </ul>
+              </ul>
+            </div>
+            <div className="panel">
+              <h2>{t("quality.topPromotedPatternsTitle")}</h2>
+              <ul className="reason-list">
+                {data.learning.promoted.top_patterns.map((item) => (
+                  <li key={`${item.pattern_type}:${item.pattern_value}`}>
+                    <strong>{item.pattern_type}:{item.pattern_value}</strong>
+                    <span>
+                      {t("quality.topPatternDetails", {
+                        decision: item.decision,
+                        support: item.support,
+                        precision: `${Math.round(item.precision * 100)}%`
+                      })}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
           </div>
           <div className="panel">
             <h2>{t("quality.learningStateTitle")}</h2>

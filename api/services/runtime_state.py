@@ -274,6 +274,32 @@ def _analysis_event_select(conn: Any, store: Any) -> str:
     return ", ".join(fields)
 
 
+def _violation_select(conn: Any, store: Any) -> str:
+    violation_columns = {
+        row["name"] for row in conn.execute("PRAGMA table_info(violations)").fetchall()
+    } if store._table_exists(conn, "violations") else set()
+    fields = [
+        "uuid",
+        "strikes",
+        "unban_time",
+        "last_forgiven",
+        "last_strike_time",
+        "warning_time",
+        "warning_count",
+    ]
+    for optional_column in (
+        "restriction_mode",
+        "saved_traffic_limit_bytes",
+        "saved_traffic_limit_strategy",
+        "applied_traffic_limit_bytes",
+    ):
+        if optional_column in violation_columns:
+            fields.append(optional_column)
+        else:
+            fields.append(f"NULL AS {optional_column}")
+    return ", ".join(fields)
+
+
 def _enrich_analysis_event_row(row: dict[str, Any]) -> dict[str, Any]:
     payload = dict(row)
     reasons = _parse_optional_json(payload.pop("reasons_json", None), [])
@@ -299,7 +325,7 @@ def build_user_card(store: Any, identity: dict[str, Any]) -> dict[str, Any]:
         has_active_trackers = store._table_exists(conn, "active_trackers")
         has_ip_history = store._table_exists(conn, "ip_history")
         violation = conn.execute(
-            "SELECT uuid, strikes, unban_time, last_forgiven, last_strike_time, warning_time, warning_count FROM violations WHERE uuid = ?",
+            f"SELECT {_violation_select(conn, store)} FROM violations WHERE uuid = ?",
             (identity.get("uuid"),),
         ).fetchone() if identity.get("uuid") and has_violations else None
         history = conn.execute(

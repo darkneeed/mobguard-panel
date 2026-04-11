@@ -19,17 +19,53 @@ export const enDictionary: TranslationDictionary = {
     on: "ON",
     off: "OFF",
     showHint: "Show hint",
-    fieldHintLabel: "{field} hint"
+    fieldHintLabel: "{field} hint",
+    present: "present",
+    missing: "missing",
+    writable: "writable",
+    readOnly: "read only",
+    envFile: ".env file",
+    currentValue: "Current value",
+    secretValueStored: "Stored on the server as a masked secret.",
+    runtimeValue: "Runtime value managed through .env.",
+    leaveBlankToKeep: "Leave blank to keep the current secret value",
+    restartRequired: "restart required"
   },
   layout: {
     brandSubtitle: "Admin panel",
+    consoleBadge: "Hybrid console",
+    consoleDescription: "Remnawave-style operator flow with Bedolaga polish.",
+    groups: {
+      monitor: "Monitor",
+      configure: "Configure",
+      operate: "Operate"
+    },
     nav: {
+      overview: "Overview",
       queue: "Queue",
       rules: "Detection Rules",
       telegram: "Telegram",
       access: "Access",
       data: "Data",
       quality: "Quality"
+    },
+    subnav: {
+      rules: {
+        thresholds: "Thresholds",
+        lists: "Lists",
+        providers: "Providers",
+        policy: "Policy",
+        learning: "Learning"
+      },
+      data: {
+        users: "Users",
+        violations: "Violations",
+        overrides: "Overrides",
+        cache: "Cache",
+        learning: "Learning",
+        cases: "Cases",
+        exports: "Exports"
+      }
     },
     theme: {
       label: "Theme",
@@ -43,6 +79,53 @@ export const enDictionary: TranslationDictionary = {
       en: "eng"
     },
     logout: "Logout"
+  },
+  overview: {
+    eyebrow: "Operator Overview",
+    title: "System health, queue pressure, and runtime posture",
+    description: "One screen for live state, moderation pressure, learning quality, and risky hotspots.",
+    lastUpdated: "Last synced {value}",
+    errors: {
+      loadFailed: "Failed to load overview data"
+    },
+    systemStatusTitle: "Live operator status",
+    systemStatusDescription: "Core, queue, runtime rules, and export readiness in one glance.",
+    healthTitle: "Health snapshot",
+    healthDescription: "Back-end heartbeat and control-plane status.",
+    health: {
+      core: "Core heartbeat",
+      db: "Database",
+      rules: "Live rules",
+      updated: "Updated {value}",
+      rulesBy: "Updated by {value}"
+    },
+    cards: {
+      openQueue: "Open queue",
+      core: "Core healthy",
+      ipinfo: "IPINFO token",
+      adminSessions: "Admin sessions",
+      scoreZeroRatio: "Score zero ratio (24h)",
+      asnMissingRatio: "ASN missing ratio (24h)",
+      mixedConflicts: "Mixed-provider conflicts",
+      promotedPatterns: "Promoted patterns"
+    },
+    quickLinks: {
+      queue: "Open queue",
+      quality: "Go to quality",
+      policy: "Review policy",
+      exports: "Calibration exports"
+    },
+    mixedProvidersTitle: "Top mixed providers",
+    mixedProvidersDescription: "Providers that keep landing in review-first or conflict-heavy states.",
+    mixedProvidersItem: "{open} open · {conflict} conflicts · {home} HOME · {mobile} MOBILE",
+    emptyMixedProviders: "No mixed-provider hotspots right now.",
+    noisyAsnTitle: "Noisy ASNs",
+    noisyAsnDescription: "ASNs contributing the largest moderation load.",
+    noisyAsnItem: "{count} review cases",
+    emptyNoisyAsn: "No noisy ASN data yet.",
+    latestCasesTitle: "Latest queue cases",
+    latestCasesDescription: "Fresh disputed cases ready for operator action.",
+    emptyLatestCases: "No open queue items right now."
   },
   login: {
     eyebrow: "Remnawave + MobGuard",
@@ -64,15 +147,25 @@ export const enDictionary: TranslationDictionary = {
   reviewQueue: {
     eyebrow: "Review Queue",
     title: "Disputed decisions and manual moderation",
+    description: "Explicit filters, bulk resolution, and a denser operator workflow for live queue handling.",
     countSummary: "{count} cases · page {page}",
+    lastUpdated: "Updated {value}",
     searchPlaceholder: "Quick search by IP / username / ISP / UUID / IDs",
+    clearFilters: "Reset filters",
     toggleFiltersTitle: "Toggle filters",
+    presets: {
+      open: "Open only",
+      providerConflict: "Provider conflict",
+      critical: "Critical",
+      punitive: "Punitive"
+    },
     filters: {
       username: "Username",
       systemId: "System ID",
       telegramId: "Telegram ID",
       repeatMin: "Repeat count min",
       repeatMax: "Repeat count max",
+      allStatus: "All status",
       allConfidence: "All confidence",
       allReasons: "All reasons",
       allSeverity: "All severity",
@@ -107,8 +200,18 @@ export const enDictionary: TranslationDictionary = {
       mobile: "Mobile",
       home: "Home",
       skip: "Skip",
+      openCase: "Open case",
+      bulkMobile: "Set selected to MOBILE",
+      bulkHome: "Set selected to HOME",
+      bulkSkip: "Skip selected",
       processing: "Processing…",
-      saved: "Review decision saved"
+      saved: "Review decision saved",
+      bulkSaved: "{count} selected cases resolved"
+    },
+    selection: {
+      selectPage: "Select page",
+      clearPage: "Clear page selection",
+      selectedCount: "{count} selected"
     },
     footer: {
       previous: "Prev",
@@ -119,7 +222,11 @@ export const enDictionary: TranslationDictionary = {
   reviewDetail: {
     eyebrow: "Case Detail",
     title: "Review case #{caseId}",
+    description: "Evidence, linked history, and a sticky resolution rail for fast moderation.",
     loading: "Loading…",
+    backToQueue: "Back to queue",
+    copySuccess: "Copied to clipboard",
+    copyFailed: "Failed to copy",
     errors: {
       resolveFailed: "Resolve failed"
     },
@@ -161,6 +268,12 @@ export const enDictionary: TranslationDictionary = {
       skip: "Skip",
       saved: "Review decision saved"
     },
+    summaryHint: "Fast identifiers and review context without digging through raw payloads.",
+    resolutionHint: "This note is written into the audit trail together with the chosen outcome.",
+    copyIp: "Copy IP",
+    copyUuid: "Copy UUID",
+    copyTelegram: "Copy Telegram ID",
+    openReviewUrl: "Open review URL",
     providerEvidence: {
       conflict: "Conflicting service markers",
       clear: "No direct marker conflict",
@@ -186,8 +299,20 @@ export const enDictionary: TranslationDictionary = {
     updatedBy: "Updated by {value}",
     general: {
       title: "General settings",
-      description: "Runtime escalation and sanction controls.",
+      description: "Runtime escalation and access switching controls.",
       save: "Save general settings"
+    },
+    sectionTitles: {
+      thresholds: "Thresholds, scores, and behavior",
+      policy: "Detection policy",
+      learning: "Learning controls"
+    },
+    sectionDescriptions: {
+      thresholds: "Decision thresholds, score weights, and behavior windows tuned in one place.",
+      lists: "ASN and keyword lists that shape primary evidence and exclusions.",
+      providers: "Provider aliases, markers, and carrier-specific hints used in review-first flows.",
+      policy: "Live decision policy plus enforcement-side access switching controls.",
+      learning: "Promotion thresholds that decide when runtime learning becomes trusted."
     },
     providerProfiles: {
       description: "Carrier-specific aliases and service markers for mixed-provider review-first scoring.",
@@ -240,8 +365,10 @@ export const enDictionary: TranslationDictionary = {
     eyebrow: "Telegram",
     title: "Bot runtime settings and message delivery",
     saveSettings: "Save telegram settings",
+    saveEnv: "Save .env settings",
     saveTemplates: "Save message templates",
     settingsSaved: "Telegram settings saved",
+    envSaved: "Telegram .env settings saved",
     templatesSaved: "Message templates saved",
     loadFailed: "Failed to load Telegram settings",
     saveFailed: "Save failed",
@@ -260,11 +387,14 @@ export const enDictionary: TranslationDictionary = {
       "Multiline text is preserved.\n\nPlaceholders: {{username}}, {{warning_count}}, {{warnings_left}}, {{ban_text}}, {{review_url}}.",
     userTemplates: "User templates",
     adminTemplates: "Admin templates",
+    envTitle: "Telegram .env",
+    envDescription: "Bot tokens and usernames are edited separately from live runtime settings.",
     cards: {
       adminBot: "Admin bot",
       userBot: "User bot",
       adminBotConfigured: "Admin bot token + username",
-      userBotConfigured: "User bot token"
+      userBotConfigured: "User bot token",
+      envFile: "Env file state"
     },
     sections: {
       delivery: "Delivery",
@@ -276,13 +406,16 @@ export const enDictionary: TranslationDictionary = {
     eyebrow: "Access",
     title: "Login methods and access lists",
     save: "Save access settings",
+    saveEnv: "Save .env settings",
     saved: "Access settings saved",
+    envSaved: "Access .env settings saved",
     loadFailed: "Failed to load access settings",
     saveFailed: "Save failed",
     invalidNumericValue: "Invalid numeric value '{value}'",
     cards: {
       telegramLogin: "Telegram login",
-      localFallback: "Local fallback login"
+      localFallback: "Local fallback login",
+      envFile: "Env file state"
     },
     authStatusTitle: "Authentication status",
     authStatusDescription: "Credentials are managed only through `.env` on the server.",
@@ -291,11 +424,22 @@ export const enDictionary: TranslationDictionary = {
       localFallback: "Local fallback auth"
     },
     listsTitle: "Access lists",
-    listsDescription: "Panel admins and runtime exclusions are managed separately."
+    listsDescription: "Panel admins and runtime exclusions are managed separately.",
+    envTitle: "Access .env",
+    envDescription: "Local fallback credentials live in `.env` and require explicit replacement for secrets."
   },
   data: {
     eyebrow: "Data",
     title: "Operational runtime data admin",
+    sectionDescriptions: {
+      users: "Primary operator workflow for user lookup, card inspection, exemptions, restrictions, and export snapshots.",
+      violations: "Global view of active restrictions and violation history stored in runtime state.",
+      overrides: "Manual IP and unsure-pattern overrides that short-circuit detection decisions.",
+      cache: "Live cache entries that can be corrected or removed without waiting for natural expiry.",
+      learning: "Promoted patterns, legacy confidence rows, and provider-learning slices.",
+      cases: "Recent review cases with a compact operator jump-list into full detail.",
+      exports: "Calibration archive generation with dataset readiness and manifest visibility."
+    },
     tabs: {
       users: "users",
       violations: "violations",
@@ -373,15 +517,23 @@ export const enDictionary: TranslationDictionary = {
         systemId: "System ID",
         telegramId: "Telegram ID",
         panelStatus: "Panel status",
+        panelSquads: "Active squads",
+        trafficLimitBytes: "Traffic limit",
+        trafficLimitStrategy: "Traffic limit strategy",
+        usedTrafficBytes: "Current used traffic",
+        lifetimeUsedTrafficBytes: "Lifetime used traffic",
         exemptSystemId: "Exempt system ID",
         exemptTelegramId: "Exempt Telegram ID",
-        activeBan: "Active ban",
+        activeBan: "Active access restriction",
         activeWarning: "Active warning"
       },
       actions: {
-        banMinutes: "Ban minutes",
-        startBan: "Start ban",
-        unban: "Unban",
+        banMinutes: "Restriction minutes",
+        startBan: "Restrict access",
+        unban: "Restore full access",
+        trafficCapGigabytes: "Traffic cap: +GB from current usage",
+        applyTrafficCap: "Apply traffic cap",
+        restoreTrafficCap: "Restore previous limit",
         strikes: "Strikes",
         add: "Add",
         remove: "Remove",
@@ -397,11 +549,11 @@ export const enDictionary: TranslationDictionary = {
       }
     },
     violations: {
-      activeTitle: "Active violations / bans",
+      activeTitle: "Active violations / access restrictions",
       historyTitle: "Violation history",
       strikes: "strikes {value}",
       warningCount: "warning_count {value}",
-      unban: "unban {value}",
+      unban: "restore {value}",
       historyRow: "strike {strike} · {duration} min"
     },
     overrides: {
@@ -494,6 +646,7 @@ export const enDictionary: TranslationDictionary = {
   quality: {
     eyebrow: "Quality",
     title: "Noisy ASN, review volume, and active patterns",
+    description: "Charts and ranked cards for resolution mix, noisy ASN pressure, and learning health.",
     loadFailed: "Failed to load quality metrics",
     cards: {
       openCases: "Open cases",
@@ -513,8 +666,12 @@ export const enDictionary: TranslationDictionary = {
     by: "By {value}",
     asnSourceTitle: "ASN source",
     noAsnSource: "No ASN source available",
+    resolutionMixTitle: "Resolution mix",
+    resolutionMixDescription: "How human operators are resolving disputed decisions right now.",
     topNoisyAsnTitle: "Top noisy ASN",
+    noisyAsnDescription: "The ASNs that currently create the most review pressure.",
     topMixedProvidersTitle: "Top mixed providers by open cases",
+    mixedProvidersDescription: "Providers with the highest open-case load and conflict pressure.",
     noMixedProviders: "No mixed-provider backlog yet",
     mixedProviderStats: "{open} open · {conflict} conflicts · HOME {home} · MOBILE {mobile} · UNSURE {unsure}",
     reviewCases: "{count} review cases",
@@ -793,28 +950,44 @@ export const enDictionary: TranslationDictionary = {
         description: "Minimum delay before the next warning can be sent."
       },
       warnings_before_ban: {
-        label: "Warnings before first ban",
-        description: "How many warning events are required before the first ban."
+        label: "Warnings before first restriction",
+        description: "How many warning events are required before the first access restriction."
       },
       warning_only_mode: {
         label: "Only warnings mode",
-        description: "Never escalate to bans automatically."
+        description: "Never escalate to access restrictions automatically."
       },
       manual_review_mixed_home_enabled: {
         label: "Review mixed HOME cases manually",
         description: "Send mixed HOME outcomes to manual review before action."
       },
       manual_ban_approval_enabled: {
-        label: "Require admin approval for bans",
-        description: "Pause ban execution until admin approves it."
+        label: "Require approval for restrictions",
+        description: "Pause access restriction until an admin approves it."
       },
       dry_run: {
         label: "Dry run",
-        description: "Analyze and notify without applying remote disable actions."
+        description: "Analyze and notify without applying remote squad switching."
       },
       ban_durations_minutes: {
-        label: "Ban durations ladder (minutes)",
-        description: "One duration per line: first ban, second ban, third ban, and so on."
+        label: "Restriction ladder (minutes)",
+        description: "One duration per line: first restriction, second restriction, third restriction, and so on."
+      },
+      full_access_squad_name: {
+        label: "Full-access squad name",
+        description: "Exact Remnawave internal squad name used for normal full access."
+      },
+      restricted_access_squad_name: {
+        label: "Restricted squad name",
+        description: "Exact Remnawave internal squad name assigned when a violation is enforced."
+      },
+      traffic_cap_increment_gb: {
+        label: "Traffic cap increment (GB)",
+        description: "How many gigabytes to add on top of the user’s current used traffic."
+      },
+      traffic_cap_threshold_gb: {
+        label: "Traffic cap threshold (GB)",
+        description: "If the user has already spent at least this amount, apply traffic cap instead of hiding mobile configs."
       }
     },
     telegramFields: {
@@ -855,8 +1028,8 @@ export const enDictionary: TranslationDictionary = {
         description: "Send admin messages when a warning is issued."
       },
       telegram_notify_admin_ban_enabled: {
-        label: "Notify bans",
-        description: "Send admin messages when a ban is issued."
+        label: "Notify access restrictions",
+        description: "Send admin messages when an access restriction is applied."
       },
       telegram_notify_user_warning_only_enabled: {
         label: "Send warning-only messages",
@@ -867,8 +1040,8 @@ export const enDictionary: TranslationDictionary = {
         description: "Send user-facing messages when a warning is issued."
       },
       telegram_notify_user_ban_enabled: {
-        label: "Send ban messages",
-        description: "Send user-facing messages when a ban is issued."
+        label: "Send restriction messages",
+        description: "Send user-facing messages when an access restriction is applied."
       }
     },
     telegramTemplateFields: {
@@ -878,11 +1051,11 @@ export const enDictionary: TranslationDictionary = {
       },
       user_warning_template: {
         label: "Warning message",
-        description: "User-facing message for standard warnings before a ban."
+        description: "User-facing message for standard warnings before an access restriction."
       },
       user_ban_template: {
-        label: "Ban message",
-        description: "User-facing message sent when a ban is applied."
+        label: "Access restriction message",
+        description: "User-facing message sent when an access restriction is applied."
       },
       admin_warning_only_template: {
         label: "Warning-only message",
@@ -893,8 +1066,8 @@ export const enDictionary: TranslationDictionary = {
         description: "Admin notification text for warning events."
       },
       admin_ban_template: {
-        label: "Ban message",
-        description: "Admin notification text for ban events."
+        label: "Access restriction message",
+        description: "Admin notification text for access restriction events."
       },
       admin_review_template: {
         label: "Review message",

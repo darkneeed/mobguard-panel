@@ -1,6 +1,7 @@
 import unittest
 
 from mobguard_platform.runtime_admin_defaults import (
+    ENFORCEMENT_SETTINGS_DEFAULTS,
     ENFORCEMENT_TEMPLATE_DEFAULTS,
     normalize_telegram_runtime_settings,
     telegram_event_notifications_enabled,
@@ -76,6 +77,10 @@ class RuntimeAdminDefaultsTests(unittest.TestCase):
 
         self.assertIn("alice", rendered)
         self.assertIn("https://mobguard.example.com/reviews/1", rendered)
+
+    def test_enforcement_defaults_include_traffic_cap_settings(self):
+        self.assertEqual(ENFORCEMENT_SETTINGS_DEFAULTS["traffic_cap_increment_gb"], 10)
+        self.assertEqual(ENFORCEMENT_SETTINGS_DEFAULTS["traffic_cap_threshold_gb"], 100)
 
 
 if __name__ == "__main__":

@@ -1,5 +1,6 @@
-import { Link, NavLink, Outlet } from "react-router-dom";
+import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 
+import { getSecondaryNavigation, primaryNavigation } from "../app/navigation";
 import { BrandLogo } from "./BrandLogo";
 import { Language, useI18n } from "../localization";
 
@@ -23,9 +24,11 @@ export function Layout({
   onThemeChange
 }: LayoutProps) {
   const { t } = useI18n();
+  const location = useLocation();
+  const secondaryNavigation = getSecondaryNavigation(location.pathname);
 
   return (
-    <div className="shell">
+    <div className="shell app-shell">
       <aside className="sidebar">
         <Link to="/" className="brand">
           <BrandLogo />
@@ -34,14 +37,22 @@ export function Layout({
             <small>{t("layout.brandSubtitle")}</small>
           </div>
         </Link>
-        <nav className="nav">
-          <NavLink to="/">{t("layout.nav.queue")}</NavLink>
-          <NavLink to="/rules">{t("layout.nav.rules")}</NavLink>
-          <NavLink to="/telegram">{t("layout.nav.telegram")}</NavLink>
-          <NavLink to="/access">{t("layout.nav.access")}</NavLink>
-          <NavLink to="/data">{t("layout.nav.data")}</NavLink>
-          <NavLink to="/quality">{t("layout.nav.quality")}</NavLink>
-        </nav>
+        <div className="sidebar-kicker">
+          <span className="chip">{t("layout.consoleBadge")}</span>
+          <small>{t("layout.consoleDescription")}</small>
+        </div>
+        {primaryNavigation.map((group) => (
+          <div className="sidebar-group" key={group.titleKey}>
+            <span className="sidebar-group-title">{t(group.titleKey)}</span>
+            <nav className="nav">
+              {group.items.map((item) => (
+                <NavLink key={item.to} to={item.to} end={item.exact}>
+                  {t(item.labelKey)}
+                </NavLink>
+              ))}
+            </nav>
+          </div>
+        ))}
         <div className="sidebar-footer">
           <label className="theme-picker">
             <span>{t("layout.language.label")}</span>
@@ -62,9 +73,24 @@ export function Layout({
           <button onClick={onLogout}>{t("layout.logout")}</button>
         </div>
       </aside>
-      <main className="content">
-        <Outlet />
-      </main>
+      <div className="content-shell">
+        {secondaryNavigation.length > 0 ? (
+          <div className="section-tabs">
+              {secondaryNavigation.map((item) => (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                className={({ isActive }) => `section-tab${isActive ? " active" : ""}`}
+              >
+                {t(item.labelKey)}
+              </NavLink>
+            ))}
+          </div>
+        ) : null}
+        <main className="content">
+          <Outlet />
+        </main>
+      </div>
     </div>
   );
 }

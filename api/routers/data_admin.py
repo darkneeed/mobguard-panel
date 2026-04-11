@@ -11,6 +11,7 @@ from ..schemas.data_admin import (
     OverrideUpsertRequest,
     UserBanRequest,
     UserExemptRequest,
+    UserTrafficCapRequest,
     UserStrikesRequest,
     UserWarningsRequest,
 )
@@ -49,6 +50,25 @@ def ban_user(
 @router.post("/users/{identifier}/unban")
 def unban_user(identifier: str, _: dict[str, Any] = Depends(get_session), container=Depends(get_container)) -> dict[str, Any]:
     return data_service.unban_user(container, identifier)
+
+
+@router.post("/users/{identifier}/traffic-cap")
+def apply_user_traffic_cap(
+    identifier: str,
+    body: UserTrafficCapRequest,
+    _: dict[str, Any] = Depends(get_session),
+    container=Depends(get_container),
+) -> dict[str, Any]:
+    return data_service.apply_user_traffic_cap(container, identifier, body.gigabytes)
+
+
+@router.post("/users/{identifier}/traffic-cap/restore")
+def restore_user_traffic_cap(
+    identifier: str,
+    _: dict[str, Any] = Depends(get_session),
+    container=Depends(get_container),
+) -> dict[str, Any]:
+    return data_service.restore_user_traffic_cap(container, identifier)
 
 
 @router.post("/users/{identifier}/warnings")
