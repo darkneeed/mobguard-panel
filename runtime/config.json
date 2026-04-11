@@ -1,37 +1,64 @@
 {
   "pure_mobile_asns": [
-    199599, 51547, 201776, 205638,
-    48190, 31499, 49724, 201302, 212621, 206673
+    199599, 51547, 201776, 205638, 48190, 31499, 49724, 201302, 212621, 206673
   ],
   "pure_home_asns": [
-    9049, 12768, 12772, 13094, 20807, 31363, 34533, 34590,
-    39435, 41668, 41682, 41733, 41754, 41786, 41843, 42116,
-    42682, 43149, 47911, 48858, 50498, 50512, 50543, 50544,
-    51028, 51178, 51570, 51604, 51645, 51819, 52207, 56420,
-    56981, 57026, 57044, 57378, 58157, 199110, 204040,
-    204952, 42420, 8648, 35598, 20002, 8342, 31200,
-    16058, 47119, 39593, 2495, 35807, 28773, 25061, 28840,
+    9049, 12768, 12772, 13094, 20807, 31363, 34533, 34590, 39435, 41668, 41682,
+    41733, 41754, 41786, 41843, 42116, 42682, 43149, 47911, 48858, 50498, 50512,
+    50543, 50544, 51028, 51178, 51570, 51604, 51645, 51819, 52207, 56420, 56981,
+    57026, 57044, 57378, 58157, 199110, 204040, 204952, 42420, 8648, 35598,
+    20002, 8342, 31200, 16058, 47119, 39593, 2495, 35807, 28773, 25061, 28840,
     31257, 5128, 41539, 29497
   ],
   "mixed_asns": [
-    8359, 25159, 3216, 12389, 20485, 42437, 12958, 13238,
-    41798, 28917, 21127, 42668, 12714, 16345, 60299, 39927,
-    31133, 31163
+    8359, 25159, 3216, 12389, 20485, 42437, 12958, 13238, 41798, 28917, 21127,
+    42668, 12714, 16345, 60299, 39927, 31133, 31163
   ],
   "exclude_isp_keywords": [
-    "datacenter", "data center", "data-center",
-    "hosting", "hoster", "vps", "vds", "dedicated",
-    "colo", "colocation",
-    "hetzner", "ovh", "digitalocean", "aws", "amazon",
-    "google cloud", "azure", "linode", "vultr", "selectel"
+    "datacenter",
+    "data center",
+    "data-center",
+    "hosting",
+    "hoster",
+    "vps",
+    "vds",
+    "dedicated",
+    "colo",
+    "colocation",
+    "hetzner",
+    "ovh",
+    "digitalocean",
+    "aws",
+    "amazon",
+    "google cloud",
+    "azure",
+    "linode",
+    "vultr",
+    "selectel"
   ],
   "home_isp_keywords": [
-    "fttb", "ftth", "dsl", "adsl", "pppoe",
-    "fiber", "gpon", "ethernet", "cable"
+    "fttb",
+    "ftth",
+    "dsl",
+    "adsl",
+    "pppoe",
+    "fiber",
+    "gpon",
+    "ethernet",
+    "cable"
   ],
   "allowed_isp_keywords": [
-    "mobile", "cellular", "lte", "gprs", "umts", "gsm",
-    "hsdpa", "pgw", "3g", "4g", "5g"
+    "mobile",
+    "cellular",
+    "lte",
+    "gprs",
+    "umts",
+    "gsm",
+    "hsdpa",
+    "pgw",
+    "3g",
+    "4g",
+    "5g"
   ],
   "provider_profiles": [
     {
@@ -69,25 +96,20 @@
     {
       "key": "domru",
       "classification": "mixed",
-      "aliases": ["dom.ru", "domru", "ertelecom", "er-telecom", "wifire", "netbynet"],
+      "aliases": [
+        "dom.ru",
+        "domru",
+        "ertelecom",
+        "er-telecom",
+        "wifire",
+        "netbynet"
+      ],
       "mobile_markers": ["mobile", "lte"],
       "home_markers": ["fiber", "gpon", "fttb", "ftth", "ethernet"],
       "asns": [12714]
     }
   ],
-  "mobile_tags": [
-    "SELFSTEAL_RU-YANDEX_TCP",
-    "VKURSE_RU-YANDEX_GRPC",
-    "VKURSE_RU-YANDEX_TCP",
-    "MATCHY_RU-YANDEX_XHTTP",
-    "MAX_RU-YANDEX_TCP",
-    "YANDEX-MUSIC_RU-YANDEX_TCP",
-    "ADS-X5_RU-YANDEX_XHTTP",
-    "RUTUBE_RU-YANDEX_TCP",
-    "SELFSTEAL_RU-VK_TCP",
-    "SELFSTEAL_RU-VK_GRPC",
-    "MAX_RU-VK_TCP"
-  ],
+  "mobile_tags": [],
   "settings": {
     "mobile_score_threshold": 50,
     "usage_time_threshold": 900,
@@ -100,7 +122,7 @@
     "debug_level": "FULL",
     "geoip_db": "runtime/GeoLite2-ASN.mmdb",
     "db_file": "runtime/bans.db",
-    "remnawave_api_url": "https://admpanel.mwnd.ru",
+    "remnawave_api_url": "https://panel.example.com",
     "report_time": "06:00",
     "dry_run": true,
     "tg_admin_chat_id": "-1003304969829",
@@ -142,9 +164,9 @@
     "learning_promote_combo_min_precision": 0.9,
     "live_rules_refresh_seconds": 15
   },
-  "exempt_ids": [2, 3, 10, 234],
-  "exempt_tg_ids": [1081950251],
-  "admin_tg_ids": [1081950251],
+  "exempt_ids": [],
+  "exempt_tg_ids": [],
+  "admin_tg_ids": [],
   "_meta": {
     "revision": 1,
     "updated_at": "",
