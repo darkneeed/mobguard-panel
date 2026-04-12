@@ -68,6 +68,8 @@ export function AccessPage() {
     [lists, savedLists]
   );
   const envDirty = useMemo(() => isEnvDirty(data?.env, envDraft), [data?.env, envDraft]);
+  const envFieldCount = Object.values(data?.env || {}).length;
+  const envPresentCount = Object.values(data?.env || {}).filter((field) => field.present).length;
 
   function parseNumberList(text: string): number[] {
     const values: number[] = [];
@@ -125,8 +127,8 @@ export function AccessPage() {
 
   function renderEnvField(field: EnvFieldState) {
     return (
-      <div className="settings-group" key={field.key}>
-        <div className="panel-heading panel-heading-row">
+      <details className="settings-group settings-group-collapsible" key={field.key}>
+        <summary className="settings-group-summary">
           <div>
             <h3>{field.key}</h3>
             <p className="muted">
@@ -141,7 +143,8 @@ export function AccessPage() {
               <span className="tag severity-high">{t("common.restartRequired")}</span>
             ) : null}
           </div>
-        </div>
+        </summary>
+        <div className="env-field-body">
         <div className="env-field-current">
           <span className="muted">{t("common.currentValue")}</span>
           <strong>{field.value || t("common.notAvailable")}</strong>
@@ -153,7 +156,8 @@ export function AccessPage() {
             setEnvDraft((prev) => ({ ...prev, [field.key]: event.target.value }))
           }
         />
-      </div>
+        </div>
+      </details>
     );
   }
 
@@ -192,23 +196,6 @@ export function AccessPage() {
             <div className="stat-card">
               <span>{t("access.cards.envFile")}</span>
               <strong>{data.env_file_writable ? t("common.writable") : t("common.readOnly")}</strong>
-            </div>
-          </div>
-
-          <div className="panel">
-            <div className="panel-heading">
-              <h2>{t("access.authStatusTitle")}</h2>
-              <p className="muted">{t("access.authStatusDescription")}</p>
-            </div>
-            <div className="stats-grid">
-              <div className="stat-card">
-                <span>{t("access.authCards.telegramPanel")}</span>
-                <strong>{data.auth.telegram_enabled ? t("common.configured") : t("common.disabled")}</strong>
-              </div>
-              <div className="stat-card">
-                <span>{t("access.authCards.localFallback")}</span>
-                <strong>{data.auth.local_enabled ? t("common.configured") : t("common.disabled")}</strong>
-              </div>
             </div>
           </div>
 
@@ -255,6 +242,9 @@ export function AccessPage() {
                   <p className="muted">{t("access.envDescription")}</p>
                 </div>
                 <div className="action-row">
+                  <span className="tag severity-low">
+                    {t("access.envCount", { present: envPresentCount, total: envFieldCount })}
+                  </span>
                   <span className={envDirty ? "tag review-only" : "tag severity-low"}>
                     {envDirty ? t("common.unsavedChanges") : t("common.saved")}
                   </span>

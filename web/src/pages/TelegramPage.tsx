@@ -153,6 +153,8 @@ export function TelegramPage() {
   const runtimeDirty = JSON.stringify(settings) !== JSON.stringify(savedSettings);
   const envDirty = useMemo(() => isEnvDirty(data?.env, envDraft), [data?.env, envDraft]);
   const templatesDirty = JSON.stringify(templates) !== JSON.stringify(savedTemplates);
+  const envFieldCount = Object.values(data?.env || {}).length;
+  const envPresentCount = Object.values(data?.env || {}).filter((field) => field.present).length;
 
   function fieldMeta(key: TelegramFieldKey) {
     return {
@@ -272,8 +274,8 @@ export function TelegramPage() {
 
   function renderEnvField(field: EnvFieldState) {
     return (
-      <div className="settings-group" key={field.key}>
-        <div className="panel-heading panel-heading-row">
+      <details className="settings-group settings-group-collapsible" key={field.key}>
+        <summary className="settings-group-summary">
           <div>
             <h3>{field.key}</h3>
             <p className="muted">
@@ -288,7 +290,8 @@ export function TelegramPage() {
               <span className="tag severity-high">{t("common.restartRequired")}</span>
             ) : null}
           </div>
-        </div>
+        </summary>
+        <div className="env-field-body">
         <div className="env-field-current">
           <span className="muted">{t("common.currentValue")}</span>
           <strong>{field.value || t("common.notAvailable")}</strong>
@@ -300,7 +303,8 @@ export function TelegramPage() {
             setEnvDraft((prev) => ({ ...prev, [field.key]: event.target.value }))
           }
         />
-      </div>
+        </div>
+      </details>
     );
   }
 
@@ -343,23 +347,6 @@ export function TelegramPage() {
 
           <div className="panel">
             <div className="panel-heading">
-              <h2>{t("telegram.capabilityStatusTitle")}</h2>
-              <p className="muted">{t("telegram.capabilityStatusDescription")}</p>
-            </div>
-            <div className="stats-grid">
-              <div className="stat-card">
-                <span>{t("telegram.cards.adminBotConfigured")}</span>
-                <strong>{data.capabilities.admin_bot_enabled ? t("common.configured") : t("common.disabled")}</strong>
-              </div>
-              <div className="stat-card">
-                <span>{t("telegram.cards.userBotConfigured")}</span>
-                <strong>{data.capabilities.user_bot_enabled ? t("common.configured") : t("common.disabled")}</strong>
-              </div>
-            </div>
-          </div>
-
-          <div className="panel">
-            <div className="panel-heading">
               <h2>{t("telegram.deliveryTitle")}</h2>
               <p className="muted">{t("telegram.deliveryDescription")}</p>
             </div>
@@ -395,6 +382,9 @@ export function TelegramPage() {
                 <p className="muted">{t("telegram.envDescription")}</p>
               </div>
               <div className="action-row">
+                <span className="tag severity-low">
+                  {t("telegram.envCount", { present: envPresentCount, total: envFieldCount })}
+                </span>
                 <span className={envDirty ? "tag review-only" : "tag severity-low"}>
                   {envDirty ? t("common.unsavedChanges") : t("common.saved")}
                 </span>

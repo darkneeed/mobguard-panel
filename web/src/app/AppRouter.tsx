@@ -1,18 +1,20 @@
-import { useMemo } from "react";
+import { Suspense, lazy, type ComponentType, useMemo } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 
 import { api, Session } from "../api/client";
+import {
+  loadAccessPage,
+  loadDataPage,
+  loadModulesPage,
+  loadOverviewPage,
+  loadQualityPage,
+  loadReviewDetailPage,
+  loadReviewQueuePage,
+  loadRulesPage,
+  loadTelegramPage
+} from "./routeModules";
 import { Layout } from "../components/Layout";
 import { Language } from "../localization";
-import { AccessPage } from "../pages/AccessPage";
-import { DataPage } from "../pages/DataPage";
-import { ModulesPage } from "../pages/ModulesPage";
-import { OverviewPage } from "../pages/OverviewPage";
-import { QualityPage } from "../pages/QualityPage";
-import { ReviewDetailPage } from "../pages/ReviewDetailPage";
-import { ReviewQueuePage } from "../pages/ReviewQueuePage";
-import { RulesPage } from "../pages/RulesPage";
-import { TelegramPage } from "../pages/TelegramPage";
 
 type ThemeMode = "light" | "dark" | "system";
 
@@ -25,6 +27,34 @@ type Props = {
   setSession: (session: Session | null) => void;
   setState: (state: "loading" | "ready" | "guest") => void;
 };
+
+function lazyNamed<T extends Record<string, ComponentType<any>>, K extends keyof T>(
+  loader: () => Promise<T>,
+  key: K
+) {
+  return lazy(async () => {
+    const module = await loader();
+    return { default: module[key] };
+  });
+}
+
+const OverviewPage = lazyNamed(loadOverviewPage, "OverviewPage");
+const ModulesPage = lazyNamed(loadModulesPage, "ModulesPage");
+const ReviewQueuePage = lazyNamed(loadReviewQueuePage, "ReviewQueuePage");
+const ReviewDetailPage = lazyNamed(loadReviewDetailPage, "ReviewDetailPage");
+const RulesPage = lazyNamed(loadRulesPage, "RulesPage");
+const TelegramPage = lazyNamed(loadTelegramPage, "TelegramPage");
+const AccessPage = lazyNamed(loadAccessPage, "AccessPage");
+const DataPage = lazyNamed(loadDataPage, "DataPage");
+const QualityPage = lazyNamed(loadQualityPage, "QualityPage");
+
+function RouteFallback() {
+  return (
+    <div className="panel">
+      Loading…
+    </div>
+  );
+}
 
 export function AppRouter({
   session,
@@ -44,18 +74,20 @@ export function AppRouter({
     <Routes>
       <Route
         element={
-          <Layout
-            username={displayName}
-            language={language}
-            onLanguageChange={setLanguage}
-            theme={theme}
-            onThemeChange={setTheme}
-            onLogout={async () => {
-              await api.logout().catch(() => undefined);
-              setSession(null);
-              setState("guest");
-            }}
-          />
+          <Suspense fallback={<RouteFallback />}>
+            <Layout
+              username={displayName}
+              language={language}
+              onLanguageChange={setLanguage}
+              theme={theme}
+              onThemeChange={setTheme}
+              onLogout={async () => {
+                await api.logout().catch(() => undefined);
+                setSession(null);
+                setState("guest");
+              }}
+            />
+          </Suspense>
         }
       >
         <Route path="/" element={<Navigate to="/overview" replace />} />
@@ -63,7 +95,7 @@ export function AppRouter({
         <Route path="/modules" element={<ModulesPage />} />
         <Route path="/queue" element={<ReviewQueuePage />} />
         <Route path="/reviews/:caseId" element={<ReviewDetailPage />} />
-        <Route path="/rules" element={<Navigate to="/rules/thresholds" replace />} />
+        <Route path="/rules" element={<Navigate to="/rules/general" replace />} />
         <Route path="/rules/:section" element={<RulesPage />} />
         <Route path="/telegram" element={<TelegramPage />} />
         <Route path="/access" element={<AccessPage />} />

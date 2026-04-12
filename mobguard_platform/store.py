@@ -214,6 +214,21 @@ def _normalize_review_identity_payload(payload: dict[str, Any]) -> dict[str, Any
     return normalized
 
 
+def _resolve_review_module_name(conn: sqlite3.Connection, payload: dict[str, Any]) -> dict[str, Any]:
+    normalized = dict(payload)
+    module_name = str(normalized.get("module_name") or "").strip()
+    module_id = str(normalized.get("module_id") or "").strip()
+    if module_name or not module_id:
+        return normalized
+    row = conn.execute(
+        "SELECT module_name FROM modules WHERE module_id = ?",
+        (module_id,),
+    ).fetchone()
+    if row and str(row["module_name"] or "").strip():
+        normalized["module_name"] = str(row["module_name"]).strip()
+    return normalized
+
+
 def _ensure_list_of_type(key: str, value: Any, item_type: type) -> list[Any]:
     if not isinstance(value, list):
         raise ValueError(f"{key} must be a list")
@@ -1664,11 +1679,12 @@ class PlatformStore:
             total = conn.execute(count_sql, params).fetchone()["cnt"]
             rows = conn.execute(sql, [*params, page_size, (page - 1) * page_size]).fetchall()
         items = []
-        for row in rows:
-            item = _normalize_review_identity_payload(dict(row))
-            item["reason_codes"] = json.loads(item.pop("reason_codes_json"))
-            item["review_url"] = self.build_review_url(item["id"])
-            items.append(item)
+        with self._connect() as conn:
+            for row in rows:
+                item = _resolve_review_module_name(conn, _normalize_review_identity_payload(dict(row)))
+                item["reason_codes"] = json.loads(item.pop("reason_codes_json"))
+                item["review_url"] = self.build_review_url(item["id"])
+                items.append(item)
         return {
             "items": items,
             "count": total,
@@ -1709,7 +1725,8 @@ class PlatformStore:
                 """,
                 (case_id, case_row["uuid"], case_row["ip"]),
             ).fetchall()
-        case = _normalize_review_identity_payload(dict(case_row))
+        with self._connect() as conn:
+            case = _resolve_review_module_name(conn, _normalize_review_identity_payload(dict(case_row)))
         case["reason_codes"] = json.loads(case.pop("reason_codes_json"))
         event_payload = dict(event_row) if event_row else {}
         if event_payload:
@@ -1718,7 +1735,11 @@ class PlatformStore:
             event_payload["bundle"] = json.loads(event_payload.pop("bundle_json"))
         case["latest_event"] = event_payload
         case["resolutions"] = [dict(row) for row in resolutions]
-        case["related_cases"] = [_normalize_review_identity_payload(dict(row)) for row in related_cases]
+        with self._connect() as conn:
+            case["related_cases"] = [
+                _resolve_review_module_name(conn, _normalize_review_identity_payload(dict(row)))
+                for row in related_cases
+            ]
         case["review_url"] = self.build_review_url(case_id)
         return case
 

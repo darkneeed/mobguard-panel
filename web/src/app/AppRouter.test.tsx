@@ -55,4 +55,14 @@ describe("AppRouter", () => {
 
     expect(await screen.findByText("Rules Screen")).toBeInTheDocument();
   });
+
+  it("redirects /rules to the dedicated general tab route", async () => {
+    render(
+      <MemoryRouter initialEntries={["/rules"]}>
+        <AppRouter {...baseProps} />
+      </MemoryRouter>
+    );
+
+    expect((await screen.findAllByText("Rules Screen")).length).toBeGreaterThan(0);
+  });
 });

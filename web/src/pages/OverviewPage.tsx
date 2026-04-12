@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 
+import { prefetchRouteModule } from "../app/routeModules";
 import { api, ReviewListResponse } from "../api/client";
 import { useI18n } from "../localization";
 import { formatDisplayDateTime } from "../utils/datetime";
@@ -143,14 +144,14 @@ export function OverviewPage() {
       {error ? <div className="error-box">{error}</div> : null}
 
       <div className="dashboard-grid dashboard-grid-hero">
-        <div className="panel panel-hero">
-          <div className="panel-heading panel-heading-row">
-            <div>
-              <h2>{t("overview.systemStatusTitle")}</h2>
-              <p className="muted">{t("overview.systemStatusDescription")}</p>
+          <div className="panel panel-hero">
+            <div className="panel-heading panel-heading-row">
+              <div>
+                <h2>{t("overview.systemStatusTitle")}</h2>
+                <p className="muted">{t("overview.systemStatusDescription")}</p>
+              </div>
+              <span className="tag status-resolved">{t("overview.cards.core")}</span>
             </div>
-            <span className="tag status-resolved">{t("overview.cards.core")}</span>
-          </div>
           <div className="stats-grid">
             <div className="stat-card">
               <span>{t("overview.cards.openQueue")}</span>
@@ -170,16 +171,36 @@ export function OverviewPage() {
             </div>
           </div>
           <div className="hero-links">
-            <Link to="/queue" className="hero-link">
+            <Link
+              to="/queue"
+              className="hero-link"
+              onMouseEnter={() => prefetchRouteModule("/queue")}
+              onFocus={() => prefetchRouteModule("/queue")}
+            >
               <span>{t("overview.quickLinks.queue")}</span>
             </Link>
-            <Link to="/quality" className="hero-link">
+            <Link
+              to="/quality"
+              className="hero-link"
+              onMouseEnter={() => prefetchRouteModule("/quality")}
+              onFocus={() => prefetchRouteModule("/quality")}
+            >
               <span>{t("overview.quickLinks.quality")}</span>
             </Link>
-            <Link to="/rules/policy" className="hero-link">
+            <Link
+              to="/rules/policy"
+              className="hero-link"
+              onMouseEnter={() => prefetchRouteModule("/rules/policy")}
+              onFocus={() => prefetchRouteModule("/rules/policy")}
+            >
               <span>{t("overview.quickLinks.policy")}</span>
             </Link>
-            <Link to="/data/exports" className="hero-link">
+            <Link
+              to="/data/exports"
+              className="hero-link"
+              onMouseEnter={() => prefetchRouteModule("/data/exports")}
+              onFocus={() => prefetchRouteModule("/data/exports")}
+            >
               <span>{t("overview.quickLinks.exports")}</span>
             </Link>
           </div>
@@ -191,13 +212,14 @@ export function OverviewPage() {
               <h2>{t("overview.healthTitle")}</h2>
               <p className="muted">{t("overview.healthDescription")}</p>
             </div>
-            <span className="tag">{t("overview.healthTitle")}</span>
           </div>
-          <ul className="reason-list overview-health-list">
-            <li>
-              <strong>{t("overview.health.core")}</strong>
-              <span>{health?.core.status || t("common.notAvailable")}</span>
-              <span>
+          <div className="metric-list">
+            <div className="metric-row">
+              <div className="record-main">
+                <span className="record-title">{t("overview.health.core")}</span>
+                <span className="tag status-resolved">{health?.core.status || t("common.notAvailable")}</span>
+              </div>
+              <div className="record-meta">
                 {t("overview.health.updated", {
                   value: formatDisplayDateTime(
                     health?.core.updated_at || "",
@@ -205,23 +227,31 @@ export function OverviewPage() {
                     language
                   )
                 })}
-              </span>
-            </li>
-            <li>
-              <strong>{t("overview.health.db")}</strong>
-              <span>{health?.db.healthy ? t("common.on") : t("common.off")}</span>
-              <span>{health?.db.path || t("common.notAvailable")}</span>
-            </li>
-            <li>
-              <strong>{t("overview.health.rules")}</strong>
-              <span>{t("rules.revision", { value: quality?.live_rules_revision ?? "—" })}</span>
-              <span>
+              </div>
+            </div>
+            <div className="metric-row">
+              <div className="record-main">
+                <span className="record-title">{t("overview.health.db")}</span>
+                <span className={health?.db.healthy ? "tag status-resolved" : "tag severity-high"}>
+                  {health?.db.healthy ? t("common.on") : t("common.off")}
+                </span>
+              </div>
+              <div className="record-meta">
+                <span>{health?.db.path || t("common.notAvailable")}</span>
+              </div>
+            </div>
+            <div className="metric-row">
+              <div className="record-main">
+                <span className="record-title">{t("overview.health.rules")}</span>
+                <span>{t("rules.revision", { value: quality?.live_rules_revision ?? "—" })}</span>
+              </div>
+              <div className="record-meta">
                 {t("overview.health.rulesBy", {
                   value: rulesOwner
                 })}
-              </span>
-            </li>
-          </ul>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -266,29 +296,36 @@ export function OverviewPage() {
                 <h2>{t("overview.mixedProvidersTitle")}</h2>
                 <p className="muted">{t("overview.mixedProvidersDescription")}</p>
               </div>
-              <span className="tag">{t("overview.mixedProvidersTitle")}</span>
             </div>
-            <ul className="reason-list">
+            <div className="record-list">
               {quality?.mixed_providers.top_open_cases.length ? (
                 quality.mixed_providers.top_open_cases.slice(0, 5).map((item) => (
-                  <li key={item.provider_key}>
-                    <strong>{item.provider_key}</strong>
-                    <span>
+                  <div className="record-item" key={item.provider_key}>
+                    <div className="record-main">
+                      <span className="record-title">{item.provider_key}</span>
+                    </div>
+                    <div className="record-grid">
+                      <div className="record-kv"><strong>Open</strong><span>{item.open_cases}</span></div>
+                      <div className="record-kv"><strong>Conflicts</strong><span>{item.conflict_cases}</span></div>
+                      <div className="record-kv"><strong>HOME</strong><span>{item.home_cases}</span></div>
+                      <div className="record-kv"><strong>MOBILE</strong><span>{item.mobile_cases}</span></div>
+                    </div>
+                    <div className="record-meta">
                       {t("overview.mixedProvidersItem", {
                         open: item.open_cases,
                         conflict: item.conflict_cases,
                         home: item.home_cases,
                         mobile: item.mobile_cases
                       })}
-                    </span>
-                  </li>
+                    </div>
+                  </div>
                 ))
               ) : (
-                <li>
+                <div className="provider-empty">
                   <span>{t("overview.emptyMixedProviders")}</span>
-                </li>
+                </div>
               )}
-            </ul>
+            </div>
           </div>
 
           <div className="panel">
@@ -297,22 +334,23 @@ export function OverviewPage() {
                 <h2>{t("overview.noisyAsnTitle")}</h2>
                 <p className="muted">{t("overview.noisyAsnDescription")}</p>
               </div>
-              <span className="tag">{t("overview.noisyAsnTitle")}</span>
             </div>
-            <ul className="reason-list">
+            <div className="record-list">
               {quality?.top_noisy_asns.length ? (
                 quality.top_noisy_asns.slice(0, 6).map((item) => (
-                  <li key={item.asn_key}>
-                    <strong>{item.asn_key}</strong>
-                    <span>{t("overview.noisyAsnItem", { count: item.cnt })}</span>
-                  </li>
+                  <div className="record-item" key={item.asn_key}>
+                    <div className="record-main">
+                      <span className="record-title">{item.asn_key}</span>
+                      <span className="tag">{t("overview.noisyAsnItem", { count: item.cnt })}</span>
+                    </div>
+                  </div>
                 ))
               ) : (
-                <li>
+                <div className="provider-empty">
                   <span>{t("overview.emptyNoisyAsn")}</span>
-                </li>
+                </div>
               )}
-            </ul>
+            </div>
           </div>
 
           <div className="panel">
@@ -321,32 +359,38 @@ export function OverviewPage() {
                 <h2>{t("overview.latestCasesTitle")}</h2>
                 <p className="muted">{t("overview.latestCasesDescription")}</p>
               </div>
-              <span className="tag">{t("overview.latestCasesTitle")}</span>
             </div>
-            <ul className="reason-list">
+            <div className="record-list">
               {queue?.items.length ? (
                 queue.items.map((item) => (
-                  <li key={item.id}>
-                    <Link to={`/reviews/${item.id}`} className="inline-link">
-                      <strong>
+                  <Link
+                    to={`/reviews/${item.id}`}
+                    className="record-item inline-link"
+                    key={item.id}
+                    onMouseEnter={() => prefetchRouteModule(`/reviews/${item.id}`)}
+                    onFocus={() => prefetchRouteModule(`/reviews/${item.id}`)}
+                  >
+                    <div className="record-main">
+                      <span className="record-title">
                         #{item.id} · {item.username || item.uuid || item.ip}
-                      </strong>
-                      <span>
+                      </span>
+                      <span className="tag">{item.review_reason}</span>
+                    </div>
+                    <div className="record-meta">
                         {item.review_reason} · {item.ip} · {formatDisplayDateTime(
                           item.updated_at,
                           t("common.notAvailable"),
                           language
                         )}
-                      </span>
-                    </Link>
-                  </li>
+                    </div>
+                  </Link>
                 ))
               ) : (
-                <li>
+                <div className="provider-empty">
                   <span>{t("overview.emptyLatestCases")}</span>
-                </li>
+                </div>
               )}
-            </ul>
+            </div>
           </div>
         </div>
       ) : null}

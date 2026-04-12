@@ -52,6 +52,7 @@ export const enDictionary: TranslationDictionary = {
     },
     subnav: {
       rules: {
+        general: "General",
         thresholds: "Thresholds",
         lists: "Lists",
         providers: "Providers",
@@ -154,6 +155,8 @@ export const enDictionary: TranslationDictionary = {
     searchPlaceholder: "Quick search by IP / username / ISP / UUID / IDs",
     clearFilters: "Reset filters",
     toggleFiltersTitle: "Toggle filters",
+    filtersButton: "Filters",
+    filterCount: "Filters ({count})",
     presets: {
       open: "Open only",
       providerConflict: "Provider conflict",
@@ -387,6 +390,7 @@ export const enDictionary: TranslationDictionary = {
       learning: "Learning controls"
     },
     sectionDescriptions: {
+      general: "Runtime-wide escalation, warning, and access switching settings in one dedicated place.",
       thresholds: "Decision thresholds, score weights, and behavior windows tuned in one place.",
       lists: "ASN and keyword lists that shape primary evidence and exclusions.",
       providers: "Provider aliases, markers, and carrier-specific hints used in review-first flows.",
@@ -468,6 +472,7 @@ export const enDictionary: TranslationDictionary = {
     adminTemplates: "Admin templates",
     envTitle: "Telegram .env",
     envDescription: "Bot tokens and usernames are edited separately from live runtime settings.",
+    envCount: "{present} of {total} configured",
     cards: {
       adminBot: "Admin bot",
       userBot: "User bot",
@@ -505,7 +510,8 @@ export const enDictionary: TranslationDictionary = {
     listsTitle: "Access lists",
     listsDescription: "Panel admins and runtime exclusions are managed separately.",
     envTitle: "Access .env",
-    envDescription: "Local fallback credentials live in `.env` and require explicit replacement for secrets."
+    envDescription: "Local fallback credentials live in `.env` and require explicit replacement for secrets.",
+    envCount: "{present} of {total} configured"
   },
   data: {
     eyebrow: "Data",

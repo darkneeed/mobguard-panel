@@ -206,7 +206,7 @@ export function QualityPage() {
               </strong>
             </div>
           </div>
-          <div className="panel queue-footer">
+          <div className="panel compact-toolbar compact-toolbar-meta">
             <span>{t("quality.revision", { value: data.live_rules_revision })}</span>
             <span>{t("quality.updated", { value: formatDisplayDateTime(data.live_rules_updated_at, t("common.notAvailable"), language) })}</span>
             <span>{t("quality.by", { value: updatedBy })}</span>
@@ -263,35 +263,51 @@ export function QualityPage() {
 
           <div className="dashboard-grid">
             <div className="panel">
-              <h2>{t("quality.asnSourceTitle")}</h2>
-              <ul className="reason-list">
-                <li>
-                  <strong>{data.asn_source.label}</strong>
-                  <span>{data.asn_source.type}</span>
-                  <span>{data.asn_source.files.length > 0 ? data.asn_source.files.join(", ") : t("quality.noAsnSource")}</span>
-                </li>
-              </ul>
+              <div className="panel-heading">
+                <h2>{t("quality.asnSourceTitle")}</h2>
+                <p className="muted">{t("quality.noisyAsnDescription")}</p>
+              </div>
+              <div className="record-list">
+                <div className="record-item">
+                  <div className="record-main">
+                    <span className="record-title">{data.asn_source.label}</span>
+                    <span className="tag">{data.asn_source.type}</span>
+                  </div>
+                  <div className="record-meta">
+                    <span>{data.asn_source.files.length > 0 ? data.asn_source.files.join(", ") : t("quality.noAsnSource")}</span>
+                  </div>
+                </div>
+              </div>
             </div>
             <div className="panel">
-              <h2>{t("quality.topPromotedPatternsTitle")}</h2>
-              <ul className="reason-list">
+              <div className="panel-heading">
+                <h2>{t("quality.topPromotedPatternsTitle")}</h2>
+                <p className="muted">{t("quality.learningStateTitle")}</p>
+              </div>
+              <div className="record-list">
                 {data.learning.promoted.top_patterns.map((item) => (
-                  <li key={`${item.pattern_type}:${item.pattern_value}`}>
-                    <strong>{item.pattern_type}:{item.pattern_value}</strong>
-                    <span>
+                  <div className="record-item" key={`${item.pattern_type}:${item.pattern_value}`}>
+                    <div className="record-main">
+                      <span className="record-title">{item.pattern_type}:{item.pattern_value}</span>
+                      <span className="tag">{item.decision}</span>
+                    </div>
+                    <div className="record-meta">
                       {t("quality.topPatternDetails", {
                         decision: item.decision,
                         support: item.support,
                         precision: `${Math.round(item.precision * 100)}%`
                       })}
-                    </span>
-                  </li>
+                    </div>
+                  </div>
                 ))}
-              </ul>
+              </div>
             </div>
           </div>
           <div className="panel">
-            <h2>{t("quality.learningStateTitle")}</h2>
+            <div className="panel-heading">
+              <h2>{t("quality.learningStateTitle")}</h2>
+              <p className="muted">{t("quality.providerLearningTitle")}</p>
+            </div>
             <div className="stats-grid">
               <div className="stat-card">
                 <span>{t("quality.learningCards.promotedPatterns")}</span>
@@ -323,85 +339,118 @@ export function QualityPage() {
               </div>
             </div>
           </div>
+          <div className="detail-grid">
           <div className="panel">
-            <h2>{t("quality.promotedByTypeTitle")}</h2>
-            <ul className="reason-list">
-              {data.learning.promoted.by_type.length === 0 ? <li><span>{t("quality.noPromotedData")}</span></li> : null}
+            <div className="panel-heading">
+              <h2>{t("quality.promotedByTypeTitle")}</h2>
+              <p className="muted">{t("quality.learningStateTitle")}</p>
+            </div>
+            <div className="record-list">
+              {data.learning.promoted.by_type.length === 0 ? <div className="provider-empty"><span>{t("quality.noPromotedData")}</span></div> : null}
               {data.learning.promoted.by_type.map((item) => (
-                <li key={item.pattern_type}>
-                  <strong>{item.pattern_type}</strong>
-                  <span>
+                <div className="record-item" key={item.pattern_type}>
+                  <div className="record-main">
+                    <span className="record-title">{item.pattern_type}</span>
+                    <span className="tag">{item.count}</span>
+                  </div>
+                  <div className="record-meta">
                     {t("quality.patternStats", {
                       count: item.count,
                       support: item.total_support,
                       precision: `${Math.round(item.avg_precision * 100)}%`
                     })}
-                  </span>
-                </li>
+                  </div>
+                </div>
               ))}
-            </ul>
+            </div>
           </div>
           <div className="panel">
-            <h2>{t("quality.legacyByTypeTitle")}</h2>
-            <ul className="reason-list">
-              {data.learning.legacy.by_type.length === 0 ? <li><span>{t("quality.noLegacyData")}</span></li> : null}
+            <div className="panel-heading">
+              <h2>{t("quality.legacyByTypeTitle")}</h2>
+              <p className="muted">{t("quality.learningStateTitle")}</p>
+            </div>
+            <div className="record-list">
+              {data.learning.legacy.by_type.length === 0 ? <div className="provider-empty"><span>{t("quality.noLegacyData")}</span></div> : null}
               {data.learning.legacy.by_type.map((item) => (
-                <li key={item.pattern_type}>
-                  <strong>{item.pattern_type}</strong>
-                  <span>{t("quality.legacyStats", { count: item.count, confidence: item.total_confidence })}</span>
-                </li>
+                <div className="record-item" key={item.pattern_type}>
+                  <div className="record-main">
+                    <span className="record-title">{item.pattern_type}</span>
+                    <span className="tag">{item.count}</span>
+                  </div>
+                  <div className="record-meta">
+                    <span>{t("quality.legacyStats", { count: item.count, confidence: item.total_confidence })}</span>
+                  </div>
+                </div>
               ))}
-            </ul>
+            </div>
+          </div>
           </div>
           <div className="panel">
-            <h2>{t("quality.providerLearningTitle")}</h2>
+            <div className="panel-heading">
+              <h2>{t("quality.providerLearningTitle")}</h2>
+              <p className="muted">{t("quality.mixedProvidersDescription")}</p>
+            </div>
             <div className="detail-grid">
               <div className="panel">
                 <h3>{t("quality.providerLearning.promoted")}</h3>
-                <ul className="reason-list">
-                  {promotedProviderTypes.length === 0 ? <li><span>{t("quality.noPromotedData")}</span></li> : null}
+                <div className="record-list">
+                  {promotedProviderTypes.length === 0 ? <div className="provider-empty"><span>{t("quality.noPromotedData")}</span></div> : null}
                   {promotedProviderTypes.map((item) => (
-                    <li key={`provider-${item.pattern_type}`}>
-                      <strong>{item.pattern_type}</strong>
-                      <span>
+                    <div className="record-item" key={`provider-${item.pattern_type}`}>
+                      <div className="record-main">
+                        <span className="record-title">{item.pattern_type}</span>
+                        <span className="tag">{item.count}</span>
+                      </div>
+                      <div className="record-meta">
                         {t("quality.patternStats", {
                           count: item.count,
                           support: item.total_support,
                           precision: `${Math.round(item.avg_precision * 100)}%`
                         })}
-                      </span>
-                    </li>
+                      </div>
+                    </div>
                   ))}
-                </ul>
+                </div>
               </div>
               <div className="panel">
                 <h3>{t("quality.providerLearning.legacy")}</h3>
-                <ul className="reason-list">
-                  {legacyProviderTypes.length === 0 ? <li><span>{t("quality.noLegacyData")}</span></li> : null}
+                <div className="record-list">
+                  {legacyProviderTypes.length === 0 ? <div className="provider-empty"><span>{t("quality.noLegacyData")}</span></div> : null}
                   {legacyProviderTypes.map((item) => (
-                    <li key={`legacy-provider-${item.pattern_type}`}>
-                      <strong>{item.pattern_type}</strong>
-                      <span>{t("quality.legacyStats", { count: item.count, confidence: item.total_confidence })}</span>
-                    </li>
+                    <div className="record-item" key={`legacy-provider-${item.pattern_type}`}>
+                      <div className="record-main">
+                        <span className="record-title">{item.pattern_type}</span>
+                        <span className="tag">{item.count}</span>
+                      </div>
+                      <div className="record-meta">
+                        <span>{t("quality.legacyStats", { count: item.count, confidence: item.total_confidence })}</span>
+                      </div>
+                    </div>
                   ))}
-                </ul>
+                </div>
               </div>
             </div>
           </div>
           <div className="panel">
-            <h2>{t("quality.topLegacyTitle")}</h2>
-            <ul className="reason-list">
-              {data.learning.legacy.top_patterns.length === 0 ? <li><span>{t("quality.noLegacyPatterns")}</span></li> : null}
+            <div className="panel-heading">
+              <h2>{t("quality.topLegacyTitle")}</h2>
+              <p className="muted">{t("quality.learningStateTitle")}</p>
+            </div>
+            <div className="record-list">
+              {data.learning.legacy.top_patterns.length === 0 ? <div className="provider-empty"><span>{t("quality.noLegacyPatterns")}</span></div> : null}
               {data.learning.legacy.top_patterns.map((item) => (
-                <li key={`${item.pattern_type}:${item.pattern_value}:${item.decision}`}>
-                  <strong>{item.pattern_type}:{item.pattern_value}</strong>
-                  <span>
-                    {item.decision} · confidence {item.confidence}
-                  </span>
-                  <span>{formatDisplayDateTime(item.timestamp, t("common.notAvailable"), language)}</span>
-                </li>
+                <div className="record-item" key={`${item.pattern_type}:${item.pattern_value}:${item.decision}`}>
+                  <div className="record-main">
+                    <span className="record-title">{item.pattern_type}:{item.pattern_value}</span>
+                    <span className="tag">{item.decision}</span>
+                  </div>
+                  <div className="record-meta">
+                    <span>confidence {item.confidence}</span>
+                    <span>{formatDisplayDateTime(item.timestamp, t("common.notAvailable"), language)}</span>
+                  </div>
+                </div>
               ))}
-            </ul>
+            </div>
           </div>
         </>
       ) : null}

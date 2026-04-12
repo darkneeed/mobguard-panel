@@ -460,9 +460,12 @@ export function ModulesPage() {
               </div>
             ) : null}
 
-            <pre className="log-box module-compose-box">
-              {detail?.install.compose_yaml || t("modules.installPreviewEmpty")}
-            </pre>
+            <details className="export-section" open={mode === "create"}>
+              <summary>{t("modules.installTitle")}</summary>
+              <pre className="log-box module-compose-box">
+                {detail?.install.compose_yaml || t("modules.installPreviewEmpty")}
+              </pre>
+            </details>
           </div>
         </aside>
       </div>

@@ -1,6 +1,8 @@
+import { useEffect } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 
 import { getSecondaryNavigation, primaryNavigation } from "../app/navigation";
+import { prefetchRouteModule } from "../app/routeModules";
 import { BrandLogo } from "./BrandLogo";
 import { Language, useI18n } from "../localization";
 
@@ -27,6 +29,25 @@ export function Layout({
   const location = useLocation();
   const secondaryNavigation = getSecondaryNavigation(location.pathname);
 
+  useEffect(() => {
+    const targets = ["/queue", "/rules/general", "/data/users", "/quality"];
+    const browserWindow = window as Window & {
+      requestIdleCallback?: (cb: () => void) => number;
+      cancelIdleCallback?: (id: number) => void;
+    };
+    const idle = browserWindow.requestIdleCallback;
+    if (idle) {
+      const id = idle(() => {
+        targets.forEach(prefetchRouteModule);
+      });
+      return () => browserWindow.cancelIdleCallback?.(id);
+    }
+    const timer = window.setTimeout(() => {
+      targets.forEach(prefetchRouteModule);
+    }, 1200);
+    return () => window.clearTimeout(timer);
+  }, []);
+
   return (
     <div className="shell app-shell">
       <aside className="sidebar">
@@ -46,7 +67,13 @@ export function Layout({
             <span className="sidebar-group-title">{t(group.titleKey)}</span>
             <nav className="nav">
               {group.items.map((item) => (
-                <NavLink key={item.to} to={item.to} end={item.exact}>
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  end={item.exact}
+                  onMouseEnter={() => prefetchRouteModule(item.to)}
+                  onFocus={() => prefetchRouteModule(item.to)}
+                >
                   {t(item.labelKey)}
                 </NavLink>
               ))}
@@ -80,6 +107,8 @@ export function Layout({
               <NavLink
                 key={item.to}
                 to={item.to}
+                onMouseEnter={() => prefetchRouteModule(item.to)}
+                onFocus={() => prefetchRouteModule(item.to)}
                 className={({ isActive }) => `section-tab${isActive ? " active" : ""}`}
               >
                 {t(item.labelKey)}

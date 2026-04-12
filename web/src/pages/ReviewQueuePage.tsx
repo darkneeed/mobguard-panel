@@ -1,6 +1,7 @@
-import { MouseEvent, useEffect, useMemo, useState } from "react";
+import { MouseEvent, startTransition, useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
+import { prefetchRouteModule } from "../app/routeModules";
 import { api, ReviewItem, ReviewListResponse } from "../api/client";
 import { useToast } from "../components/ToastProvider";
 import { useI18n } from "../localization";
@@ -85,6 +86,8 @@ export function ReviewQueuePage() {
   const [filters, setFilters] = useState<ReviewFilters>(() => normalizeFilters(searchParams));
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [lastUpdatedAt, setLastUpdatedAt] = useState("");
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [debouncedQuery, setDebouncedQuery] = useState(filters.q);
 
   useEffect(() => {
     const nextFilters = normalizeFilters(searchParams);
@@ -98,6 +101,18 @@ export function ReviewQueuePage() {
     setSearchParams(new URLSearchParams(query), { replace: true });
   }, [filters, setSearchParams]);
 
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setDebouncedQuery(filters.q);
+    }, 220);
+    return () => window.clearTimeout(timer);
+  }, [filters.q]);
+
+  const effectiveFilters = useMemo(
+    () => ({ ...filters, q: debouncedQuery }),
+    [filters, debouncedQuery]
+  );
+
   function formatIdentifier(label: string, value: string | number | null | undefined) {
     return `${label}: ${value === null || value === undefined || value === "" ? t("common.notAvailable") : value}`;
   }
@@ -107,11 +122,13 @@ export function ReviewQueuePage() {
 
     async function load() {
       try {
-        const payload = await api.listReviews(filters);
+        const payload = await api.listReviews(effectiveFilters);
         if (!cancelled) {
-          setList(payload);
-          setError("");
-          setLastUpdatedAt(new Date().toISOString());
+          startTransition(() => {
+            setList(payload);
+            setError("");
+            setLastUpdatedAt(new Date().toISOString());
+          });
         }
       } catch (err) {
         if (!cancelled) {
@@ -130,7 +147,7 @@ export function ReviewQueuePage() {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [filters, t]);
+  }, [effectiveFilters, t]);
 
   useEffect(() => {
     setSelectedIds((prev) => prev.filter((id) => list.items.some((item) => item.id === id)));
@@ -146,7 +163,7 @@ export function ReviewQueuePage() {
     try {
       setResolvingId(item.id);
       await api.resolveReview(String(item.id), resolution, "quick action from queue");
-      const payload = await api.listReviews(filters);
+      const payload = await api.listReviews(effectiveFilters);
       setList(payload);
       pushToast("success", t("reviewQueue.actions.saved"));
     } catch (err) {
@@ -165,7 +182,7 @@ export function ReviewQueuePage() {
       for (const id of selectedIds) {
         await api.resolveReview(String(id), resolution, `bulk action from queue (${selectedIds.length})`);
       }
-      const payload = await api.listReviews(filters);
+      const payload = await api.listReviews(effectiveFilters);
       setList(payload);
       setSelectedIds([]);
       pushToast("success", t("reviewQueue.actions.bulkSaved", { count: selectedIds.length }));
@@ -179,6 +196,24 @@ export function ReviewQueuePage() {
   }
 
   const allSelected = list.items.length > 0 && selectedIds.length === list.items.length;
+  const activeFilterCount = useMemo(
+    () =>
+      [
+        filters.confidence_band,
+        filters.review_reason,
+        filters.severity,
+        filters.punitive_eligible,
+        filters.module_id,
+        filters.username,
+        filters.system_id,
+        filters.telegram_id,
+        filters.opened_from,
+        filters.opened_to,
+        filters.repeat_count_min,
+        filters.repeat_count_max
+      ].filter((value) => value !== "").length,
+    [filters]
+  );
   const presets = useMemo(
     () => [
       {
@@ -250,16 +285,27 @@ export function ReviewQueuePage() {
       </div>
 
       <div className="panel queue-toolbar">
-        <div className="search-strip">
+        <div className="search-strip compact-search-strip">
           <input
             placeholder={t("reviewQueue.searchPlaceholder")}
             value={filters.q}
             onChange={(event) => setFilters((prev) => ({ ...prev, q: event.target.value, page: 1 }))}
           />
+          <button
+            className="ghost icon-button"
+            onClick={() => setFiltersOpen((prev) => !prev)}
+            title={t("reviewQueue.toggleFiltersTitle")}
+          >
+            {activeFilterCount > 0 ? t("reviewQueue.filterCount", { count: activeFilterCount }) : t("reviewQueue.filtersButton")}
+          </button>
           <button className="ghost icon-button" onClick={() => setFilters(DEFAULT_FILTERS)} title={t("reviewQueue.clearFilters")}>
             {t("reviewQueue.clearFilters")}
           </button>
         </div>
+      </div>
+
+      {filtersOpen ? (
+      <div className="panel filters reveal-panel filter-drawer">
         <div className="queue-presets">
           {presets.map((preset) => (
             <button className="ghost small-button" key={preset.key} onClick={preset.apply}>
@@ -267,9 +313,6 @@ export function ReviewQueuePage() {
             </button>
           ))}
         </div>
-      </div>
-
-      <div className="panel filters reveal-panel">
         <input
           placeholder={t("reviewQueue.filters.moduleId")}
           value={String(filters.module_id ?? "")}
@@ -393,6 +436,7 @@ export function ReviewQueuePage() {
           <option value="updated_asc">{t("reviewQueue.filters.sortUpdatedAsc")}</option>
         </select>
       </div>
+      ) : null}
 
       {error ? <div className="error-box">{error}</div> : null}
 
@@ -512,7 +556,12 @@ export function ReviewQueuePage() {
               ))}
             </div>
             <div className="action-row queue-card-actions">
-              <Link to={`/reviews/${item.id}`} className="button-link ghost small-button">
+              <Link
+                to={`/reviews/${item.id}`}
+                className="button-link ghost small-button"
+                onMouseEnter={() => prefetchRouteModule(`/reviews/${item.id}`)}
+                onFocus={() => prefetchRouteModule(`/reviews/${item.id}`)}
+              >
                 {t("reviewQueue.actions.openCase")}
               </Link>
             </div>

@@ -34,6 +34,7 @@ export const primaryNavigation: NavigationGroup[] = [
 ];
 
 export const rulesNavigation: NavigationItem[] = [
+  { to: "/rules/general", labelKey: "layout.subnav.rules.general" },
   { to: "/rules/thresholds", labelKey: "layout.subnav.rules.thresholds" },
   { to: "/rules/lists", labelKey: "layout.subnav.rules.lists" },
   { to: "/rules/providers", labelKey: "layout.subnav.rules.providers" },

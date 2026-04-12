@@ -237,6 +237,34 @@ class StoreReviewFlowTests(unittest.TestCase):
         self.assertEqual(filtered["items"][0]["system_id"], 42)
         self.assertEqual(filtered["items"][0]["opened_at"], "2026-04-01T10:00:00")
 
+    def test_list_review_cases_prefers_module_name_and_falls_back_to_modules_table(self):
+        user = {"uuid": "uuid-1", "username": "alice", "telegramId": "1001", "id": 42, "module_id": "node-a", "module_name": "Node A"}
+        bundle = DecisionBundle(
+            ip="10.10.10.10",
+            verdict="HOME",
+            confidence_band="PROBABLE_HOME",
+            score=18,
+            asn=12345,
+            isp="ISP-A",
+        )
+        self.store.register_module(
+            "node-a",
+            "token-a",
+            module_name="Readable Node",
+            protocol_version="v1",
+            auto_create=True,
+        )
+        event_id = self.store.record_analysis_event(user, bundle.ip, "TAG", bundle)
+        summary = self.store.ensure_review_case(user, bundle.ip, "TAG", bundle, event_id, "probable_home")
+
+        with self.store._connect() as conn:
+            conn.execute("UPDATE review_cases SET module_name = '' WHERE id = ?", (summary.id,))
+            conn.commit()
+
+        listing = self.store.list_review_cases({})
+
+        self.assertEqual(listing["items"][0]["module_name"], "Readable Node")
+
     def test_quality_metrics_include_promoted_and_legacy_learning_state(self):
         user = {"uuid": "uuid-1", "username": "alice", "telegramId": "1001", "id": 42}
         bundle = DecisionBundle(

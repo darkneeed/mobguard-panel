@@ -349,7 +349,7 @@ export function DataPage() {
     return (
       <>
         <div className="panel">
-          <div className="action-row">
+          <div className="search-strip compact-search-strip">
             <input placeholder={t("data.users.searchPlaceholder")} value={userQuery} onChange={(event) => setUserQuery(event.target.value)} />
             <button onClick={searchUsers} disabled={isPending("userSearch") || !userQuery.trim()}>
               {isPending("userSearch") ? t("data.users.searching") : t("data.users.search")}
@@ -508,27 +508,38 @@ export function DataPage() {
       <div className="detail-grid">
         <div className="panel">
           <h2>{t("data.violations.activeTitle")}</h2>
-          <ul className="reason-list">
+          <div className="record-list">
             {active.map((item) => (
-              <li key={String(item.uuid)}>
-                <strong>{String(item.uuid)}</strong>
-                <span>{t("data.violations.strikes", { value: String(item.strikes) })} · {t("data.violations.warningCount", { value: String(item.warning_count) })}</span>
-                <span>{t("data.violations.unban", { value: formatDisplayDateTime(String(item.unban_time ?? ""), t("common.notAvailable"), language) })}</span>
-              </li>
+              <div className="record-item" key={String(item.uuid)}>
+                <div className="record-main">
+                  <span className="record-title">{String(item.uuid)}</span>
+                  <span className="tag">{String(item.restriction_mode || t("common.notAvailable"))}</span>
+                </div>
+                <div className="record-meta">
+                  <span>{t("data.violations.strikes", { value: String(item.strikes) })}</span>
+                  <span>{t("data.violations.warningCount", { value: String(item.warning_count) })}</span>
+                  <span>{t("data.violations.unban", { value: formatDisplayDateTime(String(item.unban_time ?? ""), t("common.notAvailable"), language) })}</span>
+                </div>
+              </div>
             ))}
-          </ul>
+          </div>
         </div>
         <div className="panel">
           <h2>{t("data.violations.historyTitle")}</h2>
-          <ul className="reason-list">
+          <div className="record-list">
             {history.map((item) => (
-              <li key={String(item.id)}>
-                <strong>{String(item.uuid)}</strong>
-                <span>{String(item.ip)} · {t("data.violations.historyRow", { strike: String(item.strike_number), duration: String(item.punishment_duration) })}</span>
-                <span>{formatDisplayDateTime(String(item.timestamp ?? ""), t("common.notAvailable"), language)}</span>
-              </li>
+              <div className="record-item" key={String(item.id)}>
+                <div className="record-main">
+                  <span className="record-title">{String(item.uuid)}</span>
+                  <span>{String(item.ip)}</span>
+                </div>
+                <div className="record-meta">
+                  <span>{t("data.violations.historyRow", { strike: String(item.strike_number), duration: String(item.punishment_duration) })}</span>
+                  <span>{formatDisplayDateTime(String(item.timestamp ?? ""), t("common.notAvailable"), language)}</span>
+                </div>
+              </div>
             ))}
-          </ul>
+          </div>
         </div>
       </div>
     );
@@ -550,11 +561,17 @@ export function DataPage() {
             </select>
             <button disabled={isPending("exactOverride")} onClick={saveExactOverride}>{t("data.overrides.save")}</button>
           </div>
-          <ul className="reason-list">
+          <div className="record-list">
             {exactIp.map((item) => (
-              <li key={String(item.ip)}>
-                <strong>{String(item.ip)}</strong>
-                <span>{String(item.decision)} · {t("data.overrides.expires", { value: formatDisplayDateTime(String(item.expires_at ?? ""), t("common.notAvailable"), language) })}</span>
+              <div className="record-item" key={String(item.ip)}>
+                <div className="record-main">
+                  <span className="record-title">{String(item.ip)}</span>
+                  <span className="tag">{String(item.decision)}</span>
+                </div>
+                <div className="record-meta">
+                  <span>{t("data.overrides.expires", { value: formatDisplayDateTime(String(item.expires_at ?? ""), t("common.notAvailable"), language) })}</span>
+                </div>
+                <div className="record-actions">
                 <button className="ghost" disabled={isPending("exactOverride")} onClick={async () => {
                   try {
                     await withPending("exactOverride", () => api.deleteExactOverride(String(item.ip)));
@@ -564,9 +581,10 @@ export function DataPage() {
                     pushToast("error", err instanceof Error ? err.message : t("data.errors.saveExactOverrideFailed"));
                   }
                 }}>{t("data.overrides.delete")}</button>
-              </li>
+                </div>
+              </div>
             ))}
-          </ul>
+          </div>
         </div>
         <div className="panel">
           <h2>{t("data.overrides.unsureTitle")}</h2>
@@ -579,11 +597,17 @@ export function DataPage() {
             </select>
             <button disabled={isPending("unsureOverride")} onClick={saveUnsureOverride}>{t("data.overrides.save")}</button>
           </div>
-          <ul className="reason-list">
+          <div className="record-list">
             {unsure.map((item) => (
-              <li key={String(item.ip_pattern)}>
-                <strong>{String(item.ip_pattern)}</strong>
-                <span>{String(item.decision)} · {formatDisplayDateTime(String(item.timestamp ?? ""), t("common.notAvailable"), language)}</span>
+              <div className="record-item" key={String(item.ip_pattern)}>
+                <div className="record-main">
+                  <span className="record-title">{String(item.ip_pattern)}</span>
+                  <span className="tag">{String(item.decision)}</span>
+                </div>
+                <div className="record-meta">
+                  <span>{formatDisplayDateTime(String(item.timestamp ?? ""), t("common.notAvailable"), language)}</span>
+                </div>
+                <div className="record-actions">
                 <button className="ghost" disabled={isPending("unsureOverride")} onClick={async () => {
                   try {
                     await withPending("unsureOverride", () => api.deleteUnsureOverride(String(item.ip_pattern)));
@@ -593,9 +617,10 @@ export function DataPage() {
                     pushToast("error", err instanceof Error ? err.message : t("data.errors.saveUnsureOverrideFailed"));
                   }
                 }}>{t("data.overrides.delete")}</button>
-              </li>
+                </div>
+              </div>
             ))}
-          </ul>
+          </div>
         </div>
       </div>
     );
@@ -607,12 +632,18 @@ export function DataPage() {
       <div className="detail-grid">
         <div className="panel">
           <h2>{t("data.cache.title")}</h2>
-          <ul className="reason-list">
+          <div className="record-list">
             {items.map((item) => (
-              <li key={String(item.ip)}>
-                <strong>{String(item.ip)}</strong>
-                <span>{String(item.status)} / {String(item.confidence)} / ASN {displayValue(item.asn)}</span>
-                <div className="action-row">
+              <div className="record-item" key={String(item.ip)}>
+                <div className="record-main">
+                  <span className="record-title">{String(item.ip)}</span>
+                  <span className="tag">{String(item.status)} / {String(item.confidence)}</span>
+                </div>
+                <div className="record-meta">
+                  <span>ASN {displayValue(item.asn)}</span>
+                  <span>{String(item.details || t("common.notAvailable"))}</span>
+                </div>
+                <div className="record-actions">
                   <button className="ghost" onClick={() => {
                     setSelectedCacheIp(String(item.ip));
                     setCacheDraft({
@@ -632,17 +663,37 @@ export function DataPage() {
                     }
                   }}>{t("data.cache.delete")}</button>
                 </div>
-              </li>
+              </div>
             ))}
-          </ul>
+          </div>
         </div>
         <div className="panel">
-          <h2>{t("data.cache.editTitle")}</h2>
-          <input placeholder={t("data.cache.selectedIp")} value={selectedCacheIp} onChange={(event) => setSelectedCacheIp(event.target.value)} />
-          <input placeholder={t("data.cache.status")} value={cacheDraft.status || ""} onChange={(event) => setCacheDraft((prev) => ({ ...prev, status: event.target.value }))} />
-          <input placeholder={t("data.cache.confidence")} value={cacheDraft.confidence || ""} onChange={(event) => setCacheDraft((prev) => ({ ...prev, confidence: event.target.value }))} />
-          <textarea className="note-box" placeholder={t("data.cache.details")} value={cacheDraft.details || ""} onChange={(event) => setCacheDraft((prev) => ({ ...prev, details: event.target.value }))} />
-          <input placeholder={t("data.cache.asn")} value={cacheDraft.asn || ""} onChange={(event) => setCacheDraft((prev) => ({ ...prev, asn: event.target.value }))} />
+          <div className="panel-heading">
+            <h2>{t("data.cache.editTitle")}</h2>
+            <p className="muted">{t("data.sectionDescriptions.cache")}</p>
+          </div>
+          <div className="form-grid compact-form-grid">
+            <div className="rule-field compact-rule-field">
+              <strong>{t("data.cache.selectedIp")}</strong>
+              <input placeholder={t("data.cache.selectedIp")} value={selectedCacheIp} onChange={(event) => setSelectedCacheIp(event.target.value)} />
+            </div>
+            <div className="rule-field compact-rule-field">
+              <strong>{t("data.cache.status")}</strong>
+              <input placeholder={t("data.cache.status")} value={cacheDraft.status || ""} onChange={(event) => setCacheDraft((prev) => ({ ...prev, status: event.target.value }))} />
+            </div>
+            <div className="rule-field compact-rule-field">
+              <strong>{t("data.cache.confidence")}</strong>
+              <input placeholder={t("data.cache.confidence")} value={cacheDraft.confidence || ""} onChange={(event) => setCacheDraft((prev) => ({ ...prev, confidence: event.target.value }))} />
+            </div>
+            <div className="rule-field rule-field-wide compact-rule-field">
+              <strong>{t("data.cache.details")}</strong>
+              <textarea className="note-box compact-note-box" placeholder={t("data.cache.details")} value={cacheDraft.details || ""} onChange={(event) => setCacheDraft((prev) => ({ ...prev, details: event.target.value }))} />
+            </div>
+            <div className="rule-field compact-rule-field">
+              <strong>{t("data.cache.asn")}</strong>
+              <input placeholder={t("data.cache.asn")} value={cacheDraft.asn || ""} onChange={(event) => setCacheDraft((prev) => ({ ...prev, asn: event.target.value }))} />
+            </div>
+          </div>
           <button onClick={saveCachePatch} disabled={!selectedCacheIp || isPending("cacheSave")}>{t("data.cache.save")}</button>
         </div>
       </div>
@@ -661,34 +712,51 @@ export function DataPage() {
       <div className="detail-grid">
         <div className="panel">
           <h2>{t("data.learning.promotedActiveTitle")}</h2>
-          <ul className="reason-list">
+          <div className="record-list">
             {promotedActive.map((item) => (
-              <li key={`${String(item.pattern_type)}:${String(item.pattern_value)}`}>
-                <strong>{String(item.pattern_type)}:{String(item.pattern_value)}</strong>
-                <span>{String(item.decision)} · {t("data.learning.support", { value: String(item.support) })} · {t("data.learning.precision", { value: String(item.precision) })}</span>
-              </li>
+              <div className="record-item" key={`${String(item.pattern_type)}:${String(item.pattern_value)}`}>
+                <div className="record-main">
+                  <span className="record-title">{String(item.pattern_type)}:{String(item.pattern_value)}</span>
+                  <span className="tag">{String(item.decision)}</span>
+                </div>
+                <div className="record-meta">
+                  <span>{t("data.learning.support", { value: String(item.support) })}</span>
+                  <span>{t("data.learning.precision", { value: String(item.precision) })}</span>
+                </div>
+              </div>
             ))}
-          </ul>
+          </div>
         </div>
         <div className="panel">
           <h2>{t("data.learning.promotedStatsTitle")}</h2>
-          <ul className="reason-list">
+          <div className="record-list">
             {promotedStats.map((item) => (
-              <li key={`${String(item.pattern_type)}:${String(item.pattern_value)}:${String(item.decision)}`}>
-                <strong>{String(item.pattern_type)}:{String(item.pattern_value)}</strong>
-                <span>{String(item.decision)} · {t("data.learning.total", { value: String(item.total) })} · {t("data.learning.precision", { value: String(item.precision) })}</span>
-              </li>
+              <div className="record-item" key={`${String(item.pattern_type)}:${String(item.pattern_value)}:${String(item.decision)}`}>
+                <div className="record-main">
+                  <span className="record-title">{String(item.pattern_type)}:{String(item.pattern_value)}</span>
+                  <span className="tag">{String(item.decision)}</span>
+                </div>
+                <div className="record-meta">
+                  <span>{t("data.learning.total", { value: String(item.total) })}</span>
+                  <span>{t("data.learning.precision", { value: String(item.precision) })}</span>
+                </div>
+              </div>
             ))}
-          </ul>
+          </div>
         </div>
         <div className="panel">
           <h2>{t("data.learning.legacyTitle")}</h2>
-          <ul className="reason-list">
+          <div className="record-list">
             {legacy.map((item) => (
-              <li key={String(item.id)}>
-                <strong>{String(item.pattern_type)}:{String(item.pattern_value)}</strong>
-                <span>{String(item.decision)} · {t("data.learning.confidence", { value: String(item.confidence) })}</span>
-                <div className="action-row">
+              <div className="record-item" key={String(item.id)}>
+                <div className="record-main">
+                  <span className="record-title">{String(item.pattern_type)}:{String(item.pattern_value)}</span>
+                  <span className="tag">{String(item.decision)}</span>
+                </div>
+                <div className="record-meta">
+                  <span>{t("data.learning.confidence", { value: String(item.confidence) })}</span>
+                </div>
+                <div className="record-actions">
                   <button className="ghost" onClick={async () => {
                     try {
                       await api.patchLegacyLearning(Number(item.id), { confidence: Number(item.confidence) + 1 });
@@ -708,45 +776,45 @@ export function DataPage() {
                     }
                   }}>{t("data.learning.delete")}</button>
                 </div>
-              </li>
+              </div>
             ))}
-          </ul>
+          </div>
         </div>
         <div className="panel">
           <h2>{t("data.learning.providerActiveTitle")}</h2>
-          <ul className="reason-list">
-            {promotedProviderActive.length === 0 ? <li><span>{t("data.learning.empty")}</span></li> : null}
+          <div className="record-list">
+            {promotedProviderActive.length === 0 ? <div className="provider-empty"><span>{t("data.learning.empty")}</span></div> : null}
             {promotedProviderActive.map((item) => (
-              <li key={`${String(item.pattern_type)}:${String(item.pattern_value)}`}>
-                <strong>{String(item.pattern_value)}</strong>
-                <span>{String(item.decision)} · {t("data.learning.support", { value: String(item.support) })} · {t("data.learning.precision", { value: String(item.precision) })}</span>
-              </li>
+              <div className="record-item" key={`${String(item.pattern_type)}:${String(item.pattern_value)}`}>
+                <div className="record-main"><span className="record-title">{String(item.pattern_value)}</span><span className="tag">{String(item.decision)}</span></div>
+                <div className="record-meta"><span>{t("data.learning.support", { value: String(item.support) })}</span><span>{t("data.learning.precision", { value: String(item.precision) })}</span></div>
+              </div>
             ))}
-          </ul>
+          </div>
         </div>
         <div className="panel">
           <h2>{t("data.learning.providerServiceActiveTitle")}</h2>
-          <ul className="reason-list">
-            {promotedProviderServiceActive.length === 0 ? <li><span>{t("data.learning.empty")}</span></li> : null}
+          <div className="record-list">
+            {promotedProviderServiceActive.length === 0 ? <div className="provider-empty"><span>{t("data.learning.empty")}</span></div> : null}
             {promotedProviderServiceActive.map((item) => (
-              <li key={`${String(item.pattern_type)}:${String(item.pattern_value)}`}>
-                <strong>{String(item.pattern_value)}</strong>
-                <span>{String(item.decision)} · {t("data.learning.support", { value: String(item.support) })} · {t("data.learning.precision", { value: String(item.precision) })}</span>
-              </li>
+              <div className="record-item" key={`${String(item.pattern_type)}:${String(item.pattern_value)}`}>
+                <div className="record-main"><span className="record-title">{String(item.pattern_value)}</span><span className="tag">{String(item.decision)}</span></div>
+                <div className="record-meta"><span>{t("data.learning.support", { value: String(item.support) })}</span><span>{t("data.learning.precision", { value: String(item.precision) })}</span></div>
+              </div>
             ))}
-          </ul>
+          </div>
         </div>
         <div className="panel">
           <h2>{t("data.learning.providerLegacyTitle")}</h2>
-          <ul className="reason-list">
-            {[...legacyProvider, ...legacyProviderService].length === 0 ? <li><span>{t("data.learning.empty")}</span></li> : null}
+          <div className="record-list">
+            {[...legacyProvider, ...legacyProviderService].length === 0 ? <div className="provider-empty"><span>{t("data.learning.empty")}</span></div> : null}
             {[...legacyProvider, ...legacyProviderService].map((item) => (
-              <li key={String(item.id)}>
-                <strong>{String(item.pattern_type)}:{String(item.pattern_value)}</strong>
-                <span>{String(item.decision)} · {t("data.learning.confidence", { value: String(item.confidence) })}</span>
-              </li>
+              <div className="record-item" key={String(item.id)}>
+                <div className="record-main"><span className="record-title">{String(item.pattern_type)}:{String(item.pattern_value)}</span><span className="tag">{String(item.decision)}</span></div>
+                <div className="record-meta"><span>{t("data.learning.confidence", { value: String(item.confidence) })}</span></div>
+              </div>
             ))}
-          </ul>
+          </div>
         </div>
       </div>
     );
@@ -757,15 +825,20 @@ export function DataPage() {
     return (
       <div className="panel">
         <h2>{t("data.cases.title")}</h2>
-        <ul className="reason-list">
+        <div className="record-list">
           {items.map((item) => (
-            <li key={String(item.id)}>
-              <Link to={`/reviews/${item.id}`}>
-                #{String(item.id)} · {String(item.username || item.uuid || t("common.notAvailable"))} · {String(item.ip)} · {String(item.review_reason)}
-              </Link>
-            </li>
+            <Link className="record-item inline-link" key={String(item.id)} to={`/reviews/${item.id}`}>
+              <div className="record-main">
+                <span className="record-title">#{String(item.id)} · {String(item.username || item.uuid || t("common.notAvailable"))}</span>
+                <span className="tag">{String(item.review_reason)}</span>
+              </div>
+              <div className="record-meta">
+                <span>{String(item.ip)}</span>
+                <span>{formatDisplayDateTime(String(item.updated_at ?? ""), t("common.notAvailable"), language)}</span>
+              </div>
+            </Link>
           ))}
-        </ul>
+        </div>
       </div>
     );
   }

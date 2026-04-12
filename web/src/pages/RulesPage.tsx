@@ -65,8 +65,7 @@ const GENERAL_SETTINGS_FIELDS: GeneralSettingField[] = [
 const LIST_SECTIONS = Array.from(
   new Set(RULE_LIST_FIELDS.filter((field) => field.sectionKey !== "access").map((field) => field.sectionKey))
 );
-const SETTING_SECTIONS = Array.from(new Set(RULE_SETTING_FIELDS.map((field) => field.sectionKey)));
-const RULES_SECTIONS = ["thresholds", "lists", "providers", "policy", "learning"] as const;
+const RULES_SECTIONS = ["general", "thresholds", "lists", "providers", "policy", "learning"] as const;
 type RulesSection = (typeof RULES_SECTIONS)[number];
 
 function blankProviderProfile(): ProviderProfileDraft {
@@ -85,14 +84,13 @@ export function RulesPage() {
   const { section } = useParams();
   const navigate = useNavigate();
   const activeSection = useMemo<RulesSection>(() => {
-    return RULES_SECTIONS.includes(section as RulesSection) ? (section as RulesSection) : "thresholds";
+    return RULES_SECTIONS.includes(section as RulesSection) ? (section as RulesSection) : "general";
   }, [section]);
   const [state, setState] = useState<RulesState | null>(null);
   const [draft, setDraft] = useState<RulesDraft | null>(null);
   const [savedDraft, setSavedDraft] = useState<RulesDraft | null>(null);
   const [error, setError] = useState("");
   const [saved, setSaved] = useState("");
-
   const [generalDraft, setGeneralDraft] = useState<Record<string, string> | null>(null);
   const [savedGeneralDraft, setSavedGeneralDraft] = useState<Record<string, string> | null>(null);
   const [generalError, setGeneralError] = useState("");
@@ -102,7 +100,7 @@ export function RulesPage() {
     if (section && RULES_SECTIONS.includes(section as RulesSection)) {
       return;
     }
-    navigate("/rules/thresholds", { replace: true });
+    navigate("/rules/general", { replace: true });
   }, [navigate, section]);
 
   useEffect(() => {
@@ -141,6 +139,7 @@ export function RulesPage() {
 
   const dirty = JSON.stringify(draft) !== JSON.stringify(savedDraft);
   const generalDirty = JSON.stringify(generalDraft) !== JSON.stringify(savedGeneralDraft);
+  const updatedBy = !state?.updated_by || state.updated_by === "bootstrap" ? t("common.system") : state.updated_by;
 
   function listFieldMeta(field: RuleListFieldMeta) {
     return {
@@ -197,7 +196,6 @@ export function RulesPage() {
     if (meta.inputType === "text") {
       return String(value ?? "").trim();
     }
-
     const parsed = Number(value);
     if (!Number.isFinite(parsed)) {
       throw new Error(t("rules.invalidNumber", { field: settingFieldMeta(meta).label }));
@@ -207,7 +205,6 @@ export function RulesPage() {
 
   function serializeGeneralSettings(draftValues: Record<string, string>) {
     const payload: Record<string, unknown> = {};
-
     for (const field of GENERAL_SETTINGS_FIELDS) {
       const rawValue = draftValues[field.key] ?? "";
       const label = generalFieldMeta(field.key).label;
@@ -233,67 +230,61 @@ export function RulesPage() {
         payload[field.key] = rawValue.trim();
         continue;
       }
-
       const parsed = Number(rawValue);
       if (!Number.isFinite(parsed)) {
         throw new Error(t("rules.invalidNumber", { field: label }));
       }
       payload[field.key] = parsed;
     }
-
     return payload;
   }
 
   function serializeProviderProfiles(profiles: ProviderProfileDraft[] | undefined) {
-    return (profiles || [])
-      .map((profile, index) => {
-        const key = profile.key.trim().toLowerCase();
-        if (!key) {
-          throw new Error(t("rules.providerProfiles.validation.missingKey", { index: index + 1 }));
-        }
-        const asns = profile.asns
-          .map((item) => item.trim())
-          .filter(Boolean)
-          .map((item) => {
-            const parsed = Number(item);
-            if (!Number.isFinite(parsed)) {
-              throw new Error(
-                t("rules.invalidValue", {
-                  field: providerFieldMeta("asns").label,
-                  value: item
-                })
-              );
-            }
-            return parsed;
-          });
-        return {
-          key,
-          classification: profile.classification,
-          aliases: profile.aliases.map((item) => item.trim().toLowerCase()).filter(Boolean),
-          mobile_markers: profile.mobile_markers.map((item) => item.trim().toLowerCase()).filter(Boolean),
-          home_markers: profile.home_markers.map((item) => item.trim().toLowerCase()).filter(Boolean),
-          asns
-        };
-      });
+    return (profiles || []).map((profile, index) => {
+      const key = profile.key.trim().toLowerCase();
+      if (!key) {
+        throw new Error(t("rules.providerProfiles.validation.missingKey", { index: index + 1 }));
+      }
+      const asns = profile.asns
+        .map((item) => item.trim())
+        .filter(Boolean)
+        .map((item) => {
+          const parsed = Number(item);
+          if (!Number.isFinite(parsed)) {
+            throw new Error(
+              t("rules.invalidValue", {
+                field: providerFieldMeta("asns").label,
+                value: item
+              })
+            );
+          }
+          return parsed;
+        });
+      return {
+        key,
+        classification: profile.classification,
+        aliases: profile.aliases.map((item) => item.trim().toLowerCase()).filter(Boolean),
+        mobile_markers: profile.mobile_markers.map((item) => item.trim().toLowerCase()).filter(Boolean),
+        home_markers: profile.home_markers.map((item) => item.trim().toLowerCase()).filter(Boolean),
+        asns
+      };
+    });
   }
 
-  async function save() {
+  async function saveRules() {
     if (!draft || !state) return;
     try {
       const payload: Record<string, unknown> = { settings: {} };
-
       for (const field of RULE_LIST_FIELDS) {
         payload[field.key] = serializeListField(field, draft[field.key]);
       }
       payload.provider_profiles = serializeProviderProfiles(draft.provider_profiles);
-
       for (const field of RULE_SETTING_FIELDS) {
         payload.settings = {
           ...(payload.settings as Record<string, unknown>),
           [field.key]: serializeSettingField(field, draft.settings?.[field.key])
         };
       }
-
       const updated = (await api.updateDetectionSettings({
         rules: payload,
         revision: state.revision,
@@ -387,39 +378,57 @@ export function RulesPage() {
     setSaved("");
   }
 
-  function renderRulesSaveAction() {
+  function renderRulesSaveBar() {
     return (
-      <div className="action-row">
-        <span className={dirty ? "tag review-only" : "tag severity-low"}>
-          {dirty ? t("common.unsavedChanges") : t("common.saved")}
-        </span>
-        <button disabled={!dirty} onClick={save}>
-          {t("rules.saveRules")}
-        </button>
+      <div className="panel compact-toolbar">
+        <div className="compact-toolbar-main">
+          <strong>{t(`layout.subnav.rules.${activeSection}`)}</strong>
+          <span className="muted">{t("rules.settingSectionDescription")}</span>
+        </div>
+        <div className="action-row">
+          <span className={dirty ? "tag review-only" : "tag severity-low"}>
+            {dirty ? t("common.unsavedChanges") : t("common.saved")}
+          </span>
+          <button disabled={!dirty} onClick={saveRules}>
+            {t("rules.saveRules")}
+          </button>
+        </div>
       </div>
     );
   }
 
-  function renderSettingPanel(
-    title: string,
-    description: string,
-    sectionKeys: RuleSettingSectionKey[]
-  ) {
+  function renderGeneralSaveBar() {
+    return (
+      <div className="panel compact-toolbar">
+        <div className="compact-toolbar-main">
+          <strong>{t("rules.general.title")}</strong>
+          <span className="muted">{t("rules.general.description")}</span>
+        </div>
+        <div className="action-row">
+          <span className={generalDirty ? "tag review-only" : "tag severity-low"}>
+            {generalDirty ? t("common.unsavedChanges") : t("common.saved")}
+          </span>
+          <button disabled={!generalDirty} onClick={saveGeneralSettings}>
+            {t("rules.general.save")}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  function renderSettingPanel(title: string, description: string, sectionKeys: RuleSettingSectionKey[]) {
     if (!draft) return null;
     return (
       <div className="panel">
-        <div className="panel-heading panel-heading-row">
-          <div>
-            <h2>{title}</h2>
-            <p className="muted">{description}</p>
-          </div>
-          {renderRulesSaveAction()}
+        <div className="panel-heading">
+          <h2>{title}</h2>
+          <p className="muted">{description}</p>
         </div>
-        <div className="form-grid">
+        <div className="form-grid compact-form-grid">
           {RULE_SETTING_FIELDS.filter((field) => sectionKeys.includes(field.sectionKey)).map((field) => {
             const meta = settingFieldMeta(field);
             return (
-              <div className="rule-field" key={field.key}>
+              <div className="rule-field compact-rule-field" key={field.key}>
                 <FieldLabel
                   label={meta.label}
                   description={meta.description}
@@ -449,7 +458,230 @@ export function RulesPage() {
     );
   }
 
-  const updatedBy = !state?.updated_by || state.updated_by === "bootstrap" ? t("common.system") : state.updated_by;
+  function renderGeneralPanel() {
+    if (!generalDraft) return null;
+    return (
+      <div className="panel">
+        <div className="panel-heading">
+          <h2>{t("rules.general.title")}</h2>
+          <p className="muted">{t("rules.general.description")}</p>
+        </div>
+        {generalError ? <div className="error-box">{generalError}</div> : null}
+        {generalSaved ? <div className="ok-box">{generalSaved}</div> : null}
+        <div className="form-grid compact-form-grid">
+          {GENERAL_SETTINGS_FIELDS.map((field) => {
+            const meta = generalFieldMeta(field.key);
+            return (
+              <div
+                className={field.inputType === "number-list" ? "rule-field rule-field-wide compact-rule-field" : "rule-field compact-rule-field"}
+                key={field.key}
+              >
+                <FieldLabel label={meta.label} description={meta.description} />
+                {field.inputType === "boolean" ? (
+                  <select
+                    value={generalDraft[field.key] || "false"}
+                    onChange={(event) => updateGeneralField(field.key, event.target.value)}
+                  >
+                    <option value="true">{t("common.true")}</option>
+                    <option value="false">{t("common.false")}</option>
+                  </select>
+                ) : field.inputType === "number-list" ? (
+                  <textarea
+                    className="note-box compact-note-box"
+                    value={generalDraft[field.key] || ""}
+                    onChange={(event) => updateGeneralField(field.key, event.target.value)}
+                  />
+                ) : field.inputType === "text" ? (
+                  <input
+                    type="text"
+                    value={generalDraft[field.key] || ""}
+                    onChange={(event) => updateGeneralField(field.key, event.target.value)}
+                  />
+                ) : (
+                  <input
+                    type="number"
+                    step={field.step}
+                    value={generalDraft[field.key] || ""}
+                    onChange={(event) => updateGeneralField(field.key, event.target.value)}
+                  />
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
+  function renderListsPanels() {
+    if (!draft) return null;
+    return LIST_SECTIONS.map((section) => (
+      <div className="panel" key={section}>
+        <div className="panel-heading">
+          <h2>{t(`rulesMeta.sections.${section}`)}</h2>
+          <p className="muted">{t("rules.listSectionDescription")}</p>
+        </div>
+        <div className="detail-grid">
+          {RULE_LIST_FIELDS.filter((field) => field.sectionKey === section).map((field) => {
+            const meta = listFieldMeta(field);
+            return (
+              <div className="rule-field compact-rule-field" key={field.key}>
+                <FieldLabel
+                  label={meta.label}
+                  description={meta.description}
+                  recommendation={meta.recommendation}
+                />
+                <textarea
+                  className="note-box compact-note-box"
+                  value={listValuesToText(draft[field.key])}
+                  onChange={(event) => updateListField(field, event.target.value)}
+                />
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    ));
+  }
+
+  function renderProvidersPanel() {
+    if (!draft) return null;
+    return (
+      <div className="panel">
+        <div className="panel-heading panel-heading-row">
+          <div>
+            <h2>{t("rulesMeta.sections.providers")}</h2>
+            <p className="muted">{t("rules.providerProfiles.description")}</p>
+          </div>
+          <button className="ghost" onClick={addProviderProfile}>
+            {t("rules.providerProfiles.add")}
+          </button>
+        </div>
+        <div className="provider-profiles">
+          {(draft.provider_profiles || []).map((profile, index) => (
+            <div className="provider-card" key={`${profile.key || "provider"}-${index}`}>
+              <div className="provider-card-header">
+                <div>
+                  <strong>{profile.key || t("rules.providerProfiles.cardTitle", { index: index + 1 })}</strong>
+                  <p className="muted">{t("rules.providerProfiles.cardSubtitle")}</p>
+                </div>
+                <button className="ghost small-button" onClick={() => removeProviderProfile(index)}>
+                  {t("rules.providerProfiles.remove")}
+                </button>
+              </div>
+              <div className="form-grid compact-form-grid">
+                <div className="rule-field compact-rule-field">
+                  <FieldLabel label={providerFieldMeta("key").label} description={providerFieldMeta("key").description} />
+                  <input value={profile.key} onChange={(event) => updateProviderProfile(index, { key: event.target.value })} />
+                </div>
+                <div className="rule-field compact-rule-field">
+                  <FieldLabel
+                    label={providerFieldMeta("classification").label}
+                    description={providerFieldMeta("classification").description}
+                  />
+                  <select
+                    value={profile.classification}
+                    onChange={(event) =>
+                      updateProviderProfile(index, {
+                        classification: event.target.value as ProviderProfileDraft["classification"]
+                      })
+                    }
+                  >
+                    <option value="mixed">{t("rules.providerProfiles.classifications.mixed")}</option>
+                    <option value="mobile">{t("rules.providerProfiles.classifications.mobile")}</option>
+                    <option value="home">{t("rules.providerProfiles.classifications.home")}</option>
+                  </select>
+                </div>
+                <div className="rule-field rule-field-wide compact-rule-field">
+                  <FieldLabel label={providerFieldMeta("aliases").label} description={providerFieldMeta("aliases").description} />
+                  <textarea
+                    className="note-box compact-note-box"
+                    value={listValuesToText(profile.aliases)}
+                    onChange={(event) => updateProviderProfile(index, { aliases: parseListText(event.target.value) })}
+                  />
+                </div>
+                <div className="rule-field compact-rule-field">
+                  <FieldLabel
+                    label={providerFieldMeta("mobile_markers").label}
+                    description={providerFieldMeta("mobile_markers").description}
+                  />
+                  <textarea
+                    className="note-box compact-note-box"
+                    value={listValuesToText(profile.mobile_markers)}
+                    onChange={(event) => updateProviderProfile(index, { mobile_markers: parseListText(event.target.value) })}
+                  />
+                </div>
+                <div className="rule-field compact-rule-field">
+                  <FieldLabel
+                    label={providerFieldMeta("home_markers").label}
+                    description={providerFieldMeta("home_markers").description}
+                  />
+                  <textarea
+                    className="note-box compact-note-box"
+                    value={listValuesToText(profile.home_markers)}
+                    onChange={(event) => updateProviderProfile(index, { home_markers: parseListText(event.target.value) })}
+                  />
+                </div>
+                <div className="rule-field rule-field-wide compact-rule-field">
+                  <FieldLabel label={providerFieldMeta("asns").label} description={providerFieldMeta("asns").description} />
+                  <textarea
+                    className="note-box compact-note-box"
+                    value={listValuesToText(profile.asns)}
+                    onChange={(event) => updateProviderProfile(index, { asns: parseListText(event.target.value) })}
+                  />
+                </div>
+              </div>
+            </div>
+          ))}
+          {(draft.provider_profiles || []).length === 0 ? (
+            <div className="provider-empty">
+              <span>{t("rules.providerProfiles.empty")}</span>
+            </div>
+          ) : null}
+        </div>
+      </div>
+    );
+  }
+
+  function renderSectionContent() {
+    if (!draft && activeSection !== "general") return null;
+    if (activeSection === "general") {
+      return (
+        <>
+          {renderGeneralSaveBar()}
+          {renderGeneralPanel()}
+        </>
+      );
+    }
+    return (
+      <>
+        {renderRulesSaveBar()}
+        {activeSection === "lists" ? renderListsPanels() : null}
+        {activeSection === "providers" ? renderProvidersPanel() : null}
+        {activeSection === "thresholds"
+          ? renderSettingPanel(
+              t("rules.sectionTitles.thresholds"),
+              t("rules.sectionDescriptions.thresholds"),
+              ["thresholds", "scores", "behavior"]
+            )
+          : null}
+        {activeSection === "policy"
+          ? renderSettingPanel(
+              t("rules.sectionTitles.policy"),
+              t("rules.sectionDescriptions.policy"),
+              ["policy"]
+            )
+          : null}
+        {activeSection === "learning"
+          ? renderSettingPanel(
+              t("rules.sectionTitles.learning"),
+              t("rules.sectionDescriptions.learning"),
+              ["learning"]
+            )
+          : null}
+      </>
+    );
+  }
 
   return (
     <section className="page">
@@ -464,12 +696,13 @@ export function RulesPage() {
       {error ? <div className="error-box">{error}</div> : null}
       {saved ? <div className="ok-box">{saved}</div> : null}
       {state ? (
-        <div className="panel queue-footer">
+        <div className="panel compact-toolbar compact-toolbar-meta">
           <span>{t("rules.revision", { value: state.revision })}</span>
           <span>{t("rules.updatedAt", { value: formatDisplayDateTime(state.updated_at, t("common.notAvailable"), language) })}</span>
           <span>{t("rules.updatedBy", { value: updatedBy })}</span>
         </div>
       ) : null}
+
       {!draft && !generalDraft ? (
         <div className="detail-grid">
           {Array.from({ length: 3 }).map((_, index) => (
@@ -485,313 +718,7 @@ export function RulesPage() {
         </div>
       ) : null}
 
-      {generalDraft ? (
-        <div className="panel">
-          <div className="panel-heading panel-heading-row">
-            <div>
-              <h2>{t("rules.general.title")}</h2>
-              <p className="muted">{t("rules.general.description")}</p>
-            </div>
-            <div className="action-row">
-              <span className={generalDirty ? "tag review-only" : "tag severity-low"}>
-                {generalDirty ? t("common.unsavedChanges") : t("common.saved")}
-              </span>
-              <button disabled={!generalDirty} onClick={saveGeneralSettings}>
-                {t("rules.general.save")}
-              </button>
-            </div>
-          </div>
-          {generalError ? <div className="error-box">{generalError}</div> : null}
-          {generalSaved ? <div className="ok-box">{generalSaved}</div> : null}
-          <div className="form-grid">
-            {GENERAL_SETTINGS_FIELDS.map((field) => {
-              const meta = generalFieldMeta(field.key);
-              return (
-                <div
-                  className={field.inputType === "number-list" ? "rule-field rule-field-wide" : "rule-field"}
-                  key={field.key}
-                >
-                  <FieldLabel label={meta.label} description={meta.description} />
-                  {field.inputType === "boolean" ? (
-                    <select
-                      value={generalDraft[field.key] || "false"}
-                      onChange={(event) => updateGeneralField(field.key, event.target.value)}
-                    >
-                      <option value="true">{t("common.true")}</option>
-                      <option value="false">{t("common.false")}</option>
-                    </select>
-                  ) : field.inputType === "number-list" ? (
-                    <textarea
-                      className="note-box tall"
-                      value={generalDraft[field.key] || ""}
-                      onChange={(event) => updateGeneralField(field.key, event.target.value)}
-                    />
-                  ) : field.inputType === "text" ? (
-                    <input
-                      type="text"
-                      value={generalDraft[field.key] || ""}
-                      onChange={(event) => updateGeneralField(field.key, event.target.value)}
-                    />
-                  ) : (
-                    <input
-                      type="number"
-                      step={field.step}
-                      value={generalDraft[field.key] || ""}
-                      onChange={(event) => updateGeneralField(field.key, event.target.value)}
-                    />
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      ) : null}
-
-      {draft ? (
-        <div className="page">
-          {activeSection === "lists"
-            ? LIST_SECTIONS.map((section) => (
-                <div className="panel" key={section}>
-                  <div className="panel-heading panel-heading-row">
-                    <div>
-                      <h2>{t(`rulesMeta.sections.${section}`)}</h2>
-                      <p className="muted">{t("rules.listSectionDescription")}</p>
-                    </div>
-                    {renderRulesSaveAction()}
-                  </div>
-                  <div className="detail-grid">
-                    {RULE_LIST_FIELDS.filter((field) => field.sectionKey === section).map((field) => {
-                      const meta = listFieldMeta(field);
-                      return (
-                        <div className="rule-field" key={field.key}>
-                          <FieldLabel
-                            label={meta.label}
-                            description={meta.description}
-                            recommendation={meta.recommendation}
-                          />
-                          <textarea
-                            className="note-box tall"
-                            value={listValuesToText(draft[field.key])}
-                            onChange={(event) => updateListField(field, event.target.value)}
-                          />
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              ))
-            : null}
-
-          {activeSection === "providers" ? (
-            <div className="panel">
-              <div className="panel-heading panel-heading-row">
-                <div>
-                  <h2>{t("rulesMeta.sections.providers")}</h2>
-                  <p className="muted">{t("rules.providerProfiles.description")}</p>
-                </div>
-                <div className="action-row">
-                  <button className="ghost" onClick={addProviderProfile}>
-                    {t("rules.providerProfiles.add")}
-                  </button>
-                  {renderRulesSaveAction()}
-                </div>
-              </div>
-              <div className="provider-profiles">
-                {(draft.provider_profiles || []).map((profile, index) => (
-                  <div className="provider-card" key={`${profile.key || "provider"}-${index}`}>
-                    <div className="provider-card-header">
-                      <div>
-                        <strong>
-                          {profile.key || t("rules.providerProfiles.cardTitle", { index: index + 1 })}
-                        </strong>
-                        <p className="muted">{t("rules.providerProfiles.cardSubtitle")}</p>
-                      </div>
-                      <button className="ghost small-button" onClick={() => removeProviderProfile(index)}>
-                        {t("rules.providerProfiles.remove")}
-                      </button>
-                    </div>
-                    <div className="form-grid">
-                      <div className="rule-field">
-                        <FieldLabel
-                          label={providerFieldMeta("key").label}
-                          description={providerFieldMeta("key").description}
-                        />
-                        <input
-                          value={profile.key}
-                          onChange={(event) => updateProviderProfile(index, { key: event.target.value })}
-                        />
-                      </div>
-                      <div className="rule-field">
-                        <FieldLabel
-                          label={providerFieldMeta("classification").label}
-                          description={providerFieldMeta("classification").description}
-                        />
-                        <select
-                          value={profile.classification}
-                          onChange={(event) =>
-                            updateProviderProfile(index, {
-                              classification: event.target.value as ProviderProfileDraft["classification"]
-                            })
-                          }
-                        >
-                          <option value="mixed">{t("rules.providerProfiles.classifications.mixed")}</option>
-                          <option value="mobile">{t("rules.providerProfiles.classifications.mobile")}</option>
-                          <option value="home">{t("rules.providerProfiles.classifications.home")}</option>
-                        </select>
-                      </div>
-                      <div className="rule-field rule-field-wide">
-                        <FieldLabel
-                          label={providerFieldMeta("aliases").label}
-                          description={providerFieldMeta("aliases").description}
-                        />
-                        <textarea
-                          className="note-box"
-                          value={listValuesToText(profile.aliases)}
-                          onChange={(event) =>
-                            updateProviderProfile(index, { aliases: parseListText(event.target.value) })
-                          }
-                        />
-                      </div>
-                      <div className="rule-field">
-                        <FieldLabel
-                          label={providerFieldMeta("mobile_markers").label}
-                          description={providerFieldMeta("mobile_markers").description}
-                        />
-                        <textarea
-                          className="note-box"
-                          value={listValuesToText(profile.mobile_markers)}
-                          onChange={(event) =>
-                            updateProviderProfile(index, { mobile_markers: parseListText(event.target.value) })
-                          }
-                        />
-                      </div>
-                      <div className="rule-field">
-                        <FieldLabel
-                          label={providerFieldMeta("home_markers").label}
-                          description={providerFieldMeta("home_markers").description}
-                        />
-                        <textarea
-                          className="note-box"
-                          value={listValuesToText(profile.home_markers)}
-                          onChange={(event) =>
-                            updateProviderProfile(index, { home_markers: parseListText(event.target.value) })
-                          }
-                        />
-                      </div>
-                      <div className="rule-field rule-field-wide">
-                        <FieldLabel
-                          label={providerFieldMeta("asns").label}
-                          description={providerFieldMeta("asns").description}
-                        />
-                        <textarea
-                          className="note-box"
-                          value={listValuesToText(profile.asns)}
-                          onChange={(event) =>
-                            updateProviderProfile(index, { asns: parseListText(event.target.value) })
-                          }
-                        />
-                      </div>
-                    </div>
-                  </div>
-                ))}
-                {(draft.provider_profiles || []).length === 0 ? (
-                  <div className="provider-empty">
-                    <span>{t("rules.providerProfiles.empty")}</span>
-                  </div>
-                ) : null}
-              </div>
-            </div>
-          ) : null}
-
-          {activeSection === "thresholds"
-            ? renderSettingPanel(
-                t("rules.sectionTitles.thresholds"),
-                t("rules.sectionDescriptions.thresholds"),
-                ["thresholds", "scores", "behavior"]
-              )
-            : null}
-
-          {activeSection === "policy" ? (
-            <>
-              {generalDraft ? (
-                <div className="panel">
-                  <div className="panel-heading panel-heading-row">
-                    <div>
-                      <h2>{t("rules.general.title")}</h2>
-                      <p className="muted">{t("rules.general.description")}</p>
-                    </div>
-                    <div className="action-row">
-                      <span className={generalDirty ? "tag review-only" : "tag severity-low"}>
-                        {generalDirty ? t("common.unsavedChanges") : t("common.saved")}
-                      </span>
-                      <button disabled={!generalDirty} onClick={saveGeneralSettings}>
-                        {t("rules.general.save")}
-                      </button>
-                    </div>
-                  </div>
-                  {generalError ? <div className="error-box">{generalError}</div> : null}
-                  {generalSaved ? <div className="ok-box">{generalSaved}</div> : null}
-                  <div className="form-grid">
-                    {GENERAL_SETTINGS_FIELDS.map((field) => {
-                      const meta = generalFieldMeta(field.key);
-                      return (
-                        <div
-                          className={field.inputType === "number-list" ? "rule-field rule-field-wide" : "rule-field"}
-                          key={field.key}
-                        >
-                          <FieldLabel label={meta.label} description={meta.description} />
-                          {field.inputType === "boolean" ? (
-                            <select
-                              value={generalDraft[field.key] || "false"}
-                              onChange={(event) => updateGeneralField(field.key, event.target.value)}
-                            >
-                              <option value="true">{t("common.true")}</option>
-                              <option value="false">{t("common.false")}</option>
-                            </select>
-                          ) : field.inputType === "number-list" ? (
-                            <textarea
-                              className="note-box tall"
-                              value={generalDraft[field.key] || ""}
-                              onChange={(event) => updateGeneralField(field.key, event.target.value)}
-                            />
-                          ) : field.inputType === "text" ? (
-                            <input
-                              type="text"
-                              value={generalDraft[field.key] || ""}
-                              onChange={(event) => updateGeneralField(field.key, event.target.value)}
-                            />
-                          ) : (
-                            <input
-                              type="number"
-                              step={field.step}
-                              value={generalDraft[field.key] || ""}
-                              onChange={(event) => updateGeneralField(field.key, event.target.value)}
-                            />
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              ) : null}
-
-              {renderSettingPanel(
-                t("rules.sectionTitles.policy"),
-                t("rules.sectionDescriptions.policy"),
-                ["policy"]
-              )}
-            </>
-          ) : null}
-
-          {activeSection === "learning"
-            ? renderSettingPanel(
-                t("rules.sectionTitles.learning"),
-                t("rules.sectionDescriptions.learning"),
-                ["learning"]
-              )
-            : null}
-        </div>
-      ) : null}
+      {renderSectionContent()}
     </section>
   );
 }

@@ -52,6 +52,7 @@ export const ruDictionary: TranslationDictionary = {
     },
     subnav: {
       rules: {
+        general: "Общие",
         thresholds: "Пороги",
         lists: "Списки",
         providers: "Провайдеры",
@@ -154,6 +155,8 @@ export const ruDictionary: TranslationDictionary = {
     searchPlaceholder: "Быстрый поиск по IP / username / ISP / UUID / IDs",
     clearFilters: "Сбросить фильтры",
     toggleFiltersTitle: "Переключить фильтры",
+    filtersButton: "Фильтры",
+    filterCount: "Фильтры ({count})",
     presets: {
       open: "Только open",
       providerConflict: "Provider conflict",
@@ -387,6 +390,7 @@ export const ruDictionary: TranslationDictionary = {
       learning: "Контроль learning"
     },
     sectionDescriptions: {
+      general: "Runtime-wide параметры эскалации, предупреждений и переключения доступа в отдельной вкладке.",
       thresholds: "Пороговые значения, веса скоринга и окна поведенческих сигналов в одном месте.",
       lists: "ASN- и keyword-списки, формирующие первичное доказательство и исключения.",
       providers: "Алиасы, markers и операторские подсказки для review-first сценариев.",
@@ -468,6 +472,7 @@ export const ruDictionary: TranslationDictionary = {
     adminTemplates: "Админские шаблоны",
     envTitle: "Telegram .env",
     envDescription: "Токены и usernames ботов редактируются отдельно от live runtime-настроек.",
+    envCount: "{present} из {total} задано",
     cards: {
       adminBot: "Админ-бот",
       userBot: "Пользовательский бот",
@@ -505,7 +510,8 @@ export const ruDictionary: TranslationDictionary = {
     listsTitle: "Списки доступа",
     listsDescription: "Администраторы панели и runtime-исключения управляются отдельно.",
     envTitle: "Access .env",
-    envDescription: "Локальные fallback-учётки живут в `.env`, а секреты меняются только явной заменой."
+    envDescription: "Локальные fallback-учётки живут в `.env`, а секреты меняются только явной заменой.",
+    envCount: "{present} из {total} задано"
   },
   data: {
     eyebrow: "Данные",

@@ -65,6 +65,20 @@
   gap: 0.35rem;
 }
 
+.compact-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.compact-toolbar-main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
 .panel-heading-row,
 .queue-card-top,
 .queue-card-meta,
@@ -99,6 +113,14 @@
 
 .search-strip input {
   flex: 1 1 320px;
+}
+
+.compact-search-strip {
+  align-items: stretch;
+}
+
+.compact-search-strip input {
+  min-width: 0;
 }
 
 .queue-grid,
@@ -339,8 +361,16 @@
   min-width: 0;
 }
 
+.compact-rule-field {
+  gap: 0.65rem;
+}
+
 .rule-field-wide {
   grid-column: 1 / -1;
+}
+
+.compact-form-grid {
+  gap: 0.75rem;
 }
 
 .provider-profiles {
@@ -387,6 +417,30 @@
   flex-direction: column;
 }
 
+.settings-group-collapsible {
+  overflow: hidden;
+}
+
+.settings-group-summary {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  align-items: center;
+  cursor: pointer;
+  list-style: none;
+}
+
+.settings-group-summary::-webkit-details-marker {
+  display: none;
+}
+
+.env-field-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  margin-top: 0.85rem;
+}
+
 .settings-file-row {
   padding: 0.85rem 1rem;
   border-radius: 16px;
@@ -397,6 +451,81 @@
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
+}
+
+.filter-drawer {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.metric-list,
+.record-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.metric-row,
+.record-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 0.9rem 1rem;
+  border-radius: 18px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.22);
+}
+
+:root[data-theme="dark"] .metric-row,
+:root[data-theme="dark"] .record-item {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.record-main {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  align-items: baseline;
+  flex-wrap: wrap;
+}
+
+.record-title {
+  font-weight: 600;
+}
+
+.record-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  color: var(--muted);
+}
+
+.record-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.record-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 0.6rem;
+}
+
+.record-kv {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.record-kv strong {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.compact-note-box {
+  min-height: 140px;
 }
 
 .info-tooltip {
