@@ -248,6 +248,10 @@
     grid-template-columns: 1fr;
   }
 
+  .review-detail-grid {
+    grid-template-columns: 1fr;
+  }
+
   .env-field-edit-grid {
     grid-template-columns: 1fr;
   }

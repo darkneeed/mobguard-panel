@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 
 import { api } from "../api/client";
 import { useToast } from "../components/ToastProvider";
@@ -45,16 +45,28 @@ type ReviewPayload = Record<string, unknown> & {
   related_cases?: RelatedCase[];
 };
 
+type ReviewQueueLocationState = {
+  reviewQueueSearch?: string;
+  reviewQueueItemIds?: number[];
+  reviewQueueCurrentIndex?: number;
+};
+
 export function ReviewDetailPage() {
   const { t, language } = useI18n();
   const { pushToast } = useToast();
   const { caseId = "" } = useParams();
+  const location = useLocation();
   const navigate = useNavigate();
   const [data, setData] = useState<ReviewPayload | null>(null);
   const [note, setNote] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [resolving, setResolving] = useState(false);
+  const queueState = (location.state as ReviewQueueLocationState | null) ?? null;
+  const queueReturnPath = useMemo(
+    () => (queueState?.reviewQueueSearch ? `/queue?${queueState.reviewQueueSearch}` : "/queue"),
+    [queueState?.reviewQueueSearch]
+  );
 
   useEffect(() => {
     setLoading(true);
@@ -67,6 +79,14 @@ export function ReviewDetailPage() {
 
   function formatValue(value: string | number | null | undefined): string {
     return value === null || value === undefined || value === "" ? t("common.notAvailable") : String(value);
+  }
+
+  function formatList(values: unknown): string {
+    if (!Array.isArray(values)) return t("common.notAvailable");
+    const items = values
+      .map((item) => String(item ?? "").trim())
+      .filter((item) => item.length > 0);
+    return items.length > 0 ? items.join(", ") : t("common.notAvailable");
   }
 
   async function copyValue(value: string | number | null | undefined) {
@@ -84,7 +104,50 @@ export function ReviewDetailPage() {
       setResolving(true);
       await api.resolveReview(caseId, resolution, note);
       pushToast("success", t("reviewDetail.resolution.saved"));
-      navigate("/");
+
+      if (!queueState?.reviewQueueSearch) {
+        navigate(queueReturnPath, { replace: true });
+        return;
+      }
+
+      try {
+        const nextQueue = await api.listReviews(
+          Object.fromEntries(new URLSearchParams(queueState.reviewQueueSearch).entries())
+        );
+        const nextIds = nextQueue.items.map((item) => item.id);
+        const currentIndex =
+          typeof queueState.reviewQueueCurrentIndex === "number"
+            ? queueState.reviewQueueCurrentIndex
+            : queueState.reviewQueueItemIds?.indexOf(Number(caseId)) ?? -1;
+        const nextFromCurrentOrder =
+          currentIndex >= 0
+            ? queueState.reviewQueueItemIds
+                ?.slice(currentIndex + 1)
+                .find((id) => nextIds.includes(id))
+            : undefined;
+        const fallbackItem =
+          nextQueue.items.length > 0
+            ? nextQueue.items[Math.min(Math.max(currentIndex, 0), nextQueue.items.length - 1)]
+            : undefined;
+        const nextCaseId = nextFromCurrentOrder ?? fallbackItem?.id;
+
+        if (nextCaseId !== undefined) {
+          navigate(`/reviews/${nextCaseId}`, {
+            replace: true,
+            state: {
+              reviewQueueSearch: queueState.reviewQueueSearch,
+              reviewQueueItemIds: nextIds,
+              reviewQueueCurrentIndex: nextIds.indexOf(nextCaseId)
+            } satisfies ReviewQueueLocationState
+          });
+          return;
+        }
+      } catch {
+        // If the follow-up queue refresh fails, keep the successful resolution
+        // and fall back to the queue view instead of surfacing a false failure.
+      }
+
+      navigate(queueReturnPath, { replace: true });
     } catch (err) {
       const message = err instanceof Error ? err.message : t("reviewDetail.errors.resolveFailed");
       setError(message);
@@ -98,20 +161,40 @@ export function ReviewDetailPage() {
   const reasons = (Array.isArray(bundle?.reasons) ? bundle?.reasons : []) as ReviewReason[];
   const signalFlags = (bundle?.signal_flags as Record<string, unknown> | undefined) || {};
   const providerEvidence = (signalFlags.provider_evidence as Record<string, unknown> | undefined) || {};
-  const homeSources = Array.from(new Set(reasons.filter((reason) => String(reason.direction).toUpperCase() === "HOME" && Number(reason.weight || 0) < 0).map((reason) => String(reason.source || ""))));
-  const mobileSources = Array.from(new Set(reasons.filter((reason) => String(reason.direction).toUpperCase() === "MOBILE" && Number(reason.weight || 0) > 0).map((reason) => String(reason.source || ""))));
+  const homeSources = Array.from(
+    new Set(
+      reasons
+        .filter(
+          (reason) =>
+            String(reason.direction).toUpperCase() === "HOME" && Number(reason.weight || 0) < 0
+        )
+        .map((reason) => String(reason.source || "").trim())
+        .filter((source) => source.length > 0)
+    )
+  );
+  const mobileSources = Array.from(
+    new Set(
+      reasons
+        .filter(
+          (reason) =>
+            String(reason.direction).toUpperCase() === "MOBILE" && Number(reason.weight || 0) > 0
+        )
+        .map((reason) => String(reason.source || "").trim())
+        .filter((source) => source.length > 0)
+    )
+  );
   const relatedCases = Array.isArray(data?.related_cases) ? data.related_cases : [];
   const resolutions = Array.isArray(data?.resolutions) ? data.resolutions : [];
 
   return (
-    <section className="page">
+    <section className="page review-detail-page">
       <div className="page-header page-header-stack">
         <div>
           <span className="eyebrow">{t("reviewDetail.eyebrow")}</span>
           <h1>{t("reviewDetail.title", { caseId })}</h1>
           <p className="page-lede">{t("reviewDetail.description")}</p>
         </div>
-        <button className="ghost small-button" onClick={() => navigate("/queue")}>
+        <button className="ghost small-button" onClick={() => navigate(queueReturnPath)}>
           {t("reviewDetail.backToQueue")}
         </button>
       </div>
@@ -174,15 +257,22 @@ export function ReviewDetailPage() {
               </dl>
             </div>
 
-            <div className="detail-grid">
+            <div className="detail-grid review-detail-grid">
               <div className="panel">
                 <h2>{t("reviewDetail.sections.reasons")}</h2>
-                <ul className="reason-list">
+                <ul className="reason-list review-detail-list">
+                  {reasons.length === 0 ? (
+                    <li className="review-detail-item review-detail-item-empty">
+                      <span className="review-detail-item-meta">{t("common.notAvailable")}</span>
+                    </li>
+                  ) : null}
                   {reasons.map((reason, index) => (
-                    <li key={`${String(reason.code)}-${index}`}>
-                      <strong>{formatValue(reason.code)}</strong>
-                      <span>{formatValue(reason.message)}</span>
-                      <span>{formatValue(reason.source)} · {formatValue(reason.direction)} · {formatValue(reason.weight)}</span>
+                    <li className="review-detail-item" key={`${String(reason.code)}-${index}`}>
+                      <strong className="review-detail-item-title">{formatValue(reason.code)}</strong>
+                      <span className="review-detail-item-copy">{formatValue(reason.message)}</span>
+                      <span className="review-detail-item-meta">
+                        {formatValue(reason.source)} · {formatValue(reason.direction)} · {formatValue(reason.weight)}
+                      </span>
                     </li>
                   ))}
                 </ul>
@@ -190,52 +280,92 @@ export function ReviewDetailPage() {
 
               <div className="panel">
                 <h2>{t("reviewDetail.sections.providerEvidence")}</h2>
-                <ul className="reason-list">
-                  <li>
-                    <strong>{formatValue(providerEvidence.provider_key as string | number | null | undefined)}</strong>
-                    <span>{formatValue(providerEvidence.provider_classification as string | number | null | undefined)} · {formatValue(providerEvidence.service_type_hint as string | number | null | undefined)}</span>
-                    <span>{Boolean(providerEvidence.service_conflict) ? t("reviewDetail.providerEvidence.conflict") : t("reviewDetail.providerEvidence.clear")}</span>
-                    <span>{Boolean(providerEvidence.review_recommended) ? t("reviewDetail.providerEvidence.reviewFirst") : t("reviewDetail.providerEvidence.autoReady")}</span>
+                <ul className="reason-list review-detail-list">
+                  <li className="review-detail-item">
+                    <strong className="review-detail-item-title">
+                      {formatValue(providerEvidence.provider_key as string | number | null | undefined)}
+                    </strong>
+                    <span className="review-detail-item-copy">
+                      {formatValue(providerEvidence.provider_classification as string | number | null | undefined)} · {formatValue(providerEvidence.service_type_hint as string | number | null | undefined)}
+                    </span>
+                    <span className="review-detail-item-meta">
+                      {Boolean(providerEvidence.service_conflict)
+                        ? t("reviewDetail.providerEvidence.conflict")
+                        : t("reviewDetail.providerEvidence.clear")}
+                    </span>
+                    <span className="review-detail-item-meta">
+                      {Boolean(providerEvidence.review_recommended)
+                        ? t("reviewDetail.providerEvidence.reviewFirst")
+                        : t("reviewDetail.providerEvidence.autoReady")}
+                    </span>
                   </li>
-                  <li>
-                    <strong>{t("reviewDetail.providerEvidence.homeSources")}</strong>
-                    <span>{homeSources.length > 0 ? homeSources.join(", ") : t("common.notAvailable")}</span>
+                  <li className="review-detail-item">
+                    <strong className="review-detail-item-title">
+                      {t("reviewDetail.providerEvidence.homeSources")}
+                    </strong>
+                    <span className="review-detail-item-copy">
+                      {homeSources.length > 0 ? homeSources.join(", ") : t("common.notAvailable")}
+                    </span>
                   </li>
-                  <li>
-                    <strong>{t("reviewDetail.providerEvidence.mobileSources")}</strong>
-                    <span>{mobileSources.length > 0 ? mobileSources.join(", ") : t("common.notAvailable")}</span>
+                  <li className="review-detail-item">
+                    <strong className="review-detail-item-title">
+                      {t("reviewDetail.providerEvidence.mobileSources")}
+                    </strong>
+                    <span className="review-detail-item-copy">
+                      {mobileSources.length > 0 ? mobileSources.join(", ") : t("common.notAvailable")}
+                    </span>
                   </li>
-                  <li>
-                    <strong>{t("reviewDetail.providerEvidence.matchedAliases")}</strong>
-                    <span>{Array.isArray(providerEvidence.matched_aliases) && providerEvidence.matched_aliases.length > 0 ? providerEvidence.matched_aliases.join(", ") : t("common.notAvailable")}</span>
+                  <li className="review-detail-item">
+                    <strong className="review-detail-item-title">
+                      {t("reviewDetail.providerEvidence.matchedAliases")}
+                    </strong>
+                    <span className="review-detail-item-copy">
+                      {formatList(providerEvidence.matched_aliases)}
+                    </span>
                   </li>
-                  <li>
-                    <strong>{t("reviewDetail.providerEvidence.mobileMarkers")}</strong>
-                    <span>{Array.isArray(providerEvidence.provider_mobile_markers) && providerEvidence.provider_mobile_markers.length > 0 ? providerEvidence.provider_mobile_markers.join(", ") : t("common.notAvailable")}</span>
+                  <li className="review-detail-item">
+                    <strong className="review-detail-item-title">
+                      {t("reviewDetail.providerEvidence.mobileMarkers")}
+                    </strong>
+                    <span className="review-detail-item-copy">
+                      {formatList(providerEvidence.provider_mobile_markers)}
+                    </span>
                   </li>
-                  <li>
-                    <strong>{t("reviewDetail.providerEvidence.homeMarkers")}</strong>
-                    <span>{Array.isArray(providerEvidence.provider_home_markers) && providerEvidence.provider_home_markers.length > 0 ? providerEvidence.provider_home_markers.join(", ") : t("common.notAvailable")}</span>
+                  <li className="review-detail-item">
+                    <strong className="review-detail-item-title">
+                      {t("reviewDetail.providerEvidence.homeMarkers")}
+                    </strong>
+                    <span className="review-detail-item-copy">
+                      {formatList(providerEvidence.provider_home_markers)}
+                    </span>
                   </li>
                 </ul>
               </div>
 
               <div className="panel">
                 <h2>{t("reviewDetail.sections.log")}</h2>
-                <pre className="log-box">{Array.isArray(bundle?.log) ? bundle?.log.join("\n") : ""}</pre>
+                <pre className="log-box review-detail-log">
+                  {Array.isArray(bundle?.log) ? bundle?.log.join("\n") : ""}
+                </pre>
               </div>
 
               <div className="panel">
                 <h2>{t("reviewDetail.sections.history")}</h2>
-                <ul className="reason-list">
-                  {resolutions.length === 0 ? <li><span>{t("reviewDetail.history.empty")}</span></li> : null}
+                <ul className="reason-list review-detail-list">
+                  {resolutions.length === 0 ? (
+                    <li className="review-detail-item review-detail-item-empty">
+                      <span className="review-detail-item-meta">{t("reviewDetail.history.empty")}</span>
+                    </li>
+                  ) : null}
                   {resolutions.map((resolution) => (
-                    <li key={String(resolution.id)}>
-                      <strong>{formatValue(resolution.resolution)}</strong>
-                      <span>
+                    <li className="review-detail-item" key={String(resolution.id)}>
+                      <strong className="review-detail-item-title">
+                        {formatValue(resolution.resolution)}
+                      </strong>
+                      <span className="review-detail-item-copy">
                         {formatValue(resolution.actor)} · {formatDisplayDateTime(resolution.created_at, t("common.notAvailable"), language)}
                       </span>
-                      <span>{formatValue(resolution.note)}</span>
+                      <span className="review-detail-item-meta">{formatValue(resolution.note)}</span>
                     </li>
                   ))}
                 </ul>
@@ -243,18 +373,26 @@ export function ReviewDetailPage() {
 
               <div className="panel">
                 <h2>{t("reviewDetail.sections.linkedContext")}</h2>
-                <ul className="reason-list">
-                  {relatedCases.length === 0 ? <li><span>{t("reviewDetail.linkedCases.empty")}</span></li> : null}
+                <ul className="reason-list review-detail-list">
+                  {relatedCases.length === 0 ? (
+                    <li className="review-detail-item review-detail-item-empty">
+                      <span className="review-detail-item-meta">{t("reviewDetail.linkedCases.empty")}</span>
+                    </li>
+                  ) : null}
                   {relatedCases.map((item) => (
-                    <li key={String(item.id)}>
-                      <strong>{t("reviewDetail.linkedCases.caseLabel", { id: formatValue(item.id) })}</strong>
-                      <span>
+                    <li className="review-detail-item" key={String(item.id)}>
+                      <strong className="review-detail-item-title">
+                        {t("reviewDetail.linkedCases.caseLabel", { id: formatValue(item.id) })}
+                      </strong>
+                      <span className="review-detail-item-copy">
                         {formatValue(item.username)} · {formatValue(item.ip)} · {formatValue(item.verdict)} / {formatValue(item.confidence_band)}
                       </span>
-                      <span>
+                      <span className="review-detail-item-meta">
                         {formatValue(item.system_id)} · {formatValue(item.telegram_id)} · {formatValue(item.uuid)}
                       </span>
-                      <span>{formatDisplayDateTime(item.updated_at, t("common.notAvailable"), language)}</span>
+                      <span className="review-detail-item-meta">
+                        {formatDisplayDateTime(item.updated_at, t("common.notAvailable"), language)}
+                      </span>
                     </li>
                   ))}
                 </ul>

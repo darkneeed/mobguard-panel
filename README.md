@@ -30,6 +30,22 @@ Backward-compatible fallback for older installs is still supported:
 
 - `PANEL_TOKEN` may be used instead of `REMNAWAVE_API_TOKEN`
 
+## Test
+
+Backend:
+
+```bash
+pytest -q
+```
+
+Frontend:
+
+```bash
+cd web
+npm test -- --run
+npm run build
+```
+
 ## Build
 
 Windows:

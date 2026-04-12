@@ -31,6 +31,9 @@ jobs:
       - name: Clean install
         run: npm ci
 
+      - name: Frontend tests
+        run: npm test -- --run
+
       - name: Frontend build
         run: npm run build
 

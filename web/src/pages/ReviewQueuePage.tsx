@@ -119,6 +119,8 @@ export function ReviewQueuePage() {
     () => ({ ...filters, q: debouncedQuery }),
     [filters, debouncedQuery]
   );
+  const queueSearch = useMemo(() => buildSearchParams(effectiveFilters), [effectiveFilters]);
+  const visibleQueueIds = useMemo(() => list.items.map((item) => item.id), [list.items]);
 
   function formatIdentifier(label: string, value: string | number | null | undefined) {
     return `${label}: ${value === null || value === undefined || value === "" ? t("common.notAvailable") : value}`;
@@ -530,7 +532,7 @@ export function ReviewQueuePage() {
 
       {!loading ? (
         <div className="queue-grid review-queue-grid">
-        {list.items.map((item) => (
+        {list.items.map((item, index) => (
           <article key={item.id} className="queue-card">
             <div className="queue-card-top">
               <label className="inline-check queue-check">
@@ -584,6 +586,11 @@ export function ReviewQueuePage() {
             <div className="action-row queue-card-actions">
               <Link
                 to={`/reviews/${item.id}`}
+                state={{
+                  reviewQueueSearch: queueSearch,
+                  reviewQueueItemIds: visibleQueueIds,
+                  reviewQueueCurrentIndex: index
+                }}
                 className="button-link ghost small-button"
                 onMouseEnter={() => prefetchRouteModule(`/reviews/${item.id}`)}
                 onFocus={() => prefetchRouteModule(`/reviews/${item.id}`)}
