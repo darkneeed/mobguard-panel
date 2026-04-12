@@ -3,6 +3,7 @@ import { MemoryRouter, Outlet } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 
 import { AppRouter } from "./AppRouter";
+import { LanguageProvider } from "../localization";
 
 vi.mock("../components/Layout", () => ({
   Layout: () => (
@@ -30,6 +31,13 @@ describe("AppRouter", () => {
     },
     language: "en" as const,
     setLanguage: vi.fn(),
+    branding: {
+      panel_name: "MobGuard",
+      panel_logo_url: ""
+    },
+    setBranding: vi.fn(),
+    palette: "green" as const,
+    setPalette: vi.fn(),
     theme: "system" as const,
     setTheme: vi.fn(),
     setSession: vi.fn(),
@@ -39,7 +47,9 @@ describe("AppRouter", () => {
   it("redirects root to overview", async () => {
     render(
       <MemoryRouter initialEntries={["/"]}>
-        <AppRouter {...baseProps} />
+        <LanguageProvider language="en" setLanguage={() => undefined}>
+          <AppRouter {...baseProps} />
+        </LanguageProvider>
       </MemoryRouter>
     );
 
@@ -49,7 +59,9 @@ describe("AppRouter", () => {
   it("supports nested rules and data routes", async () => {
     render(
       <MemoryRouter initialEntries={["/rules/policy", "/data/cache"]} initialIndex={0}>
-        <AppRouter {...baseProps} />
+        <LanguageProvider language="en" setLanguage={() => undefined}>
+          <AppRouter {...baseProps} />
+        </LanguageProvider>
       </MemoryRouter>
     );
 
@@ -59,7 +71,9 @@ describe("AppRouter", () => {
   it("redirects /rules to the dedicated general tab route", async () => {
     render(
       <MemoryRouter initialEntries={["/rules"]}>
-        <AppRouter {...baseProps} />
+        <LanguageProvider language="en" setLanguage={() => undefined}>
+          <AppRouter {...baseProps} />
+        </LanguageProvider>
       </MemoryRouter>
     );
 

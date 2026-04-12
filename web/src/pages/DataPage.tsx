@@ -318,6 +318,12 @@ export function DataPage() {
     return translated === `data.exports.warnings.${code}` ? code : translated;
   }
 
+  function formatDecisionLabel(value: unknown): string {
+    const key = `data.decisions.${String(value || "").toLowerCase()}`;
+    const translated = t(key);
+    return translated === key ? displayValue(value) : translated;
+  }
+
   function formatReadinessCheckLabel(key: string): string {
     const translated = t(`data.exports.readiness.checks.${key}`);
     return translated === `data.exports.readiness.checks.${key}` ? key.replace(/_/g, " ") : translated;
@@ -596,9 +602,9 @@ export function DataPage() {
           <div className="action-row">
             <input placeholder={t("data.overrides.ipPlaceholder")} value={exactOverrideIp} onChange={(event) => setExactOverrideIp(event.target.value)} />
             <select value={exactOverrideDecision} onChange={(event) => setExactOverrideDecision(event.target.value)}>
-              <option value="HOME">HOME</option>
-              <option value="MOBILE">MOBILE</option>
-              <option value="SKIP">SKIP</option>
+              <option value="HOME">{t("data.decisions.home")}</option>
+              <option value="MOBILE">{t("data.decisions.mobile")}</option>
+              <option value="SKIP">{t("data.decisions.skip")}</option>
             </select>
             <button disabled={isPending("exactOverride")} onClick={saveExactOverride}>{t("data.overrides.save")}</button>
           </div>
@@ -607,7 +613,7 @@ export function DataPage() {
               <div className="record-item" key={String(item.ip)}>
                 <div className="record-main">
                   <span className="record-title">{String(item.ip)}</span>
-                  <span className="tag">{String(item.decision)}</span>
+                  <span className="tag">{formatDecisionLabel(item.decision)}</span>
                 </div>
                 <div className="record-meta">
                   <span>{t("data.overrides.expires", { value: formatDisplayDateTime(String(item.expires_at ?? ""), t("common.notAvailable"), language) })}</span>
@@ -632,9 +638,9 @@ export function DataPage() {
           <div className="action-row">
             <input placeholder={t("data.overrides.ipPatternPlaceholder")} value={unsureOverrideIp} onChange={(event) => setUnsureOverrideIp(event.target.value)} />
             <select value={unsureOverrideDecision} onChange={(event) => setUnsureOverrideDecision(event.target.value)}>
-              <option value="HOME">HOME</option>
-              <option value="MOBILE">MOBILE</option>
-              <option value="SKIP">SKIP</option>
+              <option value="HOME">{t("data.decisions.home")}</option>
+              <option value="MOBILE">{t("data.decisions.mobile")}</option>
+              <option value="SKIP">{t("data.decisions.skip")}</option>
             </select>
             <button disabled={isPending("unsureOverride")} onClick={saveUnsureOverride}>{t("data.overrides.save")}</button>
           </div>
@@ -643,7 +649,7 @@ export function DataPage() {
               <div className="record-item" key={String(item.ip_pattern)}>
                 <div className="record-main">
                   <span className="record-title">{String(item.ip_pattern)}</span>
-                  <span className="tag">{String(item.decision)}</span>
+                  <span className="tag">{formatDecisionLabel(item.decision)}</span>
                 </div>
                 <div className="record-meta">
                   <span>{formatDisplayDateTime(String(item.timestamp ?? ""), t("common.notAvailable"), language)}</span>
@@ -681,7 +687,7 @@ export function DataPage() {
                   <span className="tag">{String(item.status)} / {String(item.confidence)}</span>
                 </div>
                 <div className="record-meta">
-                  <span>ASN {displayValue(item.asn)}</span>
+                  <span>{t("data.cache.asnValue", { value: displayValue(item.asn) })}</span>
                   <span>{String(item.details || t("common.notAvailable"))}</span>
                 </div>
                 <div className="record-actions">

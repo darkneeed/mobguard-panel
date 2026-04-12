@@ -1,27 +1,33 @@
 import { useEffect } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 
+import { BrandingConfig } from "../api/client";
 import { getSecondaryNavigation, primaryNavigation } from "../app/navigation";
+import { PaletteName, ThemeMode } from "../app/appearance";
 import { prefetchRouteModule } from "../app/routeModules";
 import { BrandLogo } from "./BrandLogo";
 import { Language, useI18n } from "../localization";
 
-type ThemeMode = "light" | "dark" | "system";
-
 type LayoutProps = {
+  branding: BrandingConfig;
   onLogout: () => void;
   username?: string;
   language: Language;
   onLanguageChange: (language: Language) => void;
+  palette: PaletteName;
+  onPaletteChange: (palette: PaletteName) => void;
   theme: ThemeMode;
   onThemeChange: (theme: ThemeMode) => void;
 };
 
 export function Layout({
+  branding,
   onLogout,
   username,
   language,
   onLanguageChange,
+  palette,
+  onPaletteChange,
   theme,
   onThemeChange
 }: LayoutProps) {
@@ -52,9 +58,9 @@ export function Layout({
     <div className="shell app-shell">
       <aside className="sidebar">
         <Link to="/" className="brand">
-          <BrandLogo />
+          <BrandLogo logoUrl={branding.panel_logo_url} alt={branding.panel_name} />
           <div>
-            <strong>MobGuard</strong>
+            <strong>{branding.panel_name}</strong>
             <small>{t("layout.brandSubtitle")}</small>
           </div>
         </Link>
@@ -86,6 +92,16 @@ export function Layout({
             <select value={language} onChange={(event) => onLanguageChange(event.target.value as Language)}>
               <option value="ru">{t("layout.language.ru")}</option>
               <option value="en">{t("layout.language.en")}</option>
+            </select>
+          </label>
+          <label className="theme-picker">
+            <span>{t("layout.palette.label")}</span>
+            <select value={palette} onChange={(event) => onPaletteChange(event.target.value as PaletteName)}>
+              <option value="green">{t("layout.palette.green")}</option>
+              <option value="orange">{t("layout.palette.orange")}</option>
+              <option value="blue">{t("layout.palette.blue")}</option>
+              <option value="purple">{t("layout.palette.purple")}</option>
+              <option value="red">{t("layout.palette.red")}</option>
             </select>
           </label>
           <label className="theme-picker">

@@ -298,10 +298,10 @@ export function OverviewPage() {
                       <span className="record-title">{item.provider_key}</span>
                     </div>
                     <div className="record-grid">
-                      <div className="record-kv"><strong>Open</strong><span>{item.open_cases}</span></div>
-                      <div className="record-kv"><strong>Conflicts</strong><span>{item.conflict_cases}</span></div>
-                      <div className="record-kv"><strong>HOME</strong><span>{item.home_cases}</span></div>
-                      <div className="record-kv"><strong>MOBILE</strong><span>{item.mobile_cases}</span></div>
+                      <div className="record-kv"><strong>{t("overview.mixedProvidersMetrics.open")}</strong><span>{item.open_cases}</span></div>
+                      <div className="record-kv"><strong>{t("overview.mixedProvidersMetrics.conflicts")}</strong><span>{item.conflict_cases}</span></div>
+                      <div className="record-kv"><strong>{t("overview.mixedProvidersMetrics.home")}</strong><span>{item.home_cases}</span></div>
+                      <div className="record-kv"><strong>{t("overview.mixedProvidersMetrics.mobile")}</strong><span>{item.mobile_cases}</span></div>
                     </div>
                     <div className="record-meta">
                       {t("overview.mixedProvidersItem", {

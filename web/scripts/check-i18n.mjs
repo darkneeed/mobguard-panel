@@ -22,6 +22,68 @@ function collectKeys(value, prefix = "") {
   );
 }
 
+function walkFiles(targetPath) {
+  const stats = fs.statSync(targetPath);
+  if (stats.isFile()) {
+    return [targetPath];
+  }
+
+  return fs.readdirSync(targetPath).flatMap((entry) =>
+    walkFiles(path.join(targetPath, entry))
+  );
+}
+
+function shouldScanFile(filePath) {
+  return (
+    filePath.endsWith(".tsx") &&
+    !filePath.endsWith(".test.tsx") &&
+    !filePath.includes(`${path.sep}localization${path.sep}`)
+  );
+}
+
+const rawTextAllowlist = [
+  /^https?:\/\/example\.com\/logo\.png$/,
+];
+
+function isAllowedRawText(text) {
+  return rawTextAllowlist.some((pattern) => pattern.test(text));
+}
+
+function isCodeLikeRawText(text) {
+  return /Promise|\.join\(|=>|\)\s*:\s*|^\d+\s*\?|^\?\s|:\s*t\(/.test(text);
+}
+
+function collectRawUiTextIssues(filePath) {
+  const source = fs.readFileSync(filePath, "utf8");
+  const lines = source.split(/\r?\n/);
+  const issues = [];
+  const jsxTextPattern = />\s*([^<{>=]*[A-Za-zА-Яа-я][^<{>=]*)\s*</g;
+  const jsxInterpolatedPattern = />\s*([^<{>=]*[A-Za-zА-Яа-я][^<{>=]*)\{[^}]+\}([^<>=]*)\s*</g;
+  const visiblePropPattern = /\b(?:placeholder|title|aria-label)\s*=\s*"([^"]*[A-Za-zА-Яа-я][^"]*)"/g;
+
+  lines.forEach((line, index) => {
+    const hasJsxTag = /<[^>]+>.*<\/[A-Za-z]/.test(line);
+    const patterns = hasJsxTag
+      ? [jsxTextPattern, jsxInterpolatedPattern, visiblePropPattern]
+      : [visiblePropPattern];
+    for (const pattern of patterns) {
+      for (const match of line.matchAll(pattern)) {
+        const rawText = match
+          .slice(1)
+          .filter(Boolean)
+          .join("")
+          .trim();
+        if (!rawText || isAllowedRawText(rawText) || isCodeLikeRawText(rawText)) {
+          continue;
+        }
+        issues.push(`${filePath}:${index + 1}: ${rawText}`);
+      }
+    }
+  });
+
+  return issues;
+}
+
 const ru = loadDictionary(path.join(root, "src", "localization", "dictionaries", "ru.ts"));
 const en = loadDictionary(path.join(root, "src", "localization", "dictionaries", "en.ts"));
 
@@ -40,6 +102,21 @@ if (onlyRu.length || onlyEn.length) {
     console.error("Missing in ru:");
     console.error(onlyEn.join("\n"));
   }
+  process.exit(1);
+}
+
+const scanTargets = [
+  ...walkFiles(path.join(root, "src", "components")),
+  ...walkFiles(path.join(root, "src", "pages")),
+  path.join(root, "src", "App.tsx"),
+  path.join(root, "src", "app", "AppRouter.tsx"),
+].filter(shouldScanFile);
+
+const rawUiIssues = scanTargets.flatMap(collectRawUiTextIssues);
+
+if (rawUiIssues.length) {
+  console.error("Raw UI text found outside localization:");
+  console.error(rawUiIssues.join("\n"));
   process.exit(1);
 }
 

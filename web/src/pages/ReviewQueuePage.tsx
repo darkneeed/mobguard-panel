@@ -28,6 +28,8 @@ type ReviewFilters = {
   sort: string;
 };
 
+const PAGE_SIZE_OPTIONS = [12, 24, 48, 96];
+
 const DEFAULT_FILTERS: ReviewFilters = {
   status: "OPEN",
   confidence_band: "",
@@ -44,9 +46,14 @@ const DEFAULT_FILTERS: ReviewFilters = {
   repeat_count_min: "",
   repeat_count_max: "",
   page: 1,
-  page_size: 25,
+  page_size: 24,
   sort: "updated_desc"
 };
+
+function normalizePageSize(value: string | null): number {
+  const parsed = Number(value || DEFAULT_FILTERS.page_size);
+  return PAGE_SIZE_OPTIONS.includes(parsed) ? parsed : DEFAULT_FILTERS.page_size;
+}
 
 function normalizeFilters(searchParams: URLSearchParams): ReviewFilters {
   return {
@@ -65,7 +72,7 @@ function normalizeFilters(searchParams: URLSearchParams): ReviewFilters {
     repeat_count_min: searchParams.get("repeat_count_min") ?? "",
     repeat_count_max: searchParams.get("repeat_count_max") ?? "",
     page: Number(searchParams.get("page") || DEFAULT_FILTERS.page),
-    page_size: Number(searchParams.get("page_size") || DEFAULT_FILTERS.page_size),
+    page_size: normalizePageSize(searchParams.get("page_size")),
     sort: searchParams.get("sort") ?? DEFAULT_FILTERS.sort
   };
 }
@@ -79,7 +86,7 @@ export function ReviewQueuePage() {
     items: [],
     count: 0,
     page: 1,
-    page_size: 25
+    page_size: DEFAULT_FILTERS.page_size
   });
   const [error, setError] = useState("");
   const [resolvingId, setResolvingId] = useState<number | null>(null);
@@ -301,6 +308,26 @@ export function ReviewQueuePage() {
           <button className="ghost icon-button" onClick={() => setFilters(DEFAULT_FILTERS)} title={t("reviewQueue.clearFilters")}>
             {t("reviewQueue.clearFilters")}
           </button>
+          <label className="queue-page-size-picker">
+            <span>{t("reviewQueue.pageSize.label")}</span>
+            <select
+              aria-label={t("reviewQueue.pageSize.label")}
+              value={filters.page_size}
+              onChange={(event) =>
+                setFilters((prev) => ({
+                  ...prev,
+                  page_size: Number(event.target.value),
+                  page: 1
+                }))
+              }
+            >
+              {PAGE_SIZE_OPTIONS.map((size) => (
+                <option key={size} value={size}>
+                  {t("reviewQueue.pageSize.option", { value: size })}
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
         <div className="queue-bulkbar">
           <div className="queue-bulkbar-meta">
@@ -415,9 +442,9 @@ export function ReviewQueuePage() {
           value={filters.status}
           onChange={(event) => setFilters((prev) => ({ ...prev, status: event.target.value, page: 1 }))}
         >
-          <option value="OPEN">OPEN</option>
-          <option value="RESOLVED">RESOLVED</option>
-          <option value="SKIPPED">SKIPPED</option>
+          <option value="OPEN">{t("reviewQueue.filters.statusOpen")}</option>
+          <option value="RESOLVED">{t("reviewQueue.filters.statusResolved")}</option>
+          <option value="SKIPPED">{t("reviewQueue.filters.statusSkipped")}</option>
           <option value="">{t("reviewQueue.filters.allStatus")}</option>
         </select>
         <select
@@ -427,9 +454,9 @@ export function ReviewQueuePage() {
           }
         >
           <option value="">{t("reviewQueue.filters.allConfidence")}</option>
-          <option value="UNSURE">UNSURE</option>
-          <option value="PROBABLE_HOME">PROBABLE_HOME</option>
-          <option value="HIGH_HOME">HIGH_HOME</option>
+          <option value="UNSURE">{t("reviewQueue.filters.confidenceUnsure")}</option>
+          <option value="PROBABLE_HOME">{t("reviewQueue.filters.confidenceProbableHome")}</option>
+          <option value="HIGH_HOME">{t("reviewQueue.filters.confidenceHighHome")}</option>
         </select>
         <select
           value={filters.review_reason}
@@ -438,21 +465,21 @@ export function ReviewQueuePage() {
           }
         >
           <option value="">{t("reviewQueue.filters.allReasons")}</option>
-          <option value="unsure">unsure</option>
-          <option value="probable_home">probable_home</option>
-          <option value="home_requires_review">home_requires_review</option>
-          <option value="manual_review_mixed_home">manual_review_mixed_home</option>
-          <option value="provider_conflict">provider_conflict</option>
+          <option value="unsure">{t("reviewQueue.filters.reasonUnsure")}</option>
+          <option value="probable_home">{t("reviewQueue.filters.reasonProbableHome")}</option>
+          <option value="home_requires_review">{t("reviewQueue.filters.reasonHomeRequiresReview")}</option>
+          <option value="manual_review_mixed_home">{t("reviewQueue.filters.reasonManualMixedHome")}</option>
+          <option value="provider_conflict">{t("reviewQueue.filters.reasonProviderConflict")}</option>
         </select>
         <select
           value={filters.severity}
           onChange={(event) => setFilters((prev) => ({ ...prev, severity: event.target.value, page: 1 }))}
         >
           <option value="">{t("reviewQueue.filters.allSeverity")}</option>
-          <option value="critical">critical</option>
-          <option value="high">high</option>
-          <option value="medium">medium</option>
-          <option value="low">low</option>
+          <option value="critical">{t("reviewQueue.filters.severityCritical")}</option>
+          <option value="high">{t("reviewQueue.filters.severityHigh")}</option>
+          <option value="medium">{t("reviewQueue.filters.severityMedium")}</option>
+          <option value="low">{t("reviewQueue.filters.severityLow")}</option>
         </select>
         <select
           value={filters.punitive_eligible}
@@ -479,7 +506,7 @@ export function ReviewQueuePage() {
       {error ? <div className="error-box">{error}</div> : null}
 
       {loading ? (
-        <div className="queue-grid">
+        <div className="queue-grid review-queue-grid">
           {Array.from({ length: 6 }).map((_, index) => (
             <div className="queue-card skeleton-card" key={index}>
               <div className="queue-card-top">
@@ -502,7 +529,7 @@ export function ReviewQueuePage() {
       ) : null}
 
       {!loading ? (
-        <div className="queue-grid">
+        <div className="queue-grid review-queue-grid">
         {list.items.map((item) => (
           <article key={item.id} className="queue-card">
             <div className="queue-card-top">
@@ -533,7 +560,7 @@ export function ReviewQueuePage() {
               </div>
               <div className="queue-card-meta">
                 <span>{t("reviewQueue.card.asn")}</span>
-                <strong>AS{item.asn ?? "?"}</strong>
+                <strong>{t("reviewQueue.card.asnValue", { value: item.asn ?? "?" })}</strong>
               </div>
               <div className="queue-card-meta">
                 <span>{t("reviewQueue.card.decision")}</span>
@@ -588,6 +615,26 @@ export function ReviewQueuePage() {
       ) : null}
 
       <div className="panel queue-footer">
+        <label className="queue-page-size-picker queue-footer-page-size">
+          <span>{t("reviewQueue.pageSize.label")}</span>
+          <select
+            aria-label={t("reviewQueue.pageSize.label")}
+            value={filters.page_size}
+            onChange={(event) =>
+              setFilters((prev) => ({
+                ...prev,
+                page_size: Number(event.target.value),
+                page: 1
+              }))
+            }
+          >
+            {PAGE_SIZE_OPTIONS.map((size) => (
+              <option key={size} value={size}>
+                {t("reviewQueue.pageSize.option", { value: size })}
+              </option>
+            ))}
+          </select>
+        </label>
         <button
           className="ghost"
           disabled={filters.page <= 1}

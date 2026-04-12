@@ -445,7 +445,7 @@ export function QualityPage() {
                     <span className="tag">{item.decision}</span>
                   </div>
                   <div className="record-meta">
-                    <span>confidence {item.confidence}</span>
+                    <span>{t("quality.legacyConfidenceValue", { value: item.confidence })}</span>
                     <span>{formatDisplayDateTime(item.timestamp, t("common.notAvailable"), language)}</span>
                   </div>
                 </div>

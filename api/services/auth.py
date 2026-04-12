@@ -11,6 +11,12 @@ from ..context import APIContainer
 from .runtime_state import get_auth_capabilities, load_env_values
 
 
+BRANDING_DEFAULTS = {
+    "panel_name": "MobGuard",
+    "panel_logo_url": "",
+}
+
+
 def build_local_session_payload(username: str) -> dict[str, Any]:
     return {
         "id": 0,
@@ -45,10 +51,13 @@ def clear_session_cookie(container: APIContainer, response: Response) -> None:
 def auth_start_payload(container: APIContainer) -> dict[str, Any]:
     env_values = load_env_values(container)
     rules_state = container.store.get_live_rules_state()
+    runtime_settings = getattr(getattr(container, "runtime", None), "config", {}) or {}
+    settings = runtime_settings.get("settings", {}) if isinstance(runtime_settings, dict) else {}
     return {
         **get_auth_capabilities(container, env_values),
         "review_ui_base_url": rules_state["rules"].get("settings", {}).get("review_ui_base_url", ""),
-        "panel_name": "MobGuard Admin",
+        "panel_name": str(settings.get("panel_name") or BRANDING_DEFAULTS["panel_name"]),
+        "panel_logo_url": str(settings.get("panel_logo_url") or BRANDING_DEFAULTS["panel_logo_url"]),
     }
 
 

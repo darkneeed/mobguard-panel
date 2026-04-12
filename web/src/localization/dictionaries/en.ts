@@ -77,6 +77,14 @@ export const enDictionary: TranslationDictionary = {
       light: "Light",
       dark: "Dark"
     },
+    palette: {
+      label: "Palette",
+      green: "Green",
+      orange: "Orange",
+      blue: "Blue",
+      purple: "Purple",
+      red: "Red"
+    },
     language: {
       label: "Language",
       ru: "rus",
@@ -125,6 +133,12 @@ export const enDictionary: TranslationDictionary = {
     mixedProvidersTitle: "Top mixed providers",
     mixedProvidersDescription: "Providers that keep landing in review-first or conflict-heavy states.",
     mixedProvidersItem: "{open} open · {conflict} conflicts · {home} HOME · {mobile} MOBILE",
+    mixedProvidersMetrics: {
+      open: "Open",
+      conflicts: "Conflicts",
+      home: "HOME",
+      mobile: "MOBILE"
+    },
     emptyMixedProviders: "No mixed-provider hotspots right now.",
     noisyAsnTitle: "Noisy ASNs",
     noisyAsnDescription: "ASNs contributing the largest moderation load.",
@@ -175,9 +189,24 @@ export const enDictionary: TranslationDictionary = {
       telegramId: "Telegram ID",
       repeatMin: "Repeat count min",
       repeatMax: "Repeat count max",
+      statusOpen: "OPEN",
+      statusResolved: "RESOLVED",
+      statusSkipped: "SKIPPED",
       allStatus: "All status",
+      confidenceUnsure: "UNSURE",
+      confidenceProbableHome: "PROBABLE_HOME",
+      confidenceHighHome: "HIGH_HOME",
       allConfidence: "All confidence",
+      reasonUnsure: "unsure",
+      reasonProbableHome: "probable_home",
+      reasonHomeRequiresReview: "home_requires_review",
+      reasonManualMixedHome: "manual_review_mixed_home",
+      reasonProviderConflict: "provider_conflict",
       allReasons: "All reasons",
+      severityCritical: "critical",
+      severityHigh: "high",
+      severityMedium: "medium",
+      severityLow: "low",
       allSeverity: "All severity",
       punitiveAny: "Punitive any",
       punitiveOnly: "punitive only",
@@ -201,11 +230,16 @@ export const enDictionary: TranslationDictionary = {
     card: {
       ip: "IP",
       asn: "ASN",
+      asnValue: "AS{value}",
       decision: "Decision",
       punitiveEligible: "punitive eligible",
       reviewOnly: "review only",
       repeat: "repeat x{count}",
       opened: "opened {value}"
+    },
+    pageSize: {
+      label: "Cards per page",
+      option: "{value}"
     },
     actions: {
       mobile: "Mobile",
@@ -512,6 +546,17 @@ export const enDictionary: TranslationDictionary = {
       telegramPanel: "Telegram panel auth",
       localFallback: "Local fallback auth"
     },
+    brandingTitle: "Service branding",
+    brandingDescription: "Set the service name and logo URL used across login, loading, and the operator shell.",
+    brandingSaved: "Branding updated",
+    saveBranding: "Save branding",
+    brandingFields: {
+      serviceName: "Service name",
+      serviceNameDescription: "Visible service name in the panel shell and login screen.",
+      logoUrl: "Logo URL",
+      logoUrlDescription: "Public image URL for the service logo. Leave empty to use the default built-in logo.",
+      logoUrlPlaceholder: "https://example.com/logo.png"
+    },
     listsTitle: "Access lists",
     listsDescription: "Panel admins and runtime exclusions are managed separately.",
     envTitle: "Access .env",
@@ -655,6 +700,11 @@ export const enDictionary: TranslationDictionary = {
       delete: "Delete",
       expires: "expires {value}"
     },
+    decisions: {
+      home: "HOME",
+      mobile: "MOBILE",
+      skip: "SKIP"
+    },
     cache: {
       title: "IP cache",
       editTitle: "Edit cache entry",
@@ -665,6 +715,7 @@ export const enDictionary: TranslationDictionary = {
       confidence: "confidence",
       details: "details",
       asn: "asn",
+      asnValue: "ASN {value}",
       save: "Save cache entry"
     },
     learning: {
@@ -807,7 +858,8 @@ export const enDictionary: TranslationDictionary = {
       legacy: "Legacy provider patterns"
     },
     patternStats: "{count} patterns · support {support} · avg precision {precision}",
-    legacyStats: "{count} patterns · accumulated confidence {confidence}"
+    legacyStats: "{count} patterns · accumulated confidence {confidence}",
+    legacyConfidenceValue: "confidence {value}"
   },
   tooltips: {
     info: "Hint"

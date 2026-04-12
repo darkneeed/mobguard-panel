@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 
-import { api, EnvFieldState } from "../api/client";
+import { api, BrandingConfig, EnvFieldState } from "../api/client";
+import { BrandLogo } from "../components/BrandLogo";
 import { FieldLabel } from "../components/FieldLabel";
 import {
   buildEnvUpdates,
@@ -15,6 +16,7 @@ type AccessPayload = {
   updated_at: string;
   updated_by: string;
   lists: Record<string, Array<string | number>>;
+  settings: BrandingConfig;
   auth: {
     telegram_enabled: boolean;
     local_enabled: boolean;
@@ -27,18 +29,26 @@ type AccessPayload = {
 
 const ACCESS_FIELDS = RULE_LIST_FIELDS.filter((field) => field.sectionKey === "access");
 
+type AccessPageProps = {
+  branding: BrandingConfig;
+  onBrandingChange: (branding: BrandingConfig) => void;
+};
+
 function listValuesToText(values: Array<string | number> | undefined): string {
   return (values || []).map((item) => String(item)).join("\n");
 }
 
-export function AccessPage() {
+export function AccessPage({ branding, onBrandingChange }: AccessPageProps) {
   const { t } = useI18n();
   const [data, setData] = useState<AccessPayload | null>(null);
   const [lists, setLists] = useState<Record<string, string>>({});
   const [savedLists, setSavedLists] = useState<Record<string, string>>({});
+  const [brandingDraft, setBrandingDraft] = useState<BrandingConfig>(branding);
+  const [savedBranding, setSavedBranding] = useState<BrandingConfig>(branding);
   const [envDraft, setEnvDraft] = useState<Record<string, string>>({});
   const [error, setError] = useState("");
   const [saved, setSaved] = useState("");
+  const [brandingSaved, setBrandingSaved] = useState("");
   const [envError, setEnvError] = useState("");
   const [envSaved, setEnvSaved] = useState("");
 
@@ -58,15 +68,22 @@ export function AccessPage() {
             ACCESS_FIELDS.map((field) => [field.key, listValuesToText(typed.lists[field.key])])
           )
         );
+        setBrandingDraft(typed.settings);
+        setSavedBranding(typed.settings);
         setEnvDraft(buildInitialEnvDraft(typed.env));
       })
       .catch((err: Error) => setError(err.message || t("access.loadFailed")));
   }, [t]);
 
+  const brandingDirty = useMemo(
+    () => JSON.stringify(brandingDraft) !== JSON.stringify(savedBranding),
+    [brandingDraft, savedBranding]
+  );
   const listDirty = useMemo(
     () => JSON.stringify(lists) !== JSON.stringify(savedLists),
     [lists, savedLists]
   );
+  const accessDirty = brandingDirty || listDirty;
   const envDirty = useMemo(() => isEnvDirty(data?.env, envDraft), [data?.env, envDraft]);
   const envFieldCount = Object.values(data?.env || {}).length;
   const envPresentCount = Object.values(data?.env || {}).filter((field) => field.present).length;
@@ -102,10 +119,32 @@ export function AccessPage() {
       setSavedLists(normalizedLists);
       setEnvDraft(buildInitialEnvDraft(response.env));
       setSaved(t("access.saved"));
+      setBrandingSaved("");
       setError("");
     } catch (err) {
       setError(err instanceof Error ? err.message : t("access.saveFailed"));
       setSaved("");
+    }
+  }
+
+  async function saveBranding() {
+    if (!data) return;
+    try {
+      const response = (await api.updateAccessSettings({
+        settings: {
+          panel_name: brandingDraft.panel_name.trim(),
+          panel_logo_url: brandingDraft.panel_logo_url.trim(),
+        }
+      })) as AccessPayload;
+      setData(response);
+      setBrandingDraft(response.settings);
+      setSavedBranding(response.settings);
+      onBrandingChange(response.settings);
+      setBrandingSaved(t("access.brandingSaved"));
+      setError("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t("access.saveFailed"));
+      setBrandingSaved("");
     }
   }
 
@@ -172,14 +211,15 @@ export function AccessPage() {
           <span className={data?.env_file_writable ? "tag status-resolved" : "tag severity-high"}>
             {data?.env_file_writable ? t("common.writable") : t("common.readOnly")}
           </span>
-          <span className={listDirty ? "tag review-only" : "tag severity-low"}>
-            {listDirty ? t("common.unsavedChanges") : t("common.saved")}
+          <span className={accessDirty ? "tag review-only" : "tag severity-low"}>
+            {accessDirty ? t("common.unsavedChanges") : t("common.saved")}
           </span>
         </div>
       </div>
 
       {error ? <div className="error-box">{error}</div> : null}
       {saved ? <div className="ok-box">{saved}</div> : null}
+      {brandingSaved ? <div className="ok-box">{brandingSaved}</div> : null}
       {!data ? <div className="panel">{t("common.loading")}</div> : null}
 
       {data ? (
@@ -196,6 +236,64 @@ export function AccessPage() {
             <div className="stat-card">
               <span>{t("access.cards.envFile")}</span>
               <strong>{data.env_file_writable ? t("common.writable") : t("common.readOnly")}</strong>
+            </div>
+          </div>
+
+          <div className="panel">
+            <div className="panel-heading panel-heading-row">
+              <div>
+                <h2>{t("access.brandingTitle")}</h2>
+                <p className="muted">{t("access.brandingDescription")}</p>
+              </div>
+              <div className="action-row">
+                <span className={brandingDirty ? "tag review-only" : "tag severity-low"}>
+                  {brandingDirty ? t("common.unsavedChanges") : t("common.saved")}
+                </span>
+                <button onClick={saveBranding} disabled={!brandingDirty || !brandingDraft.panel_name.trim()}>
+                  {t("access.saveBranding")}
+                </button>
+              </div>
+            </div>
+            <div className="detail-grid">
+              <div className="settings-group branding-preview-card">
+                <div className="brand">
+                  <BrandLogo
+                    logoUrl={brandingDraft.panel_logo_url}
+                    alt={brandingDraft.panel_name || t("access.brandingFields.serviceName")}
+                  />
+                  <div>
+                    <strong>{brandingDraft.panel_name || t("common.notAvailable")}</strong>
+                    <small>{t("layout.brandSubtitle")}</small>
+                  </div>
+                </div>
+              </div>
+              <div className="rule-field">
+                <FieldLabel
+                  label={t("access.brandingFields.serviceName")}
+                  description={t("access.brandingFields.serviceNameDescription")}
+                />
+                <input
+                  aria-label={t("access.brandingFields.serviceName")}
+                  value={brandingDraft.panel_name}
+                  onChange={(event) =>
+                    setBrandingDraft((prev) => ({ ...prev, panel_name: event.target.value }))
+                  }
+                />
+              </div>
+              <div className="rule-field">
+                <FieldLabel
+                  label={t("access.brandingFields.logoUrl")}
+                  description={t("access.brandingFields.logoUrlDescription")}
+                />
+                <input
+                  aria-label={t("access.brandingFields.logoUrl")}
+                  placeholder={t("access.brandingFields.logoUrlPlaceholder")}
+                  value={brandingDraft.panel_logo_url}
+                  onChange={(event) =>
+                    setBrandingDraft((prev) => ({ ...prev, panel_logo_url: event.target.value }))
+                  }
+                />
+              </div>
             </div>
           </div>
 

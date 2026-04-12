@@ -5,6 +5,7 @@ import { settingsApi } from "../features/settings/api/client";
 
 export type {
   AuthCapabilities,
+  BrandingConfig,
   CalibrationExportPreview,
   CalibrationReadiness,
   CalibrationReadinessCheck,

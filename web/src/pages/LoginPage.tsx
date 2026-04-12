@@ -1,7 +1,8 @@
 import type { FormEvent } from "react";
 import { useEffect, useState } from "react";
 
-import { api, AuthCapabilities, Session } from "../api/client";
+import { api, AuthCapabilities, BrandingConfig, Session } from "../api/client";
+import { PaletteName } from "../app/appearance";
 import { BrandLogo } from "../components/BrandLogo";
 import { useI18n } from "../localization";
 
@@ -12,28 +13,48 @@ declare global {
 }
 
 type LoginPageProps = {
+  branding: BrandingConfig;
+  initialAuth: AuthCapabilities | null;
+  palette: PaletteName;
+  onAuthCapabilitiesLoaded: (auth: AuthCapabilities) => void;
+  onPaletteChange: (palette: PaletteName) => void;
   onAuthenticated: (session: Session) => void;
 };
 
-export function LoginPage({ onAuthenticated }: LoginPageProps) {
+export function LoginPage({
+  branding,
+  initialAuth,
+  palette,
+  onAuthCapabilitiesLoaded,
+  onPaletteChange,
+  onAuthenticated
+}: LoginPageProps) {
   const { t, language, setLanguage } = useI18n();
   const [error, setError] = useState("");
-  const [auth, setAuth] = useState<AuthCapabilities | null>(null);
+  const [auth, setAuth] = useState<AuthCapabilities | null>(initialAuth);
   const [localUsername, setLocalUsername] = useState("");
   const [localPassword, setLocalPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
+    if (initialAuth) {
+      setAuth(initialAuth);
+      if (initialAuth.local_username_hint) {
+        setLocalUsername(initialAuth.local_username_hint);
+      }
+      return;
+    }
     api
       .authStart()
       .then((payload) => {
         setAuth(payload);
+        onAuthCapabilitiesLoaded(payload);
         if (payload.local_username_hint) {
           setLocalUsername(payload.local_username_hint);
         }
       })
       .catch((err: Error) => setError(err.message));
-  }, []);
+  }, [initialAuth, onAuthCapabilitiesLoaded]);
 
   useEffect(() => {
     if (!auth?.telegram_enabled || !auth.bot_username) return;
@@ -79,9 +100,13 @@ export function LoginPage({ onAuthenticated }: LoginPageProps) {
     <div className="login-screen">
       <div className="login-card">
         <div className="brand-hero">
-          <BrandLogo className="brand-hero-mark" />
+          <BrandLogo
+            className="brand-hero-mark"
+            logoUrl={branding.panel_logo_url}
+            alt={branding.panel_name}
+          />
           <div>
-            <strong>MobGuard</strong>
+            <strong>{branding.panel_name}</strong>
             <small>{t("layout.brandSubtitle")}</small>
           </div>
         </div>
@@ -92,6 +117,16 @@ export function LoginPage({ onAuthenticated }: LoginPageProps) {
             <select value={language} onChange={(event) => setLanguage(event.target.value as "ru" | "en")}>
               <option value="ru">{t("layout.language.ru")}</option>
               <option value="en">{t("layout.language.en")}</option>
+            </select>
+          </label>
+          <label className="theme-picker">
+            <span>{t("layout.palette.label")}</span>
+            <select value={palette} onChange={(event) => onPaletteChange(event.target.value as PaletteName)}>
+              <option value="green">{t("layout.palette.green")}</option>
+              <option value="orange">{t("layout.palette.orange")}</option>
+              <option value="blue">{t("layout.palette.blue")}</option>
+              <option value="purple">{t("layout.palette.purple")}</option>
+              <option value="red">{t("layout.palette.red")}</option>
             </select>
           </label>
         </div>

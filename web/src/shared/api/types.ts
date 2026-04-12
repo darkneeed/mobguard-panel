@@ -13,6 +13,12 @@ export type AuthCapabilities = {
   local_username_hint: string;
   review_ui_base_url: string;
   panel_name: string;
+  panel_logo_url: string;
+};
+
+export type BrandingConfig = {
+  panel_name: string;
+  panel_logo_url: string;
 };
 
 export type EnvFieldState = {

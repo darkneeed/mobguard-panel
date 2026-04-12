@@ -1,7 +1,8 @@
 import { Suspense, lazy, type ComponentType, useMemo } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 
-import { api, Session } from "../api/client";
+import { api, BrandingConfig, Session } from "../api/client";
+import { PaletteName, ThemeMode } from "./appearance";
 import {
   loadAccessPage,
   loadDataPage,
@@ -14,14 +15,16 @@ import {
   loadTelegramPage
 } from "./routeModules";
 import { Layout } from "../components/Layout";
-import { Language } from "../localization";
-
-type ThemeMode = "light" | "dark" | "system";
+import { Language, useI18n } from "../localization";
 
 type Props = {
   session: Session;
   language: Language;
   setLanguage: (language: Language) => void;
+  branding: BrandingConfig;
+  setBranding: (branding: BrandingConfig) => void;
+  palette: PaletteName;
+  setPalette: (palette: PaletteName) => void;
   theme: ThemeMode;
   setTheme: (theme: ThemeMode) => void;
   setSession: (session: Session | null) => void;
@@ -49,9 +52,10 @@ const DataPage = lazyNamed(loadDataPage, "DataPage");
 const QualityPage = lazyNamed(loadQualityPage, "QualityPage");
 
 function RouteFallback() {
+  const { t } = useI18n();
   return (
     <div className="panel">
-      Loading…
+      {t("common.loading")}
     </div>
   );
 }
@@ -60,6 +64,10 @@ export function AppRouter({
   session,
   language,
   setLanguage,
+  branding,
+  setBranding,
+  palette,
+  setPalette,
   theme,
   setTheme,
   setSession,
@@ -76,9 +84,12 @@ export function AppRouter({
         element={
           <Suspense fallback={<RouteFallback />}>
             <Layout
+              branding={branding}
               username={displayName}
               language={language}
               onLanguageChange={setLanguage}
+              palette={palette}
+              onPaletteChange={setPalette}
               theme={theme}
               onThemeChange={setTheme}
               onLogout={async () => {
@@ -98,7 +109,10 @@ export function AppRouter({
         <Route path="/rules" element={<Navigate to="/rules/general" replace />} />
         <Route path="/rules/:section" element={<RulesPage />} />
         <Route path="/telegram" element={<TelegramPage />} />
-        <Route path="/access" element={<AccessPage />} />
+        <Route
+          path="/access"
+          element={<AccessPage branding={branding} onBrandingChange={setBranding} />}
+        />
         <Route path="/data" element={<Navigate to="/data/users" replace />} />
         <Route path="/data/:section" element={<DataPage />} />
         <Route path="/quality" element={<QualityPage />} />

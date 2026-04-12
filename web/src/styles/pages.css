@@ -75,6 +75,18 @@
   border-top: 1px solid var(--line);
 }
 
+.queue-page-size-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 150px;
+}
+
+.queue-page-size-picker span {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
 .queue-presets {
   display: flex;
   gap: 0.65rem;
@@ -87,6 +99,15 @@
 
 .queue-card-actions {
   padding-top: 0.25rem;
+}
+
+.review-queue-grid {
+  grid-template-columns: repeat(auto-fill, 320px);
+  justify-content: start;
+}
+
+.queue-footer-page-size {
+  margin-right: auto;
 }
 
 .detail-layout {
@@ -221,6 +242,10 @@
   .queue-bulkbar-meta,
   .queue-bulk-actions {
     width: 100%;
+  }
+
+  .review-queue-grid {
+    grid-template-columns: 1fr;
   }
 
   .env-field-edit-grid {

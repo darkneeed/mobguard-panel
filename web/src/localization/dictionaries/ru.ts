@@ -77,6 +77,14 @@ export const ruDictionary: TranslationDictionary = {
       light: "Светлая",
       dark: "Тёмная"
     },
+    palette: {
+      label: "Палитра",
+      green: "Зелёная",
+      orange: "Оранжевая",
+      blue: "Голубая",
+      purple: "Фиолетовая",
+      red: "Красная"
+    },
     language: {
       label: "Язык",
       ru: "rus",
@@ -125,6 +133,12 @@ export const ruDictionary: TranslationDictionary = {
     mixedProvidersTitle: "Проблемные mixed-провайдеры",
     mixedProvidersDescription: "Провайдеры, которые чаще всего приводят к review-first и конфликтам.",
     mixedProvidersItem: "{open} open · {conflict} conflicts · {home} HOME · {mobile} MOBILE",
+    mixedProvidersMetrics: {
+      open: "Open",
+      conflicts: "Conflicts",
+      home: "HOME",
+      mobile: "MOBILE"
+    },
     emptyMixedProviders: "Сейчас нет проблемных mixed-провайдеров.",
     noisyAsnTitle: "Шумные ASN",
     noisyAsnDescription: "ASN, дающие наибольшую нагрузку на модерацию.",
@@ -175,9 +189,24 @@ export const ruDictionary: TranslationDictionary = {
       telegramId: "Telegram ID",
       repeatMin: "Минимум повторов",
       repeatMax: "Максимум повторов",
+      statusOpen: "OPEN",
+      statusResolved: "RESOLVED",
+      statusSkipped: "SKIPPED",
       allStatus: "Любой статус",
+      confidenceUnsure: "UNSURE",
+      confidenceProbableHome: "PROBABLE_HOME",
+      confidenceHighHome: "HIGH_HOME",
       allConfidence: "Любая confidence",
+      reasonUnsure: "unsure",
+      reasonProbableHome: "probable_home",
+      reasonHomeRequiresReview: "home_requires_review",
+      reasonManualMixedHome: "manual_review_mixed_home",
+      reasonProviderConflict: "provider_conflict",
       allReasons: "Все причины",
+      severityCritical: "critical",
+      severityHigh: "high",
+      severityMedium: "medium",
+      severityLow: "low",
       allSeverity: "Любая severity",
       punitiveAny: "Любой punitive статус",
       punitiveOnly: "Только punitive",
@@ -201,11 +230,16 @@ export const ruDictionary: TranslationDictionary = {
     card: {
       ip: "IP",
       asn: "ASN",
+      asnValue: "AS{value}",
       decision: "Решение",
       punitiveEligible: "punitive eligible",
       reviewOnly: "review only",
       repeat: "повтор x{count}",
       opened: "открыт {value}"
+    },
+    pageSize: {
+      label: "Карточек на странице",
+      option: "{value}"
     },
     actions: {
       mobile: "Mobile",
@@ -512,6 +546,17 @@ export const ruDictionary: TranslationDictionary = {
       telegramPanel: "Telegram auth панели",
       localFallback: "Local fallback auth"
     },
+    brandingTitle: "Брендинг сервиса",
+    brandingDescription: "Название сервиса и URL логотипа, которые используются на login, loading и в основном shell панели.",
+    brandingSaved: "Брендинг обновлён",
+    saveBranding: "Сохранить брендинг",
+    brandingFields: {
+      serviceName: "Название сервиса",
+      serviceNameDescription: "Видимое название сервиса в shell панели и на экране входа.",
+      logoUrl: "URL логотипа",
+      logoUrlDescription: "Публичный URL изображения логотипа. Оставьте пустым, чтобы использовать встроенный логотип по умолчанию.",
+      logoUrlPlaceholder: "https://example.com/logo.png"
+    },
     listsTitle: "Списки доступа",
     listsDescription: "Администраторы панели и runtime-исключения управляются отдельно.",
     envTitle: "Access .env",
@@ -655,6 +700,11 @@ export const ruDictionary: TranslationDictionary = {
       delete: "Удалить",
       expires: "истекает {value}"
     },
+    decisions: {
+      home: "HOME",
+      mobile: "MOBILE",
+      skip: "SKIP"
+    },
     cache: {
       title: "IP cache",
       editTitle: "Редактировать запись кэша",
@@ -665,6 +715,7 @@ export const ruDictionary: TranslationDictionary = {
       confidence: "confidence",
       details: "details",
       asn: "asn",
+      asnValue: "ASN {value}",
       save: "Сохранить запись кэша"
     },
     learning: {
@@ -807,7 +858,8 @@ export const ruDictionary: TranslationDictionary = {
       legacy: "Legacy provider patterns"
     },
     patternStats: "{count} patterns · support {support} · avg precision {precision}",
-    legacyStats: "{count} patterns · accumulated confidence {confidence}"
+    legacyStats: "{count} patterns · accumulated confidence {confidence}",
+    legacyConfidenceValue: "confidence {value}"
   },
   tooltips: {
     info: "Подсказка"

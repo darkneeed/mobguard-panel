@@ -6,6 +6,7 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 
+from api.services import auth as auth_service
 from api.services import settings as settings_service
 from mobguard_platform.runtime import load_runtime_context
 
@@ -114,6 +115,94 @@ class APISettingsTests(unittest.TestCase):
         config_payload = json.loads((self.runtime_dir / "config.json").read_text(encoding="utf-8"))
         self.assertEqual(config_payload["settings"]["restricted_access_squad_name"], "⚠ ограниченные")
         self.assertEqual(config_payload["settings"]["traffic_cap_increment_gb"], 12)
+
+    def test_access_settings_roundtrip_includes_branding(self):
+        previous = os.environ.get("MOBGUARD_ENV_FILE")
+        os.environ["MOBGUARD_ENV_FILE"] = str(self.root / ".env")
+        try:
+            runtime = load_runtime_context(self.root, str(self.runtime_dir))
+        finally:
+            if previous is None:
+                os.environ.pop("MOBGUARD_ENV_FILE", None)
+            else:
+                os.environ["MOBGUARD_ENV_FILE"] = previous
+
+        class DummyStore:
+            def __init__(self):
+                self.synced = {}
+
+            def get_live_rules_state(self):
+                return {
+                    "revision": 1,
+                    "updated_at": "2026-04-12T00:00:00Z",
+                    "updated_by": "system",
+                    "rules": {
+                        "admin_tg_ids": [1],
+                        "exempt_tg_ids": [],
+                        "exempt_ids": [],
+                        "settings": {},
+                    },
+                }
+
+            def sync_runtime_config(self, config):
+                self.synced = config
+
+        store = DummyStore()
+        container = SimpleNamespace(runtime=runtime, store=store)
+
+        initial = settings_service.get_access_settings(container)
+        self.assertEqual(initial["settings"]["panel_name"], "MobGuard")
+        self.assertEqual(initial["settings"]["panel_logo_url"], "")
+
+        updated = settings_service.update_access_settings(
+            container,
+            {
+                "settings": {
+                    "panel_name": "Acme Shield",
+                    "panel_logo_url": "https://cdn.example.com/logo.png",
+                }
+            },
+            "admin",
+            1001,
+            None,
+            None,
+        )
+
+        self.assertEqual(updated["settings"]["panel_name"], "Acme Shield")
+        self.assertEqual(updated["settings"]["panel_logo_url"], "https://cdn.example.com/logo.png")
+        self.assertEqual(store.synced["settings"]["panel_name"], "Acme Shield")
+        config_payload = json.loads((self.runtime_dir / "config.json").read_text(encoding="utf-8"))
+        self.assertEqual(config_payload["settings"]["panel_logo_url"], "https://cdn.example.com/logo.png")
+
+    def test_auth_start_payload_uses_runtime_branding(self):
+        previous = os.environ.get("MOBGUARD_ENV_FILE")
+        os.environ["MOBGUARD_ENV_FILE"] = str(self.root / ".env")
+        try:
+            runtime = load_runtime_context(self.root, str(self.runtime_dir))
+        finally:
+            if previous is None:
+                os.environ.pop("MOBGUARD_ENV_FILE", None)
+            else:
+                os.environ["MOBGUARD_ENV_FILE"] = previous
+
+        runtime.config.setdefault("settings", {})
+        runtime.config["settings"]["panel_name"] = "Acme Shield"
+        runtime.config["settings"]["panel_logo_url"] = "https://cdn.example.com/logo.png"
+
+        class DummyStore:
+            def get_live_rules_state(self):
+                return {
+                    "revision": 1,
+                    "updated_at": "2026-04-12T00:00:00Z",
+                    "updated_by": "system",
+                    "rules": {"settings": {"review_ui_base_url": "https://panel.example.com"}},
+                }
+
+        payload = auth_service.auth_start_payload(SimpleNamespace(runtime=runtime, store=DummyStore()))
+
+        self.assertEqual(payload["panel_name"], "Acme Shield")
+        self.assertEqual(payload["panel_logo_url"], "https://cdn.example.com/logo.png")
+        self.assertEqual(payload["review_ui_base_url"], "https://panel.example.com")
 
 
 if __name__ == "__main__":

@@ -25,7 +25,15 @@
   top: 0;
   height: 100vh;
   overflow-y: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
   backdrop-filter: blur(18px);
+}
+
+.sidebar::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
 }
 
 :root[data-theme="dark"] .sidebar {
@@ -59,6 +67,10 @@
   gap: 1rem;
   align-items: center;
   margin-bottom: 1.5rem;
+}
+
+.branding-preview-card .brand {
+  margin-bottom: 0;
 }
 
 .brand-mark {

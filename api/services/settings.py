@@ -27,6 +27,11 @@ from .runtime_state import (
     write_runtime_settings,
 )
 
+ACCESS_RUNTIME_SETTINGS_DEFAULTS = {
+    "panel_name": "MobGuard",
+    "panel_logo_url": "",
+}
+
 
 def get_detection_settings(container: APIContainer) -> dict[str, Any]:
     state = container.store.get_live_rules_state()
@@ -60,11 +65,17 @@ def get_access_settings(container: APIContainer) -> dict[str, Any]:
     state = container.store.get_live_rules_state()
     env_values = load_env_values(container)
     env_status = get_env_file_status(str(container.runtime.env_path))
+    runtime_config = load_runtime_config(container)
+    access_settings = normalize_runtime_settings(
+        runtime_config,
+        ACCESS_RUNTIME_SETTINGS_DEFAULTS,
+    )
     return {
         "revision": state["revision"],
         "updated_at": state["updated_at"],
         "updated_by": state["updated_by"],
         "lists": {key: state["rules"].get(key, []) for key in ACCESS_LIST_KEYS},
+        "settings": access_settings,
         "env": serialize_env_fields(container, ACCESS_ENV_FIELDS, env_values),
         "auth": get_auth_capabilities(container, env_values),
         "env_file_path": env_status["path"],
@@ -90,6 +101,13 @@ def update_access_settings(
             expected_revision=revision,
             expected_updated_at=updated_at,
         )
+    settings_updates = {
+        key: payload.get("settings", {}).get(key)
+        for key in ACCESS_RUNTIME_SETTINGS_DEFAULTS
+        if key in payload.get("settings", {})
+    }
+    if settings_updates:
+        write_runtime_settings(container, settings_updates)
     env_updates = {key: payload.get("env", {}).get(key) for key in ACCESS_ENV_FIELDS if key in payload.get("env", {})}
     if env_updates:
         try:
