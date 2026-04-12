@@ -36,7 +36,7 @@ def list_reviews(
     container=Depends(get_container),
 ) -> dict[str, Any]:
     return review_service.list_reviews(
-        container.store,
+        container,
         {
             "status": status,
             "confidence_band": confidence_band,
@@ -62,7 +62,7 @@ def list_reviews(
 
 @router.get("/reviews/{case_id}")
 def get_review(case_id: int, _: dict[str, Any] = Depends(get_session), container=Depends(get_container)) -> dict[str, Any]:
-    return review_service.get_review(container.store, case_id)
+    return review_service.get_review(container, case_id)
 
 
 @router.post("/reviews/{case_id}/resolve")
