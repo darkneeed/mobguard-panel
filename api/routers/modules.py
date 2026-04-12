@@ -5,7 +5,12 @@ from typing import Any, Optional
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 
 from ..dependencies import get_container, get_session
-from ..schemas.modules import EventBatchRequest, ModuleHeartbeatRequest, ModuleRegisterRequest
+from ..schemas.modules import (
+    EventBatchRequest,
+    ModuleHeartbeatRequest,
+    ModuleProvisioningRequest,
+    ModuleRegisterRequest,
+)
 from ..services import modules as module_service
 
 
@@ -83,3 +88,54 @@ def admin_list_modules(
     container=Depends(get_container),
 ) -> dict[str, Any]:
     return module_service.list_modules(container)
+
+
+@router.post("/admin/modules")
+def admin_create_module(
+    payload: ModuleProvisioningRequest,
+    _: dict[str, Any] = Depends(get_session),
+    container=Depends(get_container),
+) -> dict[str, Any]:
+    try:
+        return module_service.create_managed_module(container, payload.model_dump())
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/admin/modules/{module_id}")
+def admin_get_module(
+    module_id: str,
+    _: dict[str, Any] = Depends(get_session),
+    container=Depends(get_container),
+) -> dict[str, Any]:
+    try:
+        return module_service.get_module_detail(container, module_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.put("/admin/modules/{module_id}")
+def admin_update_module(
+    module_id: str,
+    payload: ModuleProvisioningRequest,
+    _: dict[str, Any] = Depends(get_session),
+    container=Depends(get_container),
+) -> dict[str, Any]:
+    try:
+        return module_service.update_module_detail(container, module_id, payload.model_dump())
+    except ValueError as exc:
+        status_code = 404 if "not registered" in str(exc).lower() else 400
+        raise HTTPException(status_code=status_code, detail=str(exc)) from exc
+
+
+@router.post("/admin/modules/{module_id}/token/reveal")
+def admin_reveal_module_token(
+    module_id: str,
+    _: dict[str, Any] = Depends(get_session),
+    container=Depends(get_container),
+) -> dict[str, Any]:
+    try:
+        return module_service.reveal_module_token(container, module_id)
+    except ValueError as exc:
+        status_code = 404 if "not registered" in str(exc).lower() else 400
+        raise HTTPException(status_code=status_code, detail=str(exc)) from exc

@@ -134,6 +134,11 @@
   transform: translateY(-3px);
 }
 
+.module-card-active {
+  border-color: rgba(15, 118, 110, 0.3);
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.12);
+}
+
 .queue-card-identifiers,
 .queue-card-stack {
   display: flex;
@@ -292,6 +297,18 @@
   white-space: pre-wrap;
   overflow: auto;
   max-height: 28rem;
+}
+
+.module-install-steps {
+  margin: 0;
+  padding-left: 1.35rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.module-compose-box {
+  margin-top: 1rem;
 }
 
 .note-box.tall {

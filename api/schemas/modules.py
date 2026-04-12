@@ -39,3 +39,17 @@ class EventBatchRequest(BaseModel):
     module_id: str
     protocol_version: str = "v1"
     items: list[RawAccessEventRequest] = Field(default_factory=list)
+
+
+class ModuleProvisioningRequest(BaseModel):
+    module_name: str
+    host: str
+    port: int
+    access_log_path: str = "/var/log/remnanode/access.log"
+    config_profiles: list[str] = Field(default_factory=list)
+    provider: str = ""
+    notes: str = ""
+
+
+class ModuleTokenRevealRequest(BaseModel):
+    pass

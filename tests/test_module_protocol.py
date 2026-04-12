@@ -46,6 +46,20 @@ class ModuleProtocolTests(unittest.TestCase):
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
     def test_register_heartbeat_and_config_roundtrip(self):
+        self.store.create_managed_module(
+            "node-a",
+            "token-a",
+            "encrypted-token-a",
+            module_name="Node A",
+            metadata={
+                "host": "node-a.example.com",
+                "port": 2222,
+                "access_log_path": "/var/log/remnanode/access.log",
+                "config_profiles": ["Default-Profile"],
+                "provider": "hetzner",
+                "notes": "",
+            },
+        )
         module = module_service.register_module(
             self.container,
             {
@@ -77,6 +91,20 @@ class ModuleProtocolTests(unittest.TestCase):
         self.assertEqual(payload["items"][0]["module_name"], "Node A")
 
     def test_event_batch_deduplicates_by_event_uid(self):
+        self.store.create_managed_module(
+            "node-a",
+            "token-a",
+            "encrypted-token-a",
+            module_name="Node A",
+            metadata={
+                "host": "node-a.example.com",
+                "port": 2222,
+                "access_log_path": "/var/log/remnanode/access.log",
+                "config_profiles": ["Default-Profile"],
+                "provider": "",
+                "notes": "",
+            },
+        )
         module_service.register_module(
             self.container,
             {

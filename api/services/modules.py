@@ -3,6 +3,9 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import os
+import secrets
+import textwrap
+import uuid
 from datetime import datetime, timedelta
 from typing import Any, Optional
 
@@ -16,13 +19,19 @@ from mobguard_platform import (
     review_reason_for_bundle,
     should_warning_only,
 )
+from mobguard_platform.module_secrets import ModuleSecretError, decrypt_module_token, encrypt_module_token
 from mobguard_platform.panel_client import PanelClient
+from mobguard_platform.runtime import read_env_file
 from mobguard_platform.runtime_admin_defaults import ENFORCEMENT_SETTINGS_DEFAULTS
 
 from ..context import APIContainer
 
 
 PROTOCOL_VERSION = "v1"
+MODULE_TOKEN_PLACEHOLDER = "__PASTE_TOKEN__"
+DEFAULT_ACCESS_LOG_PATH = "/var/log/remnanode/access.log"
+DEFAULT_STATE_DIR = "./state"
+DEFAULT_SPOOL_DIR = "./state/spool"
 
 
 def _ipinfo_client():
@@ -33,13 +42,6 @@ def _ipinfo_client():
             "Module ingestion dependencies are missing in mobguard-api image: install aiohttp and rebuild the API image"
         ) from exc
     return ipinfo_api
-
-
-def _bool_env(name: str, default: bool) -> bool:
-    raw_value = os.getenv(name)
-    if raw_value is None:
-        return default
-    return raw_value.strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _require_protocol_version(protocol_version: str) -> str:
@@ -72,6 +74,127 @@ def _remnawave_client(container: APIContainer) -> PanelClient:
         or ""
     )
     return PanelClient(base_url, token)
+
+
+def _module_secret_key(container: APIContainer) -> str:
+    env_values = read_env_file(str(container.runtime.env_path))
+    secret_key = str(
+        os.getenv("MOBGUARD_MODULE_SECRET_KEY")
+        or env_values.get("MOBGUARD_MODULE_SECRET_KEY")
+        or ""
+    ).strip()
+    if not secret_key:
+        raise ValueError("MOBGUARD_MODULE_SECRET_KEY is not configured")
+    return secret_key
+
+
+def _panel_base_url(container: APIContainer) -> str:
+    runtime_settings = {}
+    runtime_config = getattr(container.runtime, "config", None)
+    if isinstance(runtime_config, dict):
+        runtime_settings = runtime_config.get("settings", {}) if isinstance(runtime_config.get("settings", {}), dict) else {}
+    settings = _runtime_settings(container)
+    base_url = str(
+        runtime_settings.get("remnawave_api_url")
+        or runtime_settings.get("panel_url")
+        or runtime_settings.get("review_ui_base_url")
+        or settings.get("remnawave_api_url")
+        or settings.get("panel_url")
+        or settings.get("review_ui_base_url")
+        or ""
+    ).strip()
+    return base_url or "__SET_PANEL_BASE_URL__"
+
+
+def _yaml_string(value: Any) -> str:
+    return '"' + str(value or "").replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+
+def _normalize_config_profiles(values: Any) -> list[str]:
+    if not isinstance(values, list):
+        raise ValueError("config_profiles must be a list")
+    profiles = [str(item or "").strip() for item in values]
+    cleaned = [item for item in profiles if item]
+    if not cleaned:
+        raise ValueError("config_profiles must contain at least one profile name")
+    return cleaned
+
+
+def _module_metadata_from_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    module_name = str(payload.get("module_name") or "").strip()
+    host = str(payload.get("host") or "").strip()
+    access_log_path = str(payload.get("access_log_path") or DEFAULT_ACCESS_LOG_PATH).strip()
+    provider = str(payload.get("provider") or "").strip()
+    notes = str(payload.get("notes") or "").strip()
+    if not module_name:
+        raise ValueError("module_name is required")
+    if not host:
+        raise ValueError("host is required")
+    try:
+        port = int(payload.get("port") or 0)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("port must be an integer") from exc
+    if port <= 0 or port > 65535:
+        raise ValueError("port must be between 1 and 65535")
+    if not access_log_path:
+        raise ValueError("access_log_path is required")
+    return {
+        "module_name": module_name,
+        "metadata": {
+            "host": host,
+            "port": port,
+            "access_log_path": access_log_path,
+            "config_profiles": _normalize_config_profiles(payload.get("config_profiles") or []),
+            "provider": provider,
+            "notes": notes,
+        },
+    }
+
+
+def _module_install_payload(container: APIContainer, module: dict[str, Any]) -> dict[str, Any]:
+    config_profiles = module.get("config_profiles") or []
+    access_log_path = module.get("access_log_path") or DEFAULT_ACCESS_LOG_PATH
+    log_mount = f"{access_log_path}:{access_log_path}:ro"
+    compose_yaml = textwrap.dedent(
+        f"""\
+        # MobGuard module install bundle
+        # Module: {module.get("module_name") or module.get("module_id")}
+        # Host metadata: {module.get("host") or "n/a"}
+        # Port metadata: {module.get("port") or "n/a"}
+        # Config profiles: {", ".join(config_profiles) if config_profiles else "n/a"}
+        # Copy the token from the panel and replace {MODULE_TOKEN_PLACEHOLDER} before start.
+        services:
+          mobguard-module:
+            build:
+              context: .
+              dockerfile: Dockerfile
+            container_name: {module.get("module_id") or "mobguard-module"}
+            restart: unless-stopped
+            environment:
+              PANEL_BASE_URL: {_yaml_string(_panel_base_url(container))}
+              MODULE_ID: {_yaml_string(module.get("module_id") or "")}
+              MODULE_TOKEN: {_yaml_string(MODULE_TOKEN_PLACEHOLDER)}
+              ACCESS_LOG_PATH: {_yaml_string(access_log_path)}
+              STATE_DIR: {_yaml_string(DEFAULT_STATE_DIR)}
+              SPOOL_DIR: {_yaml_string(DEFAULT_SPOOL_DIR)}
+            volumes:
+              - ./state:/app/state
+              - {_yaml_string(log_mount)}
+        """
+    ).strip()
+    return {"compose_yaml": compose_yaml}
+
+
+def _module_detail_response(container: APIContainer, module: dict[str, Any]) -> dict[str, Any]:
+    return {"module": module, "install": _module_install_payload(container, module)}
+
+
+def _generate_module_id(container: APIContainer) -> str:
+    for _ in range(10):
+        candidate = f"module-{uuid.uuid4().hex[:12]}"
+        if not container.store.get_module(candidate):
+            return candidate
+    raise ValueError("Failed to generate a unique module_id")
 
 
 def _event_uid(module_id: str, payload: dict[str, Any]) -> str:
@@ -402,15 +525,16 @@ async def _process_module_event(
 
 def register_module(container: APIContainer, payload: dict[str, Any], token: str) -> dict[str, Any]:
     protocol_version = _require_protocol_version(str(payload.get("protocol_version", PROTOCOL_VERSION)))
+    metadata_payload = payload.get("metadata")
     module = container.store.register_module(
         str(payload.get("module_id") or ""),
         token,
         module_name=str(payload.get("module_name") or ""),
         version=str(payload.get("version") or ""),
         protocol_version=protocol_version,
-        metadata=dict(payload.get("metadata") or {}),
+        metadata=dict(metadata_payload) if isinstance(metadata_payload, dict) else None,
         config_revision_applied=int(payload.get("config_revision_applied") or 0),
-        auto_create=_bool_env("MOBGUARD_MODULE_AUTO_REGISTER", True),
+        auto_create=False,
     )
     return {
         "protocol_version": protocol_version,
@@ -506,3 +630,55 @@ def list_modules(container: APIContainer) -> dict[str, Any]:
         "items": modules,
         "count": len(modules),
     }
+
+
+def create_managed_module(container: APIContainer, payload: dict[str, Any]) -> dict[str, Any]:
+    normalized = _module_metadata_from_payload(payload)
+    try:
+        token = secrets.token_urlsafe(32)
+        token_ciphertext = encrypt_module_token(_module_secret_key(container), token)
+    except ModuleSecretError as exc:
+        raise ValueError(str(exc)) from exc
+    module = container.store.create_managed_module(
+        _generate_module_id(container),
+        token,
+        token_ciphertext,
+        module_name=normalized["module_name"],
+        protocol_version=PROTOCOL_VERSION,
+        metadata=normalized["metadata"],
+    )
+    return {
+        "module": module,
+        "install": {
+            **_module_install_payload(container, module),
+            "module_token": token,
+        },
+    }
+
+
+def get_module_detail(container: APIContainer, module_id: str) -> dict[str, Any]:
+    module = container.store.get_module(module_id)
+    if not module:
+        raise ValueError("Module is not registered")
+    return _module_detail_response(container, module)
+
+
+def update_module_detail(container: APIContainer, module_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    normalized = _module_metadata_from_payload(payload)
+    module = container.store.update_managed_module(
+        module_id,
+        module_name=normalized["module_name"],
+        metadata=normalized["metadata"],
+    )
+    return _module_detail_response(container, module)
+
+
+def reveal_module_token(container: APIContainer, module_id: str) -> dict[str, Any]:
+    try:
+        token = decrypt_module_token(
+            _module_secret_key(container),
+            container.store.get_module_token_ciphertext(module_id),
+        )
+    except ModuleSecretError as exc:
+        raise ValueError(str(exc)) from exc
+    return {"module_id": module_id, "module_token": token}

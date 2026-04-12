@@ -103,6 +103,37 @@ def _sha256_hex(value: str) -> str:
     return hashlib.sha256(str(value).encode("utf-8")).hexdigest()
 
 
+def _module_metadata_from_json(raw_value: Any) -> dict[str, Any]:
+    if isinstance(raw_value, dict):
+        return dict(raw_value)
+    if raw_value in (None, ""):
+        return {}
+    try:
+        parsed = json.loads(str(raw_value))
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return {}
+    return dict(parsed) if isinstance(parsed, dict) else {}
+
+
+def _apply_module_metadata(payload: dict[str, Any], metadata_raw: Any) -> dict[str, Any]:
+    metadata = _module_metadata_from_json(metadata_raw)
+    payload["metadata"] = metadata
+    payload["host"] = str(metadata.get("host") or "").strip()
+    payload["port"] = int(metadata.get("port") or 0) if str(metadata.get("port") or "").strip() else 0
+    payload["access_log_path"] = str(metadata.get("access_log_path") or "").strip()
+    payload["config_profiles"] = [
+        str(item).strip()
+        for item in list(metadata.get("config_profiles") or [])
+        if str(item).strip()
+    ]
+    payload["provider"] = str(metadata.get("provider") or "").strip()
+    payload["notes"] = str(metadata.get("notes") or "").strip()
+    payload["install_state"] = str(payload.get("install_state") or "online").strip() or "online"
+    payload["managed"] = bool(payload.get("managed"))
+    payload["token_reveal_available"] = bool(str(payload.pop("token_ciphertext", "") or "").strip())
+    return payload
+
+
 def _ensure_list_of_type(key: str, value: Any, item_type: type) -> list[Any]:
     if not isinstance(value, list):
         raise ValueError(f"{key} must be a list")
@@ -408,12 +439,15 @@ class PlatformStore:
                     module_id TEXT PRIMARY KEY,
                     module_name TEXT NOT NULL,
                     token_hash TEXT NOT NULL,
+                    token_ciphertext TEXT NOT NULL DEFAULT '',
                     status TEXT NOT NULL DEFAULT 'online',
                     version TEXT,
                     protocol_version TEXT NOT NULL DEFAULT 'v1',
                     config_revision_applied INTEGER NOT NULL DEFAULT 0,
                     first_seen_at TEXT NOT NULL,
                     last_seen_at TEXT NOT NULL,
+                    install_state TEXT NOT NULL DEFAULT 'online',
+                    managed INTEGER NOT NULL DEFAULT 0,
                     metadata_json TEXT NOT NULL DEFAULT '{}'
                 )
                 """
@@ -690,9 +724,21 @@ class PlatformStore:
             }
             if live_rules_columns and "revision" not in live_rules_columns:
                 conn.execute("ALTER TABLE live_rules ADD COLUMN revision INTEGER NOT NULL DEFAULT 1")
+            module_columns = {
+                row["name"] for row in conn.execute("PRAGMA table_info(modules)").fetchall()
+            }
+            if module_columns and "token_ciphertext" not in module_columns:
+                conn.execute("ALTER TABLE modules ADD COLUMN token_ciphertext TEXT NOT NULL DEFAULT ''")
+            if module_columns and "install_state" not in module_columns:
+                conn.execute("ALTER TABLE modules ADD COLUMN install_state TEXT NOT NULL DEFAULT 'online'")
+            if module_columns and "managed" not in module_columns:
+                conn.execute("ALTER TABLE modules ADD COLUMN managed INTEGER NOT NULL DEFAULT 0")
 
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_modules_last_seen ON modules(last_seen_at)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_modules_install_state ON modules(install_state, last_seen_at)"
             )
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_module_heartbeats_module_id ON module_heartbeats(module_id, created_at DESC)"
@@ -750,7 +796,8 @@ class PlatformStore:
             row = conn.execute(
                 """
                 SELECT module_id, module_name, status, version, protocol_version,
-                       config_revision_applied, first_seen_at, last_seen_at, metadata_json
+                       config_revision_applied, first_seen_at, last_seen_at, install_state, managed,
+                       metadata_json, token_ciphertext
                 FROM modules
                 WHERE module_id = ?
                 """,
@@ -758,9 +805,109 @@ class PlatformStore:
             ).fetchone()
         if not row:
             return None
-        payload = dict(row)
-        payload["metadata"] = json.loads(payload.pop("metadata_json") or "{}")
-        return payload
+        return _apply_module_metadata(dict(row), row["metadata_json"])
+
+    def create_managed_module(
+        self,
+        module_id: str,
+        token: str,
+        token_ciphertext: str,
+        *,
+        module_name: str,
+        protocol_version: str = "v1",
+        metadata: Optional[dict[str, Any]] = None,
+    ) -> dict[str, Any]:
+        normalized_id = str(module_id or "").strip()
+        normalized_name = str(module_name or "").strip()
+        if not normalized_id:
+            raise ValueError("module_id is required")
+        if not normalized_name:
+            raise ValueError("module_name is required")
+        if not token:
+            raise ValueError("module token is required")
+        now = _utcnow()
+        token_hash = _sha256_hex(token)
+        metadata_json = json.dumps(metadata or {}, ensure_ascii=False)
+        with self._connect() as conn:
+            existing = conn.execute(
+                "SELECT 1 FROM modules WHERE module_id = ?",
+                (normalized_id,),
+            ).fetchone()
+            if existing:
+                raise ValueError("Module already exists")
+            conn.execute(
+                """
+                INSERT INTO modules (
+                    module_id, module_name, token_hash, token_ciphertext, status, version, protocol_version,
+                    config_revision_applied, first_seen_at, last_seen_at, install_state, managed, metadata_json
+                ) VALUES (?, ?, ?, ?, 'pending_install', '', ?, 0, ?, '', 'pending_install', 1, ?)
+                """,
+                (
+                    normalized_id,
+                    normalized_name,
+                    token_hash,
+                    str(token_ciphertext or "").strip(),
+                    str(protocol_version or "v1").strip() or "v1",
+                    now,
+                    metadata_json,
+                ),
+            )
+            conn.commit()
+        module = self.get_module(normalized_id)
+        if not module:
+            raise ValueError("Failed to persist module")
+        return module
+
+    def update_managed_module(
+        self,
+        module_id: str,
+        *,
+        module_name: str,
+        metadata: Optional[dict[str, Any]] = None,
+    ) -> dict[str, Any]:
+        normalized_id = str(module_id or "").strip()
+        normalized_name = str(module_name or "").strip()
+        if not normalized_name:
+            raise ValueError("module_name is required")
+        metadata_json = json.dumps(metadata or {}, ensure_ascii=False)
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT managed FROM modules WHERE module_id = ?",
+                (normalized_id,),
+            ).fetchone()
+            if not row:
+                raise ValueError("Module is not registered")
+            conn.execute(
+                """
+                UPDATE modules
+                SET module_name = ?, metadata_json = ?
+                WHERE module_id = ?
+                """,
+                (
+                    normalized_name,
+                    metadata_json,
+                    normalized_id,
+                ),
+            )
+            conn.commit()
+        module = self.get_module(normalized_id)
+        if not module:
+            raise ValueError("Module is not registered")
+        return module
+
+    def get_module_token_ciphertext(self, module_id: str) -> str:
+        normalized_id = str(module_id or "").strip()
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT token_ciphertext FROM modules WHERE module_id = ?",
+                (normalized_id,),
+            ).fetchone()
+        if not row:
+            raise ValueError("Module is not registered")
+        ciphertext = str(row["token_ciphertext"] or "").strip()
+        if not ciphertext:
+            raise ValueError("Module token reveal is unavailable for this module")
+        return ciphertext
 
     def register_module(
         self,
@@ -775,52 +922,54 @@ class PlatformStore:
         auto_create: bool = True,
     ) -> dict[str, Any]:
         normalized_id = str(module_id or "").strip()
-        normalized_name = str(module_name or normalized_id).strip() or normalized_id
+        normalized_name = str(module_name or "").strip()
         if not normalized_id:
             raise ValueError("module_id is required")
         if not token:
             raise ValueError("module token is required")
         now = _utcnow()
         token_hash = _sha256_hex(token)
-        metadata_json = json.dumps(metadata or {}, ensure_ascii=False)
         with self._connect() as conn:
             existing = conn.execute(
-                "SELECT token_hash FROM modules WHERE module_id = ?",
+                "SELECT token_hash, module_name, metadata_json FROM modules WHERE module_id = ?",
                 (normalized_id,),
             ).fetchone()
             if existing:
                 if str(existing["token_hash"]) != token_hash:
                     raise ValueError("Invalid module token")
+                stored_metadata = _module_metadata_from_json(existing["metadata_json"])
+                effective_metadata = stored_metadata if metadata is None else {**stored_metadata, **metadata}
                 conn.execute(
                     """
                     UPDATE modules
                     SET module_name = ?, status = 'online', version = ?, protocol_version = ?,
-                        config_revision_applied = ?, last_seen_at = ?, metadata_json = ?
+                        config_revision_applied = ?, last_seen_at = ?, install_state = 'online', metadata_json = ?
                     WHERE module_id = ?
                     """,
                     (
-                        normalized_name,
+                        normalized_name or str(existing["module_name"] or normalized_id).strip() or normalized_id,
                         str(version or "").strip(),
                         str(protocol_version or "v1").strip() or "v1",
                         int(config_revision_applied or 0),
                         now,
-                        metadata_json,
+                        json.dumps(effective_metadata, ensure_ascii=False),
                         normalized_id,
                     ),
                 )
             else:
                 if not auto_create:
                     raise ValueError("Module is not registered")
+                metadata_json = json.dumps(metadata or {}, ensure_ascii=False)
                 conn.execute(
                     """
                     INSERT INTO modules (
-                        module_id, module_name, token_hash, status, version, protocol_version,
-                        config_revision_applied, first_seen_at, last_seen_at, metadata_json
-                    ) VALUES (?, ?, ?, 'online', ?, ?, ?, ?, ?, ?)
+                        module_id, module_name, token_hash, token_ciphertext, status, version, protocol_version,
+                        config_revision_applied, first_seen_at, last_seen_at, install_state, managed, metadata_json
+                    ) VALUES (?, ?, ?, '', 'online', ?, ?, ?, ?, ?, 'online', 0, ?)
                     """,
                     (
                         normalized_id,
-                        normalized_name,
+                        normalized_name or normalized_id,
                         token_hash,
                         str(version or "").strip(),
                         str(protocol_version or "v1").strip() or "v1",
@@ -841,8 +990,8 @@ class PlatformStore:
         with self._connect() as conn:
             row = conn.execute(
                 """
-                SELECT module_id, module_name, token_hash, status, version, protocol_version,
-                       config_revision_applied, first_seen_at, last_seen_at, metadata_json
+                SELECT module_id, module_name, token_hash, token_ciphertext, status, version, protocol_version,
+                       config_revision_applied, first_seen_at, last_seen_at, install_state, managed, metadata_json
                 FROM modules
                 WHERE module_id = ?
                 """,
@@ -852,8 +1001,7 @@ class PlatformStore:
             raise ValueError("Invalid module credentials")
         payload = dict(row)
         payload.pop("token_hash", None)
-        payload["metadata"] = json.loads(payload.pop("metadata_json") or "{}")
-        return payload
+        return _apply_module_metadata(payload, row["metadata_json"])
 
     def record_module_heartbeat(
         self,
@@ -878,7 +1026,7 @@ class PlatformStore:
             conn.execute(
                 """
                 UPDATE modules
-                SET status = ?, version = ?, protocol_version = ?, config_revision_applied = ?, last_seen_at = ?
+                SET status = ?, version = ?, protocol_version = ?, config_revision_applied = ?, last_seen_at = ?, install_state = 'online'
                 WHERE module_id = ?
                 """,
                 (
@@ -918,7 +1066,8 @@ class PlatformStore:
             rows = conn.execute(
                 """
                 SELECT m.module_id, m.module_name, m.status, m.version, m.protocol_version,
-                       m.config_revision_applied, m.first_seen_at, m.last_seen_at, m.metadata_json,
+                       m.config_revision_applied, m.first_seen_at, m.last_seen_at, m.install_state,
+                       m.managed, m.metadata_json,
                        (
                            SELECT COUNT(*)
                            FROM review_cases rc
@@ -939,7 +1088,7 @@ class PlatformStore:
             payload = dict(row)
             last_seen_raw = str(payload.get("last_seen_at") or "")
             last_seen = datetime.fromisoformat(last_seen_raw) if last_seen_raw else None
-            payload["metadata"] = json.loads(payload.pop("metadata_json") or "{}")
+            payload = _apply_module_metadata(payload, row["metadata_json"])
             payload["healthy"] = bool(last_seen and now - last_seen <= stale_delta)
             items.append(payload)
         return items

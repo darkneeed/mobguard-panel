@@ -1,5 +1,5 @@
 import { buildSearchParams, request, requestBlob } from "../../../shared/api/request";
-import { ReviewListParams } from "../../../shared/api/types";
+import { ModuleProvisioningPayload, ReviewListParams } from "../../../shared/api/types";
 
 export const dataApi = {
   searchUsers: (query: string) =>
@@ -88,5 +88,21 @@ export const dataApi = {
   getQuality: (params: Record<string, string | number | boolean | undefined> = {}) =>
     request<Record<string, unknown>>(`/admin/metrics/quality?${buildSearchParams(params)}`),
   getModules: () => request<Record<string, unknown>>("/admin/modules"),
+  getModuleDetail: (moduleId: string) =>
+    request<Record<string, unknown>>(`/admin/modules/${encodeURIComponent(moduleId)}`),
+  createModule: (payload: ModuleProvisioningPayload) =>
+    request<Record<string, unknown>>("/admin/modules", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }),
+  updateModule: (moduleId: string, payload: ModuleProvisioningPayload) =>
+    request<Record<string, unknown>>(`/admin/modules/${encodeURIComponent(moduleId)}`, {
+      method: "PUT",
+      body: JSON.stringify(payload)
+    }),
+  revealModuleToken: (moduleId: string) =>
+    request<Record<string, unknown>>(`/admin/modules/${encodeURIComponent(moduleId)}/token/reveal`, {
+      method: "POST"
+    }),
   getHealth: () => request<Record<string, unknown>>("/health")
 };

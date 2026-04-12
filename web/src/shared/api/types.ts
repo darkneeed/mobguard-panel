@@ -63,11 +63,45 @@ export type ModuleRecord = {
   version: string;
   protocol_version: string;
   config_revision_applied: number;
+  install_state: string;
+  managed: boolean;
+  host: string;
+  port: number;
+  access_log_path: string;
+  config_profiles: string[];
+  provider: string;
+  notes: string;
+  token_reveal_available?: boolean;
   first_seen_at?: string;
   last_seen_at: string;
   healthy?: boolean;
   open_review_cases?: number;
   analysis_events_count?: number;
+};
+
+export type ModuleListResponse = {
+  items: ModuleRecord[];
+  count: number;
+};
+
+export type ModuleInstallBundle = {
+  compose_yaml: string;
+  module_token?: string;
+};
+
+export type ModuleDetailResponse = {
+  module: ModuleRecord;
+  install: ModuleInstallBundle;
+};
+
+export type ModuleProvisioningPayload = {
+  module_name: string;
+  host: string;
+  port: number;
+  access_log_path: string;
+  config_profiles: string[];
+  provider: string;
+  notes: string;
 };
 
 export type RulesState = {
