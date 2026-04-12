@@ -88,22 +88,34 @@ def _module_secret_key(container: APIContainer) -> str:
     return secret_key
 
 
+def _normalize_api_base_url(base_url: str) -> str:
+    normalized = str(base_url or "").rstrip("/")
+    if not normalized:
+        return ""
+    return normalized if normalized.endswith("/api") else f"{normalized}/api"
+
+
 def _panel_base_url(container: APIContainer) -> str:
     runtime_settings = {}
     runtime_config = getattr(container.runtime, "config", None)
     if isinstance(runtime_config, dict):
         runtime_settings = runtime_config.get("settings", {}) if isinstance(runtime_config.get("settings", {}), dict) else {}
     settings = _runtime_settings(container)
-    base_url = str(
-        runtime_settings.get("remnawave_api_url")
-        or runtime_settings.get("panel_url")
-        or runtime_settings.get("review_ui_base_url")
-        or settings.get("remnawave_api_url")
-        or settings.get("panel_url")
+    public_ui_base = str(
+        runtime_settings.get("review_ui_base_url")
         or settings.get("review_ui_base_url")
         or ""
     ).strip()
-    return base_url or "__SET_PANEL_BASE_URL__"
+    if public_ui_base:
+        return _normalize_api_base_url(public_ui_base)
+    fallback_base = str(
+        runtime_settings.get("panel_url")
+        or settings.get("panel_url")
+        or runtime_settings.get("remnawave_api_url")
+        or settings.get("remnawave_api_url")
+        or ""
+    ).strip()
+    return _normalize_api_base_url(fallback_base) or "__SET_PANEL_BASE_URL__/api"
 
 
 def _yaml_string(value: Any) -> str:

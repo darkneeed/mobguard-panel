@@ -72,7 +72,7 @@ class ModuleProvisioningTests(unittest.TestCase):
         self.assertTrue(module["token_reveal_available"])
         self.assertIn(MODULE_TOKEN_PLACEHOLDER := "__PASTE_TOKEN__", install["compose_yaml"])
         self.assertNotIn(install["module_token"], install["compose_yaml"])
-        self.assertIn("https://panel.example.com", install["compose_yaml"])
+        self.assertIn("https://mobguard.example.com/api", install["compose_yaml"])
 
         detail = module_service.get_module_detail(self.container, module["module_id"])
         self.assertEqual(detail["module"]["host"], "node-alpha.example.com")
