@@ -302,6 +302,44 @@ export function ReviewQueuePage() {
             {t("reviewQueue.clearFilters")}
           </button>
         </div>
+        <div className="queue-bulkbar">
+          <div className="queue-bulkbar-meta">
+            <button
+              className="ghost small-button"
+              onClick={() =>
+                setSelectedIds(allSelected ? [] : list.items.map((item) => item.id))
+              }
+            >
+              {allSelected ? t("reviewQueue.selection.clearPage") : t("reviewQueue.selection.selectPage")}
+            </button>
+            <span className="chip">
+              {t("reviewQueue.selection.selectedCount", { count: selectedIds.length })}
+            </span>
+          </div>
+          <div className="queue-bulk-actions">
+            <button
+              className="small-button"
+              disabled={selectedIds.length === 0 || resolvingId !== null}
+              onClick={() => resolveSelected("MOBILE")}
+            >
+              {t("reviewQueue.actions.bulkMobile")}
+            </button>
+            <button
+              className="small-button"
+              disabled={selectedIds.length === 0 || resolvingId !== null}
+              onClick={() => resolveSelected("HOME")}
+            >
+              {t("reviewQueue.actions.bulkHome")}
+            </button>
+            <button
+              className="ghost small-button"
+              disabled={selectedIds.length === 0 || resolvingId !== null}
+              onClick={() => resolveSelected("SKIP")}
+            >
+              {t("reviewQueue.actions.bulkSkip")}
+            </button>
+          </div>
+        </div>
       </div>
 
       {filtersOpen ? (
@@ -439,45 +477,6 @@ export function ReviewQueuePage() {
       ) : null}
 
       {error ? <div className="error-box">{error}</div> : null}
-
-      <div className="panel queue-opsbar">
-        <div className="action-row">
-          <button
-            className="ghost small-button"
-            onClick={() =>
-              setSelectedIds(allSelected ? [] : list.items.map((item) => item.id))
-            }
-          >
-            {allSelected ? t("reviewQueue.selection.clearPage") : t("reviewQueue.selection.selectPage")}
-          </button>
-          <span className="chip">
-            {t("reviewQueue.selection.selectedCount", { count: selectedIds.length })}
-          </span>
-        </div>
-        <div className="action-row">
-          <button
-            className="small-button"
-            disabled={selectedIds.length === 0 || resolvingId !== null}
-            onClick={() => resolveSelected("MOBILE")}
-          >
-            {t("reviewQueue.actions.bulkMobile")}
-          </button>
-          <button
-            className="small-button"
-            disabled={selectedIds.length === 0 || resolvingId !== null}
-            onClick={() => resolveSelected("HOME")}
-          >
-            {t("reviewQueue.actions.bulkHome")}
-          </button>
-          <button
-            className="ghost small-button"
-            disabled={selectedIds.length === 0 || resolvingId !== null}
-            onClick={() => resolveSelected("SKIP")}
-          >
-            {t("reviewQueue.actions.bulkSkip")}
-          </button>
-        </div>
-      </div>
 
       {loading ? (
         <div className="queue-grid">

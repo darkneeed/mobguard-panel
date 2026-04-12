@@ -115,3 +115,67 @@ export type SettingsSectionUpdatePayload = {
   revision?: number;
   updated_at?: string;
 };
+
+export type CalibrationReadinessCheck = {
+  key: string;
+  scope: "dataset" | "tuning";
+  current: number;
+  target: number;
+  ratio: number;
+  percent: number;
+  ready: boolean;
+};
+
+export type CalibrationReadiness = {
+  overall_percent: number;
+  dataset_percent: number;
+  tuning_percent: number;
+  blockers: string[];
+  checks: CalibrationReadinessCheck[];
+};
+
+export type CalibrationExportPreview = {
+  schema_version: number;
+  generated_at: string;
+  snapshot_source: string;
+  dataset_ready: boolean;
+  tuning_ready: boolean;
+  warnings: string[];
+  readiness: CalibrationReadiness;
+  filters: Record<string, unknown>;
+  row_counts: Record<string, unknown>;
+  coverage: Record<string, unknown>;
+};
+
+export type HealthCoreSnapshot = {
+  service_name?: string;
+  healthy: boolean;
+  status: string;
+  mode: "embedded" | "heartbeat";
+  updated_at?: string;
+  age_seconds?: number;
+  details?: Record<string, unknown>;
+};
+
+export type HealthSnapshot = {
+  status: string;
+  admin_sessions: number;
+  ipinfo_token_present: boolean;
+  db: {
+    healthy: boolean;
+    path: string;
+  };
+  core: HealthCoreSnapshot;
+  live_rules: {
+    revision: number;
+    updated_at: string;
+    updated_by: string;
+  };
+  analysis_24h: {
+    total: number;
+    score_zero_count: number;
+    score_zero_ratio: number;
+    asn_missing_count: number;
+    asn_missing_ratio: number;
+  };
+};

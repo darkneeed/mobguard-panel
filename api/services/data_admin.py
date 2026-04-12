@@ -988,7 +988,26 @@ def _build_review_reason_summary(rows: list[dict[str, Any]]) -> list[dict[str, A
     return sorted(buckets.values(), key=lambda item: (-int(item["total"]), item["review_reason"]))
 
 
-def build_calibration_export(container: APIContainer, filters: dict[str, Any]) -> dict[str, Any]:
+def _readiness_ratio(current: float, target: float) -> float:
+    if target <= 0:
+        return 1.0
+    return max(0.0, min(float(current) / float(target), 1.0))
+
+
+def _readiness_check(key: str, scope: str, current: float, target: float) -> dict[str, Any]:
+    ratio = _readiness_ratio(current, target)
+    return {
+        "key": key,
+        "scope": scope,
+        "current": current,
+        "target": target,
+        "ratio": round(ratio, 4),
+        "percent": int(round(ratio * 100)),
+        "ready": ratio >= 1.0,
+    }
+
+
+def _build_calibration_artifacts(container: APIContainer, filters: dict[str, Any]) -> dict[str, Any]:
     rules_snapshot, manifest_warnings, snapshot_source = _build_export_rules_snapshot(container)
     rows = _build_calibration_rows(container, filters)
     include_unknown = bool(filters.get("include_unknown", False))
@@ -1023,6 +1042,7 @@ def build_calibration_export(container: APIContainer, filters: dict[str, Any]) -
             continue
         pattern_key = f"{provider_key}:{service_hint}" if service_hint else provider_key
         provider_support_counts[pattern_key] = provider_support_counts.get(pattern_key, 0) + 1
+    min_provider_support = min(provider_support_counts.values()) if provider_support_counts else 0
     warnings = list(manifest_warnings)
     if provider_profiles_count == 0:
         warnings.append("provider_profiles_missing")
@@ -1034,7 +1054,7 @@ def build_calibration_export(container: APIContainer, filters: dict[str, Any]) -
         warnings.append("resolved_ratio_below_threshold")
     if provider_profiles_count > 0 and provider_key_coverage < 0.6:
         warnings.append("provider_key_coverage_below_target")
-    if provider_support_counts and min(provider_support_counts.values()) < 5:
+    if provider_support_counts and min_provider_support < 5:
         warnings.append("provider_support_below_target")
     dataset_ready = not (
         provider_profiles_count == 0 or provider_key_coverage == 0 or resolved_ratio < 0.5
@@ -1043,8 +1063,33 @@ def build_calibration_export(container: APIContainer, filters: dict[str, Any]) -
         provider_profiles_count > 0
         and provider_key_coverage >= 0.6
         and provider_support_counts
-        and min(provider_support_counts.values()) >= 5
+        and min_provider_support >= 5
     )
+    dataset_checks = [
+        _readiness_check(
+            "provider_profiles_present",
+            "dataset",
+            1 if provider_profiles_count > 0 else 0,
+            1,
+        ),
+        _readiness_check("resolved_ratio", "dataset", resolved_ratio, 0.5),
+        _readiness_check("provider_evidence_coverage", "dataset", provider_evidence_coverage, 0.6),
+        _readiness_check("provider_key_coverage", "dataset", provider_key_coverage, 0.6),
+    ]
+    tuning_checks = [
+        _readiness_check(
+            "provider_profiles_present",
+            "tuning",
+            1 if provider_profiles_count > 0 else 0,
+            1,
+        ),
+        _readiness_check("provider_key_coverage", "tuning", provider_key_coverage, 0.6),
+        _readiness_check("min_provider_support", "tuning", min_provider_support, 5),
+    ]
+    all_checks = dataset_checks + tuning_checks
+    dataset_percent = int(round(sum(check["percent"] for check in dataset_checks) / len(dataset_checks))) if dataset_checks else 0
+    tuning_percent = int(round(sum(check["percent"] for check in tuning_checks) / len(tuning_checks))) if tuning_checks else 0
+    blockers = list(dict.fromkeys(check["key"] for check in all_checks if not check["ready"]))
     manifest = {
         "schema_version": 1,
         "generated_at": datetime.utcnow().replace(microsecond=0).isoformat(),
@@ -1052,6 +1097,13 @@ def build_calibration_export(container: APIContainer, filters: dict[str, Any]) -
         "dataset_ready": dataset_ready,
         "tuning_ready": tuning_ready,
         "warnings": sorted(set(warnings)),
+        "readiness": {
+            "overall_percent": min(dataset_percent, tuning_percent),
+            "dataset_percent": dataset_percent,
+            "tuning_percent": tuning_percent,
+            "blockers": blockers,
+            "checks": all_checks,
+        },
         "filters": {
             "opened_from": filters.get("opened_from"),
             "opened_to": filters.get("opened_to"),
@@ -1078,12 +1130,39 @@ def build_calibration_export(container: APIContainer, filters: dict[str, Any]) -
             "provider_key_coverage": provider_key_coverage,
             "provider_profiles_count": provider_profiles_count,
             "provider_pattern_candidates": len(provider_support_counts),
+            "min_provider_support": min_provider_support,
         },
     }
     provider_summary = _build_provider_summary(rows)
     feature_summary = _build_feature_summary(known_rows)
     mixed_provider_summary = _build_mixed_provider_summary(rows)
     review_reason_summary = _build_review_reason_summary(rows)
+    return {
+        "rules_snapshot": rules_snapshot,
+        "rows": rows,
+        "known_rows": known_rows,
+        "manifest": manifest,
+        "provider_summary": provider_summary,
+        "feature_summary": feature_summary,
+        "mixed_provider_summary": mixed_provider_summary,
+        "review_reason_summary": review_reason_summary,
+    }
+
+
+def build_calibration_preview(container: APIContainer, filters: dict[str, Any]) -> dict[str, Any]:
+    artifacts = _build_calibration_artifacts(container, filters)
+    return artifacts["manifest"]
+
+
+def build_calibration_export(container: APIContainer, filters: dict[str, Any]) -> dict[str, Any]:
+    artifacts = _build_calibration_artifacts(container, filters)
+    rows = artifacts["rows"]
+    manifest = artifacts["manifest"]
+    rules_snapshot = artifacts["rules_snapshot"]
+    provider_summary = artifacts["provider_summary"]
+    feature_summary = artifacts["feature_summary"]
+    mixed_provider_summary = artifacts["mixed_provider_summary"]
+    review_reason_summary = artifacts["review_reason_summary"]
 
     archive_buffer = io.BytesIO()
     with io.StringIO() as jsonl_stream:

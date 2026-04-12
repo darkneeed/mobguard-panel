@@ -5,7 +5,12 @@ import { settingsApi } from "../features/settings/api/client";
 
 export type {
   AuthCapabilities,
+  CalibrationExportPreview,
+  CalibrationReadiness,
+  CalibrationReadinessCheck,
   EnvFieldState,
+  HealthCoreSnapshot,
+  HealthSnapshot,
   ModuleDetailResponse,
   ModuleInstallBundle,
   ModuleListResponse,

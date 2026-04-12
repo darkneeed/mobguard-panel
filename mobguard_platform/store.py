@@ -1926,26 +1926,43 @@ class PlatformStore:
                 """,
                 (status, now, case_id),
             )
-            expires_at = (datetime.utcnow() + timedelta(days=7)).replace(microsecond=0).isoformat()
-            conn.execute(
-                """
-                INSERT INTO exact_ip_overrides (ip, decision, source, actor, actor_tg_id, created_at, updated_at, expires_at)
-                VALUES (?, ?, 'review_resolution', ?, ?, ?, ?, ?)
-                ON CONFLICT(ip) DO UPDATE SET
-                    decision = excluded.decision,
-                    source = excluded.source,
-                    actor = excluded.actor,
-                    actor_tg_id = excluded.actor_tg_id,
-                    updated_at = excluded.updated_at,
-                    expires_at = excluded.expires_at
-                """,
-                (event_row["ip"], resolution, actor, actor_tg_id, now, now, expires_at),
-            )
-            bundle = DecisionBundle.from_dict(json.loads(event_row["bundle_json"]))
-            self._record_labels_for_resolution(conn, case_id, case_row["latest_event_id"], bundle, resolution)
+            if resolution == "SKIP":
+                conn.execute(
+                    """
+                    DELETE FROM exact_ip_overrides
+                    WHERE ip = ? AND source = 'review_resolution'
+                    """,
+                    (event_row["ip"],),
+                )
+                conn.execute(
+                    """
+                    DELETE FROM review_labels
+                    WHERE case_id = ?
+                    """,
+                    (case_id,),
+                )
+            else:
+                expires_at = (datetime.utcnow() + timedelta(days=7)).replace(microsecond=0).isoformat()
+                conn.execute(
+                    """
+                    INSERT INTO exact_ip_overrides (ip, decision, source, actor, actor_tg_id, created_at, updated_at, expires_at)
+                    VALUES (?, ?, 'review_resolution', ?, ?, ?, ?, ?)
+                    ON CONFLICT(ip) DO UPDATE SET
+                        decision = excluded.decision,
+                        source = excluded.source,
+                        actor = excluded.actor,
+                        actor_tg_id = excluded.actor_tg_id,
+                        updated_at = excluded.updated_at,
+                        expires_at = excluded.expires_at
+                    """,
+                    (event_row["ip"], resolution, actor, actor_tg_id, now, now, expires_at),
+                )
+                bundle = DecisionBundle.from_dict(json.loads(event_row["bundle_json"]))
+                self._record_labels_for_resolution(conn, case_id, case_row["latest_event_id"], bundle, resolution)
             conn.commit()
 
-        self.promote_learning_patterns()
+        if resolution in {"HOME", "MOBILE"}:
+            self.promote_learning_patterns()
         return self.get_review_case(case_id)
 
     def get_quality_metrics(self, module_id: str | None = None) -> dict[str, Any]:

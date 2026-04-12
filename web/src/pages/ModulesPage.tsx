@@ -7,6 +7,7 @@ import {
   ModuleProvisioningPayload,
   ModuleRecord
 } from "../api/client";
+import { ModalShell } from "../components/ModalShell";
 import { useToast } from "../components/ToastProvider";
 import { useI18n } from "../localization";
 import { formatDisplayDateTime } from "../utils/datetime";
@@ -76,7 +77,7 @@ export function ModulesPage() {
   const [data, setData] = useState<ModuleListResponse | null>(null);
   const [detail, setDetail] = useState<ModuleDetailResponse | null>(null);
   const [selectedId, setSelectedId] = useState("");
-  const [mode, setMode] = useState<"create" | "detail">("create");
+  const [modalMode, setModalMode] = useState<"create" | "detail" | null>(null);
   const [draft, setDraft] = useState<ModuleDraft>(EMPTY_DRAFT);
   const [savedDraft, setSavedDraft] = useState<ModuleDraft>(EMPTY_DRAFT);
   const [revealedToken, setRevealedToken] = useState("");
@@ -86,11 +87,16 @@ export function ModulesPage() {
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  const activeModule = detail?.module ?? null;
+  const activeModule = modalMode === "detail" ? detail?.module ?? null : null;
   const draftDirty = useMemo(
     () => JSON.stringify(draft) !== JSON.stringify(savedDraft),
     [draft, savedDraft]
   );
+  const modalOpen = modalMode !== null;
+  const canSubmit =
+    modalMode === "create"
+      ? draftDirty && Boolean(draft.module_name.trim())
+      : draftDirty;
 
   useEffect(() => {
     let cancelled = false;
@@ -101,36 +107,9 @@ export function ModulesPage() {
         if (cancelled) return;
         setData(listPayload);
         setError("");
-
-        if (!listPayload.items.length) {
-          setMode("create");
-          setSelectedId("");
-          setDetail(null);
-          setDraft(EMPTY_DRAFT);
-          setSavedDraft(EMPTY_DRAFT);
-          return;
-        }
-
-        const targetId =
-          selectedId && listPayload.items.some((item) => item.module_id === selectedId)
-            ? selectedId
-            : listPayload.items[0].module_id;
-        setSelectedId(targetId);
-        setMode("detail");
-        setLoadingDetail(true);
-        const detailPayload = (await api.getModuleDetail(targetId)) as ModuleDetailResponse;
-        if (cancelled) return;
-        setDetail(detailPayload);
-        const normalizedDraft = draftFromModule(detailPayload.module);
-        setDraft(normalizedDraft);
-        setSavedDraft(normalizedDraft);
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : t("modules.loadFailed"));
-        }
-      } finally {
-        if (!cancelled) {
-          setLoadingDetail(false);
         }
       }
     }
@@ -142,11 +121,15 @@ export function ModulesPage() {
   }, [t]);
 
   async function openModule(moduleId: string) {
-    setMode("detail");
+    setModalMode("detail");
     setSelectedId(moduleId);
     setPanelError("");
     setSaved("");
     setRevealedToken("");
+    if (detail?.module.module_id === moduleId) {
+      return;
+    }
+    setDetail(null);
     setLoadingDetail(true);
     try {
       const payload = (await api.getModuleDetail(moduleId)) as ModuleDetailResponse;
@@ -162,7 +145,7 @@ export function ModulesPage() {
   }
 
   function startCreateFlow() {
-    setMode("create");
+    setModalMode("create");
     setSelectedId("");
     setDetail(null);
     setDraft(EMPTY_DRAFT);
@@ -172,16 +155,23 @@ export function ModulesPage() {
     setSaved("");
   }
 
+  function closeModal() {
+    setModalMode(null);
+    setPanelError("");
+    setSaved("");
+    setRevealedToken("");
+  }
+
   async function saveModule() {
     setSubmitting(true);
     setPanelError("");
     setSaved("");
     try {
       const payload = toProvisioningPayload(draft);
-      if (mode === "create") {
+      if (modalMode === "create") {
         const response = (await api.createModule(payload)) as ModuleDetailResponse;
         const nextDraft = draftFromModule(response.module);
-        setMode("detail");
+        setModalMode("detail");
         setSelectedId(response.module.module_id);
         setDetail(response);
         setDraft(nextDraft);
@@ -232,7 +222,7 @@ export function ModulesPage() {
   }
 
   function renderModuleCard(item: ModuleRecord) {
-    const isActive = mode === "detail" && selectedId === item.module_id;
+    const isActive = modalMode === "detail" && selectedId === item.module_id;
 
     return (
       <article
@@ -311,43 +301,48 @@ export function ModulesPage() {
         </div>
       </div>
 
-      <div className="detail-layout">
-        <div className="detail-main">
-          <div className="panel">
-            <div className="panel-heading panel-heading-row">
-              <div>
-                <h2>{t("modules.listTitle")}</h2>
-                <p className="muted">{t("modules.listDescription")}</p>
-              </div>
-              <span className="tag severity-low">{t("modules.selectionHint")}</span>
-            </div>
-            <div className="queue-grid">
-              {(data?.items || []).map(renderModuleCard)}
-              {!data?.items.length ? <div className="provider-empty">{t("modules.empty")}</div> : null}
-            </div>
+      <div className="panel">
+        <div className="panel-heading panel-heading-row">
+          <div>
+            <h2>{t("modules.listTitle")}</h2>
+            <p className="muted">{t("modules.listDescription")}</p>
           </div>
+          <span className="tag severity-low">{t("modules.selectionHint")}</span>
         </div>
+        <div className="queue-grid">
+          {(data?.items || []).map(renderModuleCard)}
+          {!data?.items.length ? <div className="provider-empty">{t("modules.empty")}</div> : null}
+        </div>
+      </div>
 
-        <aside className="detail-sidebar">
+      <ModalShell
+        open={modalOpen}
+        onClose={closeModal}
+        title={modalMode === "create" ? t("modules.createTitle") : t("modules.detailsTitle")}
+        description={modalMode === "create" ? t("modules.createDescription") : t("modules.detailsDescription")}
+        closeLabel={t("common.close")}
+        actions={
+          <div className="action-row">
+            <span className={draftDirty ? "tag review-only" : "tag severity-low"}>
+              {draftDirty ? t("common.unsavedChanges") : t("common.saved")}
+            </span>
+            <button onClick={saveModule} disabled={submitting || !canSubmit}>
+              {modalMode === "create" ? t("modules.create") : t("modules.save")}
+            </button>
+          </div>
+        }
+      >
+        {panelError ? <div className="error-box">{panelError}</div> : null}
+        {saved ? <div className="ok-box">{saved}</div> : null}
+
+        <div className="modules-modal-stack">
           <div className="panel">
-            <div className="panel-heading panel-heading-row">
-              <div>
-                <h2>{mode === "create" ? t("modules.createTitle") : t("modules.detailsTitle")}</h2>
-                <p className="muted">
-                  {mode === "create" ? t("modules.createDescription") : t("modules.detailsDescription")}
-                </p>
-              </div>
-              <div className="action-row">
-                <span className={draftDirty ? "tag review-only" : "tag severity-low"}>
-                  {draftDirty ? t("common.unsavedChanges") : t("common.saved")}
-                </span>
-                <button onClick={saveModule} disabled={submitting || !draftDirty}>
-                  {mode === "create" ? t("modules.create") : t("modules.save")}
-                </button>
-              </div>
+            <div className="panel-heading">
+              <h2>{t("modules.fields.moduleName")}</h2>
+              <p className="muted">
+                {modalMode === "create" ? t("modules.createDescription") : t("modules.detailsDescription")}
+              </p>
             </div>
-            {panelError ? <div className="error-box">{panelError}</div> : null}
-            {saved ? <div className="ok-box">{saved}</div> : null}
             <div className="form-grid">
               <div className="rule-field">
                 <label htmlFor="module-name">{t("modules.fields.moduleName")}</label>
@@ -377,98 +372,106 @@ export function ModulesPage() {
             </div>
           </div>
 
-          <div className="panel">
-            <div className="panel-heading">
-              <h2>{t("modules.healthTitle")}</h2>
-              <p className="muted">{t("modules.healthDescription")}</p>
-            </div>
-            {activeModule ? (
-              <div className="detail-list">
-                <div>
-                  <dt>{t("modules.healthStatus")}</dt>
-                  <dd>{t(statusLabelKey(activeModule))}</dd>
+          {modalMode === "detail" && loadingDetail && !detail ? (
+            <div className="panel">{t("common.loading")}</div>
+          ) : null}
+
+          {modalMode === "detail" ? (
+            <>
+              <div className="panel">
+                <div className="panel-heading">
+                  <h2>{t("modules.healthTitle")}</h2>
+                  <p className="muted">{t("modules.healthDescription")}</p>
                 </div>
-                <div>
-                  <dt>{t("modules.lastValidationAt")}</dt>
-                  <dd>{formatDisplayDateTime(activeModule.last_validation_at, t("common.notAvailable"), language)}</dd>
-                </div>
-                <div>
-                  <dt>{t("modules.spoolDepth")}</dt>
-                  <dd>{activeModule.spool_depth}</dd>
-                </div>
-                <div>
-                  <dt>{t("modules.accessLogExists")}</dt>
-                  <dd>{activeModule.access_log_exists ? t("common.yes") : t("common.no")}</dd>
-                </div>
+                {activeModule ? (
+                  <div className="detail-list">
+                    <div>
+                      <dt>{t("modules.healthStatus")}</dt>
+                      <dd>{t(statusLabelKey(activeModule))}</dd>
+                    </div>
+                    <div>
+                      <dt>{t("modules.lastValidationAt")}</dt>
+                      <dd>{formatDisplayDateTime(activeModule.last_validation_at, t("common.notAvailable"), language)}</dd>
+                    </div>
+                    <div>
+                      <dt>{t("modules.spoolDepth")}</dt>
+                      <dd>{activeModule.spool_depth}</dd>
+                    </div>
+                    <div>
+                      <dt>{t("modules.accessLogExists")}</dt>
+                      <dd>{activeModule.access_log_exists ? t("common.yes") : t("common.no")}</dd>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="provider-empty">{t("modules.healthEmpty")}</div>
+                )}
+                {activeModule?.error_text ? <div className="error-box">{activeModule.error_text}</div> : null}
               </div>
-            ) : (
-              <div className="provider-empty">{t("modules.healthEmpty")}</div>
-            )}
-            {activeModule?.error_text ? <div className="error-box">{activeModule.error_text}</div> : null}
-          </div>
 
-          <div className="panel">
-            <div className="panel-heading panel-heading-row">
-              <div>
-                <h2>{t("modules.installTitle")}</h2>
-                <p className="muted">{t("modules.installDescription")}</p>
-              </div>
-              <div className="action-row">
-                <button
-                  className="ghost"
-                  disabled={!detail?.install.compose_yaml}
-                  onClick={() => copyText(detail?.install.compose_yaml || "", t("modules.composeCopied"))}
-                >
-                  {t("modules.copyCompose")}
-                </button>
-                <button
-                  className="ghost"
-                  disabled={loadingDetail || !activeModule?.token_reveal_available}
-                  onClick={revealToken}
-                >
-                  {t("modules.revealToken")}
-                </button>
-              </div>
-            </div>
-
-            <ol className="module-install-steps">
-              <li>{t("modules.installSteps.clone")}</li>
-              <li>{t("modules.installSteps.compose")}</li>
-              <li>{t("modules.installSteps.token")}</li>
-              <li>{t("modules.installSteps.start")}</li>
-            </ol>
-
-            {!activeModule?.token_reveal_available && mode === "detail" ? (
-              <div className="provider-empty">{t("modules.tokenUnavailable")}</div>
-            ) : null}
-
-            {revealedToken ? (
-              <div className="settings-group">
+              <div className="panel">
                 <div className="panel-heading panel-heading-row">
                   <div>
-                    <h3>{t("modules.tokenTitle")}</h3>
-                    <p className="muted">{t("modules.tokenDescription")}</p>
+                    <h2>{t("modules.installTitle")}</h2>
+                    <p className="muted">{t("modules.installDescription")}</p>
                   </div>
-                  <button className="ghost" onClick={() => copyText(revealedToken, t("modules.tokenCopied"))}>
-                    {t("modules.copyToken")}
-                  </button>
+                  <div className="action-row">
+                    <button
+                      className="ghost"
+                      disabled={!detail?.install.compose_yaml}
+                      onClick={() => copyText(detail?.install.compose_yaml || "", t("modules.composeCopied"))}
+                    >
+                      {t("modules.copyCompose")}
+                    </button>
+                    <button
+                      className="ghost"
+                      disabled={loadingDetail || !activeModule?.token_reveal_available}
+                      onClick={revealToken}
+                    >
+                      {t("modules.revealToken")}
+                    </button>
+                  </div>
                 </div>
-                <div className="env-field-current">
-                  <span className="muted">{t("modules.tokenValue")}</span>
-                  <strong>{revealedToken}</strong>
-                </div>
-              </div>
-            ) : null}
 
-            <details className="export-section" open={mode === "create"}>
-              <summary>{t("modules.installTitle")}</summary>
-              <pre className="log-box module-compose-box">
-                {detail?.install.compose_yaml || t("modules.installPreviewEmpty")}
-              </pre>
-            </details>
-          </div>
-        </aside>
-      </div>
+                <ol className="module-install-steps">
+                  <li>{t("modules.installSteps.clone")}</li>
+                  <li>{t("modules.installSteps.compose")}</li>
+                  <li>{t("modules.installSteps.token")}</li>
+                  <li>{t("modules.installSteps.start")}</li>
+                </ol>
+
+                {!activeModule?.token_reveal_available ? (
+                  <div className="provider-empty">{t("modules.tokenUnavailable")}</div>
+                ) : null}
+
+                {revealedToken ? (
+                  <div className="settings-group">
+                    <div className="panel-heading panel-heading-row">
+                      <div>
+                        <h3>{t("modules.tokenTitle")}</h3>
+                        <p className="muted">{t("modules.tokenDescription")}</p>
+                      </div>
+                      <button className="ghost" onClick={() => copyText(revealedToken, t("modules.tokenCopied"))}>
+                        {t("modules.copyToken")}
+                      </button>
+                    </div>
+                    <div className="env-field-current">
+                      <span className="muted">{t("modules.tokenValue")}</span>
+                      <strong>{revealedToken}</strong>
+                    </div>
+                  </div>
+                ) : null}
+
+                <details className="export-section" open>
+                  <summary>{t("modules.installTitle")}</summary>
+                  <pre className="log-box module-compose-box">
+                    {detail?.install.compose_yaml || t("modules.installPreviewEmpty")}
+                  </pre>
+                </details>
+              </div>
+            </>
+          ) : null}
+        </div>
+      </ModalShell>
     </section>
   );
 }

@@ -105,6 +105,7 @@ export function TelegramPage() {
   const [settings, setSettings] = useState<Record<string, string>>({});
   const [savedSettings, setSavedSettings] = useState<Record<string, string>>({});
   const [envDraft, setEnvDraft] = useState<Record<string, string>>({});
+  const [openEnvField, setOpenEnvField] = useState("");
   const [error, setError] = useState("");
   const [saved, setSaved] = useState("");
   const [envError, setEnvError] = useState("");
@@ -135,6 +136,7 @@ export function TelegramPage() {
         setSettings(normalizedTelegram);
         setSavedSettings(normalizedTelegram);
         setEnvDraft(buildInitialEnvDraft(typedTelegram.env));
+        setOpenEnvField(Object.keys(typedTelegram.env)[0] ?? "");
         setTemplates(normalizedTemplates);
         setSavedTemplates(normalizedTemplates);
       } catch (err) {
@@ -196,6 +198,7 @@ export function TelegramPage() {
       setSettings(normalized);
       setSavedSettings(normalized);
       setEnvDraft(buildInitialEnvDraft(response.env));
+      setOpenEnvField((prev) => prev || Object.keys(response.env)[0] || "");
       setSaved(t("telegram.settingsSaved"));
       setError("");
     } catch (err) {
@@ -217,6 +220,7 @@ export function TelegramPage() {
       setSettings(normalized);
       setSavedSettings(normalized);
       setEnvDraft(buildInitialEnvDraft(response.env));
+      setOpenEnvField((prev) => prev || Object.keys(response.env)[0] || "");
       setEnvSaved(t("telegram.envSaved"));
       setEnvError("");
     } catch (err) {
@@ -273,16 +277,22 @@ export function TelegramPage() {
   }
 
   function renderEnvField(field: EnvFieldState) {
+    const isOpen = openEnvField === field.key;
     return (
-      <details className="settings-group settings-group-collapsible" key={field.key}>
-        <summary className="settings-group-summary">
-          <div>
+      <div className={`settings-group env-accordion-item ${isOpen ? "is-open" : ""}`} key={field.key}>
+        <button
+          className="settings-group-summary env-accordion-trigger"
+          type="button"
+          aria-expanded={isOpen}
+          onClick={() => setOpenEnvField((prev) => (prev === field.key ? "" : field.key))}
+        >
+          <div className="env-accordion-copy">
             <h3>{field.key}</h3>
-            <p className="muted">
-              {field.masked ? t("common.secretValueStored") : t("common.runtimeValue")}
+            <p className="muted env-accordion-preview">
+              {field.value || t("common.notAvailable")}
             </p>
           </div>
-          <div className="action-row">
+          <div className="action-row env-accordion-meta">
             <span className={field.present ? "tag status-resolved" : "tag severity-low"}>
               {field.present ? t("common.present") : t("common.missing")}
             </span>
@@ -290,21 +300,28 @@ export function TelegramPage() {
               <span className="tag severity-high">{t("common.restartRequired")}</span>
             ) : null}
           </div>
-        </summary>
-        <div className="env-field-body">
-        <div className="env-field-current">
-          <span className="muted">{t("common.currentValue")}</span>
-          <strong>{field.value || t("common.notAvailable")}</strong>
-        </div>
-        <input
-          placeholder={field.masked ? t("common.leaveBlankToKeep") : ""}
-          value={envDraft[field.key] ?? ""}
-          onChange={(event) =>
-            setEnvDraft((prev) => ({ ...prev, [field.key]: event.target.value }))
-          }
-        />
-        </div>
-      </details>
+        </button>
+        {isOpen ? (
+          <div className="env-field-body">
+            <div className="env-field-edit-grid">
+              <div className="env-field-current">
+                <span className="muted">{t("common.currentValue")}</span>
+                <strong>{field.value || t("common.notAvailable")}</strong>
+              </div>
+              <div className="rule-field env-field-next">
+                <span className="muted">{t("common.newValue")}</span>
+                <input
+                  placeholder={field.masked ? t("common.leaveBlankToKeep") : ""}
+                  value={envDraft[field.key] ?? ""}
+                  onChange={(event) =>
+                    setEnvDraft((prev) => ({ ...prev, [field.key]: event.target.value }))
+                  }
+                />
+              </div>
+            </div>
+          </div>
+        ) : null}
+      </div>
     );
   }
 
@@ -400,7 +417,9 @@ export function TelegramPage() {
               </div>
               {envError ? <div className="error-box">{envError}</div> : null}
               {envSaved ? <div className="ok-box">{envSaved}</div> : null}
-              {Object.values(data.env).map(renderEnvField)}
+              <div className="env-accordion">
+                {Object.values(data.env).map(renderEnvField)}
+              </div>
             </div>
           </div>
 

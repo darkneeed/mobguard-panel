@@ -65,6 +65,21 @@ class ServiceHealthRepository(SQLiteRepository):
     ) -> dict[str, Any]:
         live_rules_state = live_rules_state_loader()
         core_heartbeat = self.get_heartbeat(core_service_name)
+        if core_heartbeat["status"] == "missing":
+            core_snapshot = {
+                "service_name": core_service_name,
+                "healthy": True,
+                "status": "embedded",
+                "mode": "embedded",
+                "updated_at": utcnow(),
+                "age_seconds": 0,
+                "details": {
+                    "runtime": "mobguard-api",
+                    "note": "scoring runtime is embedded in the panel API process",
+                },
+            }
+        else:
+            core_snapshot = {**core_heartbeat, "mode": "heartbeat"}
         with self.connect() as conn:
             conn.execute("SELECT 1").fetchone()
             admin_sessions = conn.execute(
@@ -88,7 +103,7 @@ class ServiceHealthRepository(SQLiteRepository):
         score_zero_ratio = (score_zero_count / total) if total else 0.0
         asn_missing_ratio = (asn_missing_count / total) if total else 0.0
         ipinfo_token_present = bool(os.getenv("IPINFO_TOKEN"))
-        degraded = not core_heartbeat["healthy"] or not ipinfo_token_present
+        degraded = not core_snapshot["healthy"] or not ipinfo_token_present
         overall = "degraded" if degraded else "ok"
         return {
             "status": overall,
@@ -98,7 +113,7 @@ class ServiceHealthRepository(SQLiteRepository):
                 "updated_at": live_rules_state["updated_at"],
                 "updated_by": live_rules_state["updated_by"],
             },
-            "core": core_heartbeat,
+            "core": core_snapshot,
             "admin_sessions": admin_sessions,
             "ipinfo_token_present": ipinfo_token_present,
             "analysis_24h": {

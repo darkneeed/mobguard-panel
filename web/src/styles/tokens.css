@@ -1,9 +1,12 @@
 @import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;700&display=swap");
 
 :root {
+  color-scheme: light;
   --bg: #f3efe6;
   --bg-panel: rgba(255, 250, 240, 0.82);
   --bg-panel-strong: rgba(255, 250, 240, 0.92);
+  --surface-soft: rgba(255, 255, 255, 0.34);
+  --surface-strong: rgba(255, 255, 255, 0.22);
   --ink: #15211a;
   --muted: #657369;
   --line: rgba(21, 33, 26, 0.12);
@@ -22,9 +25,12 @@
 }
 
 :root[data-theme="dark"] {
+  color-scheme: dark;
   --bg: #0e1418;
   --bg-panel: rgba(18, 25, 30, 0.9);
   --bg-panel-strong: rgba(18, 25, 30, 0.96);
+  --surface-soft: rgba(255, 255, 255, 0.05);
+  --surface-strong: rgba(255, 255, 255, 0.03);
   --ink: #eff8f1;
   --muted: #9ab0a4;
   --line: rgba(239, 248, 241, 0.12);

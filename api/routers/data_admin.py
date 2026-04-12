@@ -201,6 +201,30 @@ def export_calibration(
     )
 
 
+@router.get("/exports/calibration/preview")
+def preview_calibration_export(
+    opened_from: Optional[str] = None,
+    opened_to: Optional[str] = None,
+    review_reason: Optional[str] = None,
+    provider_key: Optional[str] = None,
+    include_unknown: bool = False,
+    status: str = Query(default="resolved_only"),
+    _: dict[str, Any] = Depends(get_session),
+    container=Depends(get_container),
+) -> dict[str, Any]:
+    return data_service.build_calibration_preview(
+        container,
+        {
+            "opened_from": opened_from,
+            "opened_to": opened_to,
+            "review_reason": review_reason,
+            "provider_key": provider_key,
+            "include_unknown": include_unknown,
+            "status": status,
+        },
+    )
+
+
 @router.get("/learning")
 def get_learning_admin(_: dict[str, Any] = Depends(get_session), container=Depends(get_container)) -> dict[str, Any]:
     return data_service.get_learning_admin(container)

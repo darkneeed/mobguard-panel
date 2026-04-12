@@ -1,4 +1,4 @@
-import { screen, waitFor } from "@testing-library/react";
+import { cleanup, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -18,6 +18,7 @@ vi.mock("../api/client", () => ({
 
 describe("ModulesPage", () => {
   beforeEach(() => {
+    cleanup();
     vi.clearAllMocks();
     Object.assign(navigator, {
       clipboard: {
@@ -62,9 +63,12 @@ describe("ModulesPage", () => {
 
     renderWithProviders(<ModulesPage />);
 
-    await userEvent.type(await screen.findByLabelText("Display name"), "Node Alpha");
-    await userEvent.type(screen.getByLabelText("INBOUND tags"), "DEFAULT-INBOUND");
-    await userEvent.click(screen.getAllByRole("button", { name: "Create module" })[1]);
+    await userEvent.click(await screen.findByRole("button", { name: "Create module" }));
+
+    const dialog = await screen.findByRole("dialog");
+    await userEvent.type(within(dialog).getByLabelText("Display name"), "Node Alpha");
+    await userEvent.type(within(dialog).getByLabelText("INBOUND tags"), "DEFAULT-INBOUND");
+    await userEvent.click(within(dialog).getByRole("button", { name: "Create module" }));
 
     await waitFor(() => {
       expect(api.createModule).toHaveBeenCalledWith({
@@ -139,7 +143,16 @@ describe("ModulesPage", () => {
     renderWithProviders(<ModulesPage />);
 
     await screen.findByText("Node Alpha");
-    await userEvent.click(screen.getAllByRole("button", { name: "Reveal token" })[0]);
+    expect(api.getModuleDetail).not.toHaveBeenCalled();
+
+    await userEvent.click(screen.getAllByRole("button", { name: "Open details" })[0]);
+
+    await waitFor(() => {
+      expect(api.getModuleDetail).toHaveBeenCalledWith("module-abc123");
+    });
+
+    const dialog = await screen.findByRole("dialog");
+    await userEvent.click(within(dialog).getByRole("button", { name: "Reveal token" }));
 
     await waitFor(() => {
       expect(api.revealModuleToken).toHaveBeenCalledWith("module-abc123");

@@ -13,6 +13,10 @@ body {
   overflow-x: hidden;
 }
 
+body.modal-open {
+  overflow: hidden;
+}
+
 :root[data-theme="dark"] body {
   background:
     radial-gradient(circle at top left, rgba(83, 212, 197, 0.12), transparent 24%),
@@ -107,12 +111,19 @@ textarea {
   background: rgba(255, 255, 255, 0.68);
   padding: 0.85rem 1rem;
   color: var(--ink);
+  color-scheme: inherit;
 }
 
 :root[data-theme="dark"] input,
 :root[data-theme="dark"] select,
 :root[data-theme="dark"] textarea {
   background: rgba(255, 255, 255, 0.06);
+  color: var(--ink);
+}
+
+option,
+optgroup {
+  background: var(--bg-panel-strong);
   color: var(--ink);
 }
 

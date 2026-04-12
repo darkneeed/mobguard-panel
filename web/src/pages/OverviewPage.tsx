@@ -2,38 +2,9 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { prefetchRouteModule } from "../app/routeModules";
-import { api, ReviewListResponse } from "../api/client";
+import { api, HealthSnapshot, ReviewListResponse } from "../api/client";
 import { useI18n } from "../localization";
 import { formatDisplayDateTime } from "../utils/datetime";
-
-type HealthSnapshot = {
-  status: string;
-  admin_sessions: number;
-  ipinfo_token_present: boolean;
-  db: {
-    healthy: boolean;
-    path: string;
-  };
-  core: {
-    healthy: boolean;
-    status: string;
-    updated_at?: string;
-    age_seconds?: number;
-    details?: Record<string, unknown>;
-  };
-  live_rules: {
-    revision: number;
-    updated_at: string;
-    updated_by: string;
-  };
-  analysis_24h: {
-    total: number;
-    score_zero_count: number;
-    score_zero_ratio: number;
-    asn_missing_count: number;
-    asn_missing_ratio: number;
-  };
-};
 
 type QualityPayload = {
   open_cases: number;
@@ -122,6 +93,26 @@ export function OverviewPage() {
     !quality?.live_rules_updated_by || quality.live_rules_updated_by === "bootstrap"
       ? t("common.system")
       : quality.live_rules_updated_by;
+  const coreStatusLabel =
+    health?.core.mode === "embedded"
+      ? t("overview.health.embedded")
+      : health?.core.status || t("common.notAvailable");
+  const coreRuntimeMeta =
+    health?.core.mode === "embedded"
+      ? t("overview.health.embeddedRuntime", {
+          value: formatDisplayDateTime(
+            health?.core.updated_at || "",
+            t("common.notAvailable"),
+            language
+          )
+        })
+      : t("overview.health.updated", {
+          value: formatDisplayDateTime(
+            health?.core.updated_at || "",
+            t("common.notAvailable"),
+            language
+          )
+        });
 
   return (
     <section className="page">
@@ -159,7 +150,13 @@ export function OverviewPage() {
             </div>
             <div className="stat-card">
               <span>{t("overview.cards.core")}</span>
-              <strong>{health?.core.healthy ? t("common.on") : t("common.off")}</strong>
+              <strong>
+                {health?.core.mode === "embedded"
+                  ? t("overview.cards.embeddedValue")
+                  : health?.core.healthy
+                    ? t("common.on")
+                    : t("common.off")}
+              </strong>
             </div>
             <div className="stat-card">
               <span>{t("overview.cards.ipinfo")}</span>
@@ -217,16 +214,12 @@ export function OverviewPage() {
             <div className="metric-row">
               <div className="record-main">
                 <span className="record-title">{t("overview.health.core")}</span>
-                <span className="tag status-resolved">{health?.core.status || t("common.notAvailable")}</span>
+                <span className={`tag ${health?.core.healthy ? "status-resolved" : "severity-high"}`}>
+                  {coreStatusLabel}
+                </span>
               </div>
               <div className="record-meta">
-                {t("overview.health.updated", {
-                  value: formatDisplayDateTime(
-                    health?.core.updated_at || "",
-                    t("common.notAvailable"),
-                    language
-                  )
-                })}
+                {coreRuntimeMeta}
               </div>
             </div>
             <div className="metric-row">

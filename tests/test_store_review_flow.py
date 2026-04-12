@@ -103,6 +103,53 @@ class StoreReviewFlowTests(unittest.TestCase):
         self.assertIsNotNone(provider_service_pattern)
         self.assertEqual(provider_service_pattern["decision"], "HOME")
 
+    def test_skip_resolution_does_not_create_override_or_learning_and_case_reopens_on_new_event(self):
+        bundle = DecisionBundle(
+            ip="10.10.10.11",
+            verdict="UNSURE",
+            confidence_band="UNSURE",
+            score=0,
+            asn=12345,
+            isp="MTS",
+        )
+        bundle.signal_flags["provider_evidence"] = {
+            "provider_key": "mts",
+            "provider_classification": "mixed",
+            "service_type_hint": "conflict",
+            "service_conflict": True,
+            "review_recommended": True,
+        }
+        user = {"uuid": "uuid-1", "username": "alice", "telegramId": "1001", "id": 42, "module_id": "node-a", "module_name": "Node A"}
+        event_id = self.store.record_analysis_event(user, bundle.ip, "TAG", bundle)
+        summary = self.store.ensure_review_case(user, bundle.ip, "TAG", bundle, event_id, "provider_conflict")
+
+        skipped = self.store.resolve_review_case(summary.id, "SKIP", "admin", 1001, "need more data")
+
+        self.assertEqual(skipped["status"], "SKIPPED")
+        self.assertIsNone(self.store.get_ip_override(bundle.ip))
+        self.assertIsNone(self.store.get_promoted_pattern("asn", "12345"))
+        with self.store._connect() as conn:
+            labels = conn.execute(
+                "SELECT COUNT(*) AS cnt FROM review_labels WHERE case_id = ?",
+                (summary.id,),
+            ).fetchone()
+            self.assertEqual(labels["cnt"], 0)
+
+        next_bundle = DecisionBundle(
+            ip="10.10.10.11",
+            verdict="HOME",
+            confidence_band="PROBABLE_HOME",
+            score=18,
+            asn=12345,
+            isp="MTS Fiber",
+        )
+        next_event_id = self.store.record_analysis_event(user, next_bundle.ip, "TAG", next_bundle)
+        reopened = self.store.ensure_review_case(user, next_bundle.ip, "TAG", next_bundle, next_event_id, "probable_home")
+
+        self.assertEqual(reopened.id, summary.id)
+        self.assertEqual(reopened.status, "OPEN")
+        self.assertEqual(reopened.repeat_count, 2)
+
     def test_live_rules_revision_conflict_is_rejected(self):
         state = self.store.get_live_rules_state()
         updated = self.store.update_live_rules(
@@ -542,7 +589,24 @@ class StoreReviewFlowTests(unittest.TestCase):
             snapshot = self.store.get_health_snapshot()
             self.assertEqual(snapshot["status"], "ok")
             self.assertTrue(snapshot["core"]["healthy"])
+            self.assertEqual(snapshot["core"]["mode"], "heartbeat")
             self.assertTrue(snapshot["ipinfo_token_present"])
+        finally:
+            if previous is None:
+                os.environ.pop("IPINFO_TOKEN", None)
+            else:
+                os.environ["IPINFO_TOKEN"] = previous
+
+    def test_health_snapshot_uses_embedded_runtime_when_heartbeat_is_missing(self):
+        previous = os.environ.get("IPINFO_TOKEN")
+        os.environ["IPINFO_TOKEN"] = "test-token"
+        try:
+            snapshot = self.store.get_health_snapshot()
+            self.assertEqual(snapshot["status"], "ok")
+            self.assertTrue(snapshot["core"]["healthy"])
+            self.assertEqual(snapshot["core"]["mode"], "embedded")
+            self.assertEqual(snapshot["core"]["status"], "embedded")
+            self.assertTrue(snapshot["core"]["updated_at"])
         finally:
             if previous is None:
                 os.environ.pop("IPINFO_TOKEN", None)

@@ -26,10 +26,12 @@ export const enDictionary: TranslationDictionary = {
     readOnly: "read only",
     envFile: ".env file",
     currentValue: "Current value",
+    newValue: "New value",
     secretValueStored: "Stored on the server as a masked secret.",
     runtimeValue: "Runtime value managed through .env.",
     leaveBlankToKeep: "Leave blank to keep the current secret value",
-    restartRequired: "restart required"
+    restartRequired: "restart required",
+    close: "Close"
   },
   layout: {
     brandSubtitle: "Admin panel",
@@ -95,15 +97,18 @@ export const enDictionary: TranslationDictionary = {
     healthTitle: "Health snapshot",
     healthDescription: "Back-end heartbeat and control-plane status.",
     health: {
-      core: "Core heartbeat",
+      core: "Scoring runtime",
       db: "Database",
       rules: "Live rules",
+      embedded: "embedded",
+      embeddedRuntime: "Embedded in the panel API process · updated {value}",
       updated: "Updated {value}",
       rulesBy: "Updated by {value}"
     },
     cards: {
       openQueue: "Open queue",
-      core: "Core healthy",
+      core: "Scoring runtime",
+      embeddedValue: "embedded",
       ipinfo: "IPINFO token",
       adminSessions: "Admin sessions",
       scoreZeroRatio: "Score zero ratio (24h)",
@@ -686,11 +691,16 @@ export const enDictionary: TranslationDictionary = {
       generating: "Generating…",
       generate: "Generate ZIP",
       lastManifestTitle: "Last export manifest",
-      noManifest: "No calibration export generated yet",
+      readinessTitle: "Calibration readiness",
+      readinessDescription: "Live preview shows how ready the export is for learning and scoring adjustments.",
+      noManifest: "No readiness preview available yet",
       datasetReady: "Dataset is structurally ready for analysis",
       datasetNotReady: "Dataset is not ready for reliable provider calibration",
       tuningReady: "Provider tuning can start from this export",
       tuningNotReady: "Provider tuning is still blocked by coverage/support",
+      blockersTitle: "Readiness blockers",
+      noBlockers: "No critical blockers right now",
+      checksTitle: "Current readiness checks",
       warningsTitle: "Readiness warnings",
       notReadyToast: "Calibration archive generated, but readiness checks failed",
       filterSnapshot: "Applied filters",
@@ -709,6 +719,9 @@ export const enDictionary: TranslationDictionary = {
         all: "All cases"
       },
       cards: {
+        overallReadiness: "Overall readiness",
+        datasetReadiness: "Dataset readiness",
+        tuningReadiness: "Tuning readiness",
         file: "Archive",
         rawRows: "Raw rows",
         knownRows: "Known rows",
@@ -716,6 +729,15 @@ export const enDictionary: TranslationDictionary = {
         providerProfiles: "Provider profiles",
         providerCoverage: "Provider key coverage",
         patternCandidates: "Provider pattern candidates"
+      },
+      readiness: {
+        checks: {
+          provider_profiles_present: "Provider profiles in snapshot",
+          resolved_ratio: "Resolved ratio",
+          provider_evidence_coverage: "Provider explainability coverage",
+          provider_key_coverage: "Provider key coverage",
+          min_provider_support: "Minimum provider support"
+        }
       },
       warnings: {
         live_rules_stale_or_unseeded: "Live rules snapshot was empty and had to be merged from runtime config.",

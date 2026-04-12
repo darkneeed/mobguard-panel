@@ -83,6 +83,8 @@ export const dataApi = {
     }),
   exportCalibration: (params: Record<string, string | number | boolean | undefined>) =>
     requestBlob(`/admin/data/exports/calibration?${buildSearchParams(params)}`),
+  previewCalibration: (params: Record<string, string | number | boolean | undefined>) =>
+    request<Record<string, unknown>>(`/admin/data/exports/calibration/preview?${buildSearchParams(params)}`),
   listCases: (params: ReviewListParams) =>
     request<Record<string, unknown>>(`/admin/data/cases?${buildSearchParams(params)}`),
   getQuality: (params: Record<string, string | number | boolean | undefined> = {}) =>

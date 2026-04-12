@@ -162,6 +162,8 @@ class CalibrationExportTests(unittest.TestCase):
         self.assertEqual(manifest_from_header["row_counts"]["unknown_rows"], 1)
         self.assertTrue(manifest_from_header["dataset_ready"])
         self.assertFalse(manifest_from_header["tuning_ready"])
+        self.assertEqual(manifest_from_header["readiness"]["overall_percent"], 73)
+        self.assertIn("min_provider_support", manifest_from_header["readiness"]["blockers"])
         self.assertIn("provider_support_below_target", manifest_from_header["warnings"])
 
         archive = zipfile.ZipFile(io.BytesIO(payload["content"]))
@@ -197,11 +199,46 @@ class CalibrationExportTests(unittest.TestCase):
         self.assertEqual({row["ground_truth"] for row in calibration_rows}, {"HOME", "unknown"})
         self.assertTrue(calibration_rows[0]["provider_evidence"]["provider_key"] in {"beeline", "mts"})
         self.assertIn("provider_evidence_reconstructed", calibration_rows[0])
+        unknown_row = next(row for row in calibration_rows if row["ground_truth"] == "unknown")
+        self.assertEqual(unknown_row["review_labels"], [])
 
         provider_summary = archive.read("provider_summary.csv").decode("utf-8")
         self.assertIn("beeline", provider_summary)
         self.assertIn("mts", provider_summary)
         self.assertIn("raw_total", provider_summary)
+
+    def test_calibration_preview_returns_readiness_without_building_archive(self):
+        bundle = DecisionBundle(
+            ip="10.0.0.13",
+            verdict="HOME",
+            confidence_band="HIGH_HOME",
+            score=-20,
+            asn=3216,
+            isp="Beeline GPON",
+        )
+        bundle.signal_flags["provider_evidence"] = {
+            "provider_key": "beeline",
+            "provider_classification": "mixed",
+            "service_type_hint": "home",
+            "service_conflict": False,
+            "review_recommended": True,
+        }
+        self._create_case(
+            user={"uuid": "uuid-preview", "username": "dana", "telegramId": "4004", "id": 55},
+            bundle=bundle,
+            review_reason="provider_conflict",
+            resolution="HOME",
+        )
+
+        preview = data_admin_service.build_calibration_preview(
+            self.container,
+            {"status": "resolved_only", "include_unknown": False},
+        )
+
+        self.assertIn("readiness", preview)
+        self.assertEqual(preview["dataset_ready"], True)
+        self.assertGreaterEqual(preview["readiness"]["dataset_percent"], 75)
+        self.assertIn("checks", preview["readiness"])
 
     def test_calibration_export_warns_when_provider_profiles_are_missing_and_runtime_is_merged(self):
         container = SimpleNamespace(

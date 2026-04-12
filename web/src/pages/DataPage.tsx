@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
-import { api } from "../api/client";
+import { api, CalibrationExportPreview, CalibrationReadinessCheck } from "../api/client";
 import { useToast } from "../components/ToastProvider";
 import { useI18n } from "../localization";
 import { downloadBlob } from "../shared/api/request";
@@ -16,6 +16,7 @@ type PendingKey =
   | "exactOverride"
   | "unsureOverride"
   | "cacheSave"
+  | "calibrationPreview"
   | "calibrationExport";
 
 const DATA_TABS: DataTab[] = [
@@ -69,8 +70,9 @@ export function DataPage() {
     include_unknown: false,
     status: "resolved_only"
   });
-  const [lastCalibrationManifest, setLastCalibrationManifest] = useState<Record<string, unknown> | null>(null);
+  const [lastCalibrationManifest, setLastCalibrationManifest] = useState<CalibrationExportPreview | null>(null);
   const [lastCalibrationFilename, setLastCalibrationFilename] = useState("");
+  const [previewError, setPreviewError] = useState("");
 
   useEffect(() => {
     if (section && DATA_TABS.includes(section as DataTab)) {
@@ -170,6 +172,30 @@ export function DataPage() {
     };
   }, [tab, t]);
 
+  useEffect(() => {
+    if (tab !== "exports") return undefined;
+
+    let cancelled = false;
+    const timer = window.setTimeout(async () => {
+      try {
+        const payload = (await withPending("calibrationPreview", () =>
+          api.previewCalibration(calibrationFilters as Record<string, string | number | boolean | undefined>)
+        )) as CalibrationExportPreview;
+        if (cancelled) return;
+        setLastCalibrationManifest(payload);
+        setPreviewError("");
+      } catch (err) {
+        if (cancelled) return;
+        setPreviewError(err instanceof Error ? err.message : t("data.errors.exportCalibrationFailed"));
+      }
+    }, 220);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [tab, calibrationFilters, t]);
+
   async function searchUsers() {
     try {
       const payload = await withPending("userSearch", () => api.searchUsers(userQuery));
@@ -262,7 +288,7 @@ export function DataPage() {
         api.exportCalibration(calibrationFilters as Record<string, string | number | boolean | undefined>)
       );
       const manifest = parseManifestHeader(response.headers.get("X-MobGuard-Export-Manifest"));
-      setLastCalibrationManifest(manifest);
+      setLastCalibrationManifest((manifest as CalibrationExportPreview | null) ?? null);
       setLastCalibrationFilename(response.filename);
       downloadBlob(response.filename, response.blob);
       pushToast("success", t("data.saved.calibrationExportReady"));
@@ -290,6 +316,21 @@ export function DataPage() {
   function formatExportWarning(code: string): string {
     const translated = t(`data.exports.warnings.${code}`);
     return translated === `data.exports.warnings.${code}` ? code : translated;
+  }
+
+  function formatReadinessCheckLabel(key: string): string {
+    const translated = t(`data.exports.readiness.checks.${key}`);
+    return translated === `data.exports.readiness.checks.${key}` ? key.replace(/_/g, " ") : translated;
+  }
+
+  function formatReadinessCheckValue(check: CalibrationReadinessCheck): string {
+    if (check.key === "provider_profiles_present") {
+      return `${check.current > 0 ? t("common.yes") : t("common.no")} / ${check.target > 0 ? t("common.yes") : t("common.no")}`;
+    }
+    if (check.key === "min_provider_support") {
+      return `${displayValue(check.current)} / ${displayValue(check.target)}`;
+    }
+    return `${Math.round(check.current * 100)}% / ${Math.round(check.target * 100)}%`;
   }
 
   function renderUserExportPreview() {
@@ -848,6 +889,9 @@ export function DataPage() {
     const filters = (lastCalibrationManifest?.filters as Record<string, unknown> | undefined) || {};
     const coverage = (lastCalibrationManifest?.coverage as Record<string, unknown> | undefined) || {};
     const warnings = (lastCalibrationManifest?.warnings as string[] | undefined) || [];
+    const readiness = lastCalibrationManifest?.readiness;
+    const blockers = readiness?.blockers || [];
+    const checks = readiness?.checks || [];
     const datasetReady = Boolean(lastCalibrationManifest?.dataset_ready);
     const tuningReady = Boolean(lastCalibrationManifest?.tuning_ready);
     return (
@@ -897,16 +941,45 @@ export function DataPage() {
           </div>
         </div>
         <div className="panel">
-          <h2>{t("data.exports.lastManifestTitle")}</h2>
-          {!lastCalibrationManifest ? <p className="muted">{t("data.exports.noManifest")}</p> : null}
+          <div className="panel-heading">
+            <h2>{t("data.exports.readinessTitle")}</h2>
+            <p className="muted">{t("data.exports.readinessDescription")}</p>
+          </div>
+          {isPending("calibrationPreview") && !lastCalibrationManifest ? <p className="muted">{t("common.loading")}</p> : null}
+          {previewError ? <div className="error-box">{previewError}</div> : null}
+          {!lastCalibrationManifest && !isPending("calibrationPreview") ? <p className="muted">{t("data.exports.noManifest")}</p> : null}
           {lastCalibrationManifest ? (
             <>
+              <div className="stats-grid">
+                <div className="stat-card"><span>{t("data.exports.cards.overallReadiness")}</span><strong>{readiness?.overall_percent ?? 0}%</strong></div>
+                <div className="stat-card"><span>{t("data.exports.cards.datasetReadiness")}</span><strong>{readiness?.dataset_percent ?? 0}%</strong></div>
+                <div className="stat-card"><span>{t("data.exports.cards.tuningReadiness")}</span><strong>{readiness?.tuning_percent ?? 0}%</strong></div>
+                <div className="stat-card"><span>{t("data.exports.cards.file")}</span><strong>{displayValue(lastCalibrationFilename)}</strong></div>
+                <div className="stat-card"><span>{t("data.exports.cards.rawRows")}</span><strong>{displayValue(rowCounts.raw_rows)}</strong></div>
+                <div className="stat-card"><span>{t("data.exports.cards.knownRows")}</span><strong>{displayValue(rowCounts.known_rows)}</strong></div>
+                <div className="stat-card"><span>{t("data.exports.cards.unknownRows")}</span><strong>{displayValue(rowCounts.unknown_rows)}</strong></div>
+                <div className="stat-card"><span>{t("data.exports.cards.providerProfiles")}</span><strong>{displayValue(coverage.provider_profiles_count)}</strong></div>
+                <div className="stat-card"><span>{t("data.exports.cards.providerCoverage")}</span><strong>{displayValue(coverage.provider_key_coverage)}</strong></div>
+                <div className="stat-card"><span>{t("data.exports.cards.patternCandidates")}</span><strong>{displayValue(coverage.provider_pattern_candidates)}</strong></div>
+              </div>
               <div className={datasetReady ? "ok-box" : "error-box"}>
                 {datasetReady ? t("data.exports.datasetReady") : t("data.exports.datasetNotReady")}
               </div>
               <div className={tuningReady ? "ok-box" : "error-box"}>
                 {tuningReady ? t("data.exports.tuningReady") : t("data.exports.tuningNotReady")}
               </div>
+              {blockers.length > 0 ? (
+                <div className="panel export-warning-panel">
+                  <h3>{t("data.exports.blockersTitle")}</h3>
+                  <ul className="reason-list">
+                    {blockers.map((blocker) => (
+                      <li key={blocker}><span>{formatReadinessCheckLabel(blocker)}</span></li>
+                    ))}
+                  </ul>
+                </div>
+              ) : (
+                <div className="ok-box">{t("data.exports.noBlockers")}</div>
+              )}
               {warnings.length > 0 ? (
                 <div className="panel export-warning-panel">
                   <h3>{t("data.exports.warningsTitle")}</h3>
@@ -917,14 +990,24 @@ export function DataPage() {
                   </ul>
                 </div>
               ) : null}
-              <div className="stats-grid">
-                <div className="stat-card"><span>{t("data.exports.cards.file")}</span><strong>{displayValue(lastCalibrationFilename)}</strong></div>
-                <div className="stat-card"><span>{t("data.exports.cards.rawRows")}</span><strong>{displayValue(rowCounts.raw_rows)}</strong></div>
-                <div className="stat-card"><span>{t("data.exports.cards.knownRows")}</span><strong>{displayValue(rowCounts.known_rows)}</strong></div>
-                <div className="stat-card"><span>{t("data.exports.cards.unknownRows")}</span><strong>{displayValue(rowCounts.unknown_rows)}</strong></div>
-                <div className="stat-card"><span>{t("data.exports.cards.providerProfiles")}</span><strong>{displayValue(coverage.provider_profiles_count)}</strong></div>
-                <div className="stat-card"><span>{t("data.exports.cards.providerCoverage")}</span><strong>{displayValue(coverage.provider_key_coverage)}</strong></div>
-                <div className="stat-card"><span>{t("data.exports.cards.patternCandidates")}</span><strong>{displayValue(coverage.provider_pattern_candidates)}</strong></div>
+              <div className="panel export-checks-panel">
+                <h3>{t("data.exports.checksTitle")}</h3>
+                <div className="record-list">
+                  {checks.map((check) => (
+                    <div className="record-item" key={`${check.scope}:${check.key}`}>
+                      <div className="record-main">
+                        <span className="record-title">{formatReadinessCheckLabel(check.key)}</span>
+                        <span className={check.ready ? "tag status-resolved" : "tag severity-high"}>
+                          {check.percent}%
+                        </span>
+                      </div>
+                      <div className="record-meta">
+                        <span>{check.scope}</span>
+                        <span>{formatReadinessCheckValue(check)}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
               <details className="export-section" open>
                 <summary>{t("data.exports.filterSnapshot")}</summary>

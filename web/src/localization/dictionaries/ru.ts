@@ -26,10 +26,12 @@ export const ruDictionary: TranslationDictionary = {
     readOnly: "только чтение",
     envFile: "Файл .env",
     currentValue: "Текущее значение",
+    newValue: "Новое значение",
     secretValueStored: "На сервере значение хранится как скрытый секрет.",
     runtimeValue: "Runtime-значение, управляемое через .env.",
     leaveBlankToKeep: "Оставьте пустым, чтобы сохранить текущее секретное значение",
-    restartRequired: "нужен перезапуск"
+    restartRequired: "нужен перезапуск",
+    close: "Закрыть"
   },
   layout: {
     brandSubtitle: "Панель администратора",
@@ -95,15 +97,18 @@ export const ruDictionary: TranslationDictionary = {
     healthTitle: "Снимок здоровья",
     healthDescription: "Heartbeat backend-сервисов и статус control-plane.",
     health: {
-      core: "Heartbeat core",
+      core: "Scoring runtime",
       db: "База данных",
       rules: "Live rules",
+      embedded: "embedded",
+      embeddedRuntime: "Встроен в panel API · обновлено {value}",
       updated: "Обновлено {value}",
       rulesBy: "Обновил {value}"
     },
     cards: {
       openQueue: "Открытая очередь",
-      core: "Core healthy",
+      core: "Scoring runtime",
+      embeddedValue: "embedded",
       ipinfo: "IPINFO token",
       adminSessions: "Админ-сессии",
       scoreZeroRatio: "Доля score=0 (24ч)",
@@ -686,11 +691,16 @@ export const ruDictionary: TranslationDictionary = {
       generating: "Формирую…",
       generate: "Собрать ZIP",
       lastManifestTitle: "Manifest последней выгрузки",
-      noManifest: "Calibration export ещё не формировался",
+      readinessTitle: "Готовность calibration-пакета",
+      readinessDescription: "Live preview показывает, насколько выгрузка уже пригодна для редактирования обучения и скоринга.",
+      noManifest: "Preview готовности пока недоступен",
       datasetReady: "Датасет структурно пригоден для анализа",
       datasetNotReady: "Датасет пока непригоден для надёжной provider-калибровки",
       tuningReady: "По этой выгрузке уже можно начинать provider tuning",
       tuningNotReady: "Provider tuning пока заблокирован покрытием или support",
+      blockersTitle: "Блокеры readiness",
+      noBlockers: "Критичных blockers сейчас нет",
+      checksTitle: "Текущие readiness checks",
       warningsTitle: "Предупреждения readiness-проверки",
       notReadyToast: "Calibration archive сформирован, но readiness checks не пройдены",
       filterSnapshot: "Применённые фильтры",
@@ -709,6 +719,9 @@ export const ruDictionary: TranslationDictionary = {
         all: "Все кейсы"
       },
       cards: {
+        overallReadiness: "Общая готовность",
+        datasetReadiness: "Готовность dataset",
+        tuningReadiness: "Готовность tuning",
         file: "Архив",
         rawRows: "Сырые rows",
         knownRows: "Размеченные rows",
@@ -716,6 +729,15 @@ export const ruDictionary: TranslationDictionary = {
         providerProfiles: "Профили провайдеров",
         providerCoverage: "Покрытие provider key",
         patternCandidates: "Кандидаты provider patterns"
+      },
+      readiness: {
+        checks: {
+          provider_profiles_present: "Provider profiles в snapshot",
+          resolved_ratio: "Resolved ratio",
+          provider_evidence_coverage: "Покрытие provider explainability",
+          provider_key_coverage: "Покрытие provider key",
+          min_provider_support: "Минимальный support по провайдерам"
+        }
       },
       warnings: {
         live_rules_stale_or_unseeded: "Live rules snapshot был пуст и был слит с runtime config.",
