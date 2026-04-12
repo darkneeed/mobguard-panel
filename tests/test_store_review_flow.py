@@ -301,6 +301,82 @@ class StoreReviewFlowTests(unittest.TestCase):
             "https://mobguard.example.com/reviews/7",
         )
 
+    def test_review_payload_normalizes_numeric_uuid_to_system_id_for_legacy_rows(self):
+        with self.store._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO analysis_events (
+                    created_at, module_id, module_name, uuid, username, system_id, telegram_id, ip, tag,
+                    verdict, confidence_band, score, isp, asn, punitive_eligible,
+                    reasons_json, signal_flags_json, bundle_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    "2026-04-12T10:00:00",
+                    "node-a",
+                    "Node A",
+                    "215",
+                    None,
+                    None,
+                    None,
+                    "1.2.3.4",
+                    "TAG",
+                    "UNSURE",
+                    "UNSURE",
+                    0,
+                    "ISP",
+                    None,
+                    0,
+                    "[]",
+                    "{}",
+                    "{}",
+                ),
+            )
+            event_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+            conn.execute(
+                """
+                INSERT INTO review_cases (
+                    unique_key, status, review_reason, module_id, module_name, uuid, username, system_id, telegram_id,
+                    ip, tag, verdict, confidence_band, score, isp, asn, punitive_eligible,
+                    latest_event_id, repeat_count, reason_codes_json, opened_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    "legacy:215:1.2.3.4:TAG",
+                    "OPEN",
+                    "unsure",
+                    "node-a",
+                    "Node A",
+                    "215",
+                    None,
+                    None,
+                    None,
+                    "1.2.3.4",
+                    "TAG",
+                    "UNSURE",
+                    "UNSURE",
+                    0,
+                    "ISP",
+                    None,
+                    0,
+                    event_id,
+                    1,
+                    "[]",
+                    "2026-04-12T10:00:00",
+                    "2026-04-12T10:01:00",
+                ),
+            )
+            case_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+            conn.commit()
+
+        detail = self.store.get_review_case(case_id)
+        listing = self.store.list_review_cases({})
+
+        self.assertIsNone(detail["uuid"])
+        self.assertEqual(detail["system_id"], 215)
+        self.assertEqual(listing["items"][0]["system_id"], 215)
+        self.assertIsNone(listing["items"][0]["uuid"])
+
     def test_bootstrap_updated_by_is_normalized_to_system(self):
         with open(self.config_path, "w", encoding="utf-8") as handle:
             json.dump(

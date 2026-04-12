@@ -203,6 +203,17 @@ def _module_health_snapshot(
     return health_status, error_text, last_validation_at, spool_depth, access_log_exists
 
 
+def _normalize_review_identity_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    normalized = dict(payload)
+    raw_uuid = normalized.get("uuid")
+    if normalized.get("system_id") in (None, "") and raw_uuid not in (None, ""):
+        raw_uuid_text = str(raw_uuid).strip()
+        if raw_uuid_text.isdigit():
+            normalized["system_id"] = int(raw_uuid_text)
+            normalized["uuid"] = None
+    return normalized
+
+
 def _ensure_list_of_type(key: str, value: Any, item_type: type) -> list[Any]:
     if not isinstance(value, list):
         raise ValueError(f"{key} must be a list")
@@ -1654,7 +1665,7 @@ class PlatformStore:
             rows = conn.execute(sql, [*params, page_size, (page - 1) * page_size]).fetchall()
         items = []
         for row in rows:
-            item = dict(row)
+            item = _normalize_review_identity_payload(dict(row))
             item["reason_codes"] = json.loads(item.pop("reason_codes_json"))
             item["review_url"] = self.build_review_url(item["id"])
             items.append(item)
@@ -1698,7 +1709,7 @@ class PlatformStore:
                 """,
                 (case_id, case_row["uuid"], case_row["ip"]),
             ).fetchall()
-        case = dict(case_row)
+        case = _normalize_review_identity_payload(dict(case_row))
         case["reason_codes"] = json.loads(case.pop("reason_codes_json"))
         event_payload = dict(event_row) if event_row else {}
         if event_payload:
@@ -1707,7 +1718,7 @@ class PlatformStore:
             event_payload["bundle"] = json.loads(event_payload.pop("bundle_json"))
         case["latest_event"] = event_payload
         case["resolutions"] = [dict(row) for row in resolutions]
-        case["related_cases"] = [dict(row) for row in related_cases]
+        case["related_cases"] = [_normalize_review_identity_payload(dict(row)) for row in related_cases]
         case["review_url"] = self.build_review_url(case_id)
         return case
 
