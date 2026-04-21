@@ -59,7 +59,8 @@ export const ruDictionary: TranslationDictionary = {
         lists: "Списки",
         providers: "Провайдеры",
         policy: "Политика",
-        learning: "Learning"
+        learning: "Learning",
+        retention: "Retention"
       },
       data: {
         users: "Пользователи",
@@ -426,7 +427,8 @@ export const ruDictionary: TranslationDictionary = {
     sectionTitles: {
       thresholds: "Пороги, скоринг и поведение",
       policy: "Политика детекта",
-      learning: "Контроль learning"
+      learning: "Контроль learning",
+      retention: "Ретеншн базы данных"
     },
     sectionDescriptions: {
       general: "Runtime-wide параметры эскалации, предупреждений и переключения доступа в отдельной вкладке.",
@@ -434,7 +436,8 @@ export const ruDictionary: TranslationDictionary = {
       lists: "ASN- и keyword-списки, формирующие первичное доказательство и исключения.",
       providers: "Алиасы, markers и операторские подсказки для review-first сценариев.",
       policy: "Живая policy-логика детекта плюс enforcement-настройки переключения доступа.",
-      learning: "Пороги, при которых runtime-learning становится доверенным."
+      learning: "Пороги, при которых runtime-learning становится доверенным.",
+      retention: "Окна хранения, которые ограничивают рост SQLite, не удаляя активные review-состояния."
     },
     providerProfiles: {
       description: "Профили операторов с alias и service markers для осторожного review-first скоринга.",
@@ -874,7 +877,8 @@ export const ruDictionary: TranslationDictionary = {
       scores: "Scores",
       behavior: "Behavior",
       policy: "Policy",
-      learning: "Learning"
+      learning: "Learning",
+      retention: "Retention"
     },
     listFields: {
       admin_tg_ids: {
@@ -1078,6 +1082,36 @@ export const ruDictionary: TranslationDictionary = {
         label: "Live rules refresh interval",
         description: "Как часто runtime перечитывает live rules из storage.",
         recommendation: "Обычно достаточно 10–30 секунд."
+      },
+      db_cleanup_interval_minutes: {
+        label: "Интервал очистки БД (минуты)",
+        description: "Как часто API-процесс запускает периодический maintenance-проход по SQLite.",
+        recommendation: "30 минут — безопасное стартовое значение для steady-state очистки."
+      },
+      module_heartbeats_retention_days: {
+        label: "Хранение module heartbeat (дни)",
+        description: "Сколько дней держать исторические heartbeat-записи модулей перед очисткой.",
+        recommendation: "Держите коротко: актуальное состояние модуля и так хранится в таблице modules."
+      },
+      ingested_raw_events_retention_days: {
+        label: "Хранение сырых ingested events (дни)",
+        description: "Сколько дней хранить события модулей после того, как они перестают быть нужны для обычной работы.",
+        recommendation: "30 дней обычно достаточно, если вам не нужны длинные окна повторной подачи событий."
+      },
+      ip_history_retention_days: {
+        label: "Хранение IP history (дни)",
+        description: "Сколько дней сохранять поведенческую историю IP для churn и long-window анализа.",
+        recommendation: "Согласуйте это значение с самым длинным history-based окном скоринга, которому вы реально доверяете."
+      },
+      orphan_analysis_events_retention_days: {
+        label: "Хранение orphan analysis events (дни)",
+        description: "Сколько дней держать analysis events, на которые больше не ссылается ни один review case.",
+        recommendation: "Короткое окно заметно ограничивает рост базы, сохраняя недавний операторский контекст."
+      },
+      resolved_review_retention_days: {
+        label: "Хранение resolved review (дни)",
+        description: "Сколько дней хранить resolved/skipped кейсы и связанную audit-историю.",
+        recommendation: "Здесь держите длинное audit-окно; активные OPEN-кейсы эта настройка не удаляет."
       },
       learning_promote_asn_min_support: {
         label: "Promoted ASN min support",

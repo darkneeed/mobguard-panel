@@ -12,6 +12,8 @@ from typing import Any, Optional
 from .models import DecisionBundle, ReviewCaseSummary
 from .asn_sources import detect_asn_source
 from .repositories.health import ServiceHealthRepository
+from .repositories.modules_admin import ModuleAdminRepository
+from .repositories.review_admin import ReviewAdminRepository
 from .repositories.sessions import AdminSessionRepository
 from .runtime import canonicalize_runtime_bound_settings
 from .storage.sqlite import SQLiteStorage
@@ -84,6 +86,12 @@ EDITABLE_SETTINGS_KEYS = {
     "learning_promote_combo_min_support": int,
     "learning_promote_combo_min_precision": (int, float),
     "live_rules_refresh_seconds": int,
+    "db_cleanup_interval_minutes": int,
+    "module_heartbeats_retention_days": int,
+    "ingested_raw_events_retention_days": int,
+    "ip_history_retention_days": int,
+    "orphan_analysis_events_retention_days": int,
+    "resolved_review_retention_days": int,
 }
 
 DEFAULT_SETTINGS = {
@@ -107,6 +115,12 @@ DEFAULT_SETTINGS = {
     "learning_promote_combo_min_support": 5,
     "learning_promote_combo_min_precision": 0.90,
     "live_rules_refresh_seconds": 15,
+    "db_cleanup_interval_minutes": 30,
+    "module_heartbeats_retention_days": 14,
+    "ingested_raw_events_retention_days": 30,
+    "ip_history_retention_days": 30,
+    "orphan_analysis_events_retention_days": 30,
+    "resolved_review_retention_days": 90,
 }
 
 
@@ -114,8 +128,31 @@ def _utcnow() -> str:
     return datetime.utcnow().replace(microsecond=0).isoformat()
 
 
+def _coerce_int(value: Any, default: int) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _coerce_positive_int(value: Any, default: int, *, minimum: int = 1) -> int:
+    return max(_coerce_int(value, default), minimum)
+
+
 def _sha256_hex(value: str) -> str:
     return hashlib.sha256(str(value).encode("utf-8")).hexdigest()
+
+
+def _execute_with_changes(
+    conn: sqlite3.Connection,
+    query: str,
+    args: tuple[Any, ...] = (),
+) -> int:
+    cursor = conn.execute(query, args)
+    if cursor.rowcount is not None and cursor.rowcount >= 0:
+        return int(cursor.rowcount)
+    row = conn.execute("SELECT changes() AS cnt").fetchone()
+    return int(row["cnt"] if row else 0)
 
 
 def _module_metadata_from_json(raw_value: Any) -> dict[str, Any]:
@@ -417,6 +454,12 @@ class PlatformStore:
         self.storage = SQLiteStorage(db_path)
         self.sessions = AdminSessionRepository(self.storage)
         self.health = ServiceHealthRepository(self.storage, db_path)
+        self.modules_admin = ModuleAdminRepository(self.storage)
+        self.review_admin = ReviewAdminRepository(
+            self.storage,
+            base_config=self.base_config,
+            live_rules_loader=self.get_live_rules_state,
+        )
 
     def _connect(self) -> sqlite3.Connection:
         return self.storage.connect()
@@ -881,10 +924,19 @@ class PlatformStore:
                 "CREATE INDEX IF NOT EXISTS idx_review_cases_module_id ON review_cases(module_id, updated_at)"
             )
             conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_review_cases_uuid_updated ON review_cases(uuid, updated_at DESC)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_review_cases_username_updated ON review_cases(username, updated_at DESC)"
+            )
+            conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_review_cases_system_id ON review_cases(system_id)"
             )
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_review_cases_telegram_id ON review_cases(telegram_id)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_review_cases_latest_event_id ON review_cases(latest_event_id)"
             )
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_analysis_events_system_id ON analysis_events(system_id)"
@@ -893,10 +945,25 @@ class PlatformStore:
                 "CREATE INDEX IF NOT EXISTS idx_analysis_events_module_id ON analysis_events(module_id, created_at DESC)"
             )
             conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_analysis_events_uuid_created ON analysis_events(uuid, created_at DESC)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_analysis_events_username_created ON analysis_events(username, created_at DESC)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_analysis_events_telegram_id_created ON analysis_events(telegram_id, created_at DESC)"
+            )
+            conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_analysis_events_ip ON analysis_events(ip, created_at)"
             )
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_review_labels_pattern ON review_labels(pattern_type, pattern_value)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_review_labels_case_id ON review_labels(case_id)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_review_resolutions_case_id ON review_resolutions(case_id, created_at DESC)"
             )
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_unsure_learning_pattern ON unsure_learning(pattern_type, pattern_value)"
@@ -917,21 +984,7 @@ class PlatformStore:
             conn.commit()
 
     def get_module(self, module_id: str) -> Optional[dict[str, Any]]:
-        with self._connect() as conn:
-            row = conn.execute(
-                """
-                SELECT module_id, module_name, status, version, protocol_version,
-                       config_revision_applied, first_seen_at, last_seen_at, install_state, managed,
-                       health_status, error_text, last_validation_at, spool_depth, access_log_exists,
-                       metadata_json, token_ciphertext
-                FROM modules
-                WHERE module_id = ?
-                """,
-                (module_id,),
-            ).fetchone()
-        if not row:
-            return None
-        return _apply_module_metadata(dict(row), row["metadata_json"])
+        return self.modules_admin.get_module(module_id)
 
     def create_managed_module(
         self,
@@ -943,46 +996,14 @@ class PlatformStore:
         protocol_version: str = "v1",
         metadata: Optional[dict[str, Any]] = None,
     ) -> dict[str, Any]:
-        normalized_id = str(module_id or "").strip()
-        normalized_name = str(module_name or "").strip()
-        if not normalized_id:
-            raise ValueError("module_id is required")
-        if not normalized_name:
-            raise ValueError("module_name is required")
-        if not token:
-            raise ValueError("module token is required")
-        now = _utcnow()
-        token_hash = _sha256_hex(token)
-        metadata_json = json.dumps(metadata or {}, ensure_ascii=False)
-        with self._connect() as conn:
-            existing = conn.execute(
-                "SELECT 1 FROM modules WHERE module_id = ?",
-                (normalized_id,),
-            ).fetchone()
-            if existing:
-                raise ValueError("Module already exists")
-            conn.execute(
-                """
-                INSERT INTO modules (
-                    module_id, module_name, token_hash, token_ciphertext, status, version, protocol_version,
-                    config_revision_applied, first_seen_at, last_seen_at, install_state, managed, metadata_json
-                ) VALUES (?, ?, ?, ?, 'pending_install', '', ?, 0, ?, '', 'pending_install', 1, ?)
-                """,
-                (
-                    normalized_id,
-                    normalized_name,
-                    token_hash,
-                    str(token_ciphertext or "").strip(),
-                    str(protocol_version or "v1").strip() or "v1",
-                    now,
-                    metadata_json,
-                ),
-            )
-            conn.commit()
-        module = self.get_module(normalized_id)
-        if not module:
-            raise ValueError("Failed to persist module")
-        return module
+        return self.modules_admin.create_managed_module(
+            module_id,
+            token,
+            token_ciphertext,
+            module_name=module_name,
+            protocol_version=protocol_version,
+            metadata=metadata,
+        )
 
     def update_managed_module(
         self,
@@ -991,49 +1012,14 @@ class PlatformStore:
         module_name: str,
         metadata: Optional[dict[str, Any]] = None,
     ) -> dict[str, Any]:
-        normalized_id = str(module_id or "").strip()
-        normalized_name = str(module_name or "").strip()
-        if not normalized_name:
-            raise ValueError("module_name is required")
-        metadata_json = json.dumps(metadata or {}, ensure_ascii=False)
-        with self._connect() as conn:
-            row = conn.execute(
-                "SELECT managed FROM modules WHERE module_id = ?",
-                (normalized_id,),
-            ).fetchone()
-            if not row:
-                raise ValueError("Module is not registered")
-            conn.execute(
-                """
-                UPDATE modules
-                SET module_name = ?, metadata_json = ?
-                WHERE module_id = ?
-                """,
-                (
-                    normalized_name,
-                    metadata_json,
-                    normalized_id,
-                ),
-            )
-            conn.commit()
-        module = self.get_module(normalized_id)
-        if not module:
-            raise ValueError("Module is not registered")
-        return module
+        return self.modules_admin.update_managed_module(
+            module_id,
+            module_name=module_name,
+            metadata=metadata,
+        )
 
     def get_module_token_ciphertext(self, module_id: str) -> str:
-        normalized_id = str(module_id or "").strip()
-        with self._connect() as conn:
-            row = conn.execute(
-                "SELECT token_ciphertext FROM modules WHERE module_id = ?",
-                (normalized_id,),
-            ).fetchone()
-        if not row:
-            raise ValueError("Module is not registered")
-        ciphertext = str(row["token_ciphertext"] or "").strip()
-        if not ciphertext:
-            raise ValueError("Module token reveal is unavailable for this module")
-        return ciphertext
+        return self.modules_admin.get_module_token_ciphertext(module_id)
 
     def register_module(
         self,
@@ -1047,89 +1033,19 @@ class PlatformStore:
         config_revision_applied: int = 0,
         auto_create: bool = True,
     ) -> dict[str, Any]:
-        normalized_id = str(module_id or "").strip()
-        normalized_name = str(module_name or "").strip()
-        if not normalized_id:
-            raise ValueError("module_id is required")
-        if not token:
-            raise ValueError("module token is required")
-        now = _utcnow()
-        token_hash = _sha256_hex(token)
-        with self._connect() as conn:
-            existing = conn.execute(
-                "SELECT token_hash, module_name, metadata_json FROM modules WHERE module_id = ?",
-                (normalized_id,),
-            ).fetchone()
-            if existing:
-                if str(existing["token_hash"]) != token_hash:
-                    raise ValueError("Invalid module token")
-                stored_metadata = _module_metadata_from_json(existing["metadata_json"])
-                effective_metadata = stored_metadata if metadata is None else {**stored_metadata, **metadata}
-                conn.execute(
-                    """
-                    UPDATE modules
-                    SET module_name = ?, status = 'online', version = ?, protocol_version = ?,
-                        config_revision_applied = ?, last_seen_at = ?, install_state = 'online', metadata_json = ?
-                    WHERE module_id = ?
-                    """,
-                    (
-                        normalized_name or str(existing["module_name"] or normalized_id).strip() or normalized_id,
-                        str(version or "").strip(),
-                        str(protocol_version or "v1").strip() or "v1",
-                        int(config_revision_applied or 0),
-                        now,
-                        json.dumps(effective_metadata, ensure_ascii=False),
-                        normalized_id,
-                    ),
-                )
-            else:
-                if not auto_create:
-                    raise ValueError("Module is not registered")
-                metadata_json = json.dumps(metadata or {}, ensure_ascii=False)
-                conn.execute(
-                    """
-                    INSERT INTO modules (
-                        module_id, module_name, token_hash, token_ciphertext, status, version, protocol_version,
-                        config_revision_applied, first_seen_at, last_seen_at, install_state, managed, metadata_json
-                    ) VALUES (?, ?, ?, '', 'online', ?, ?, ?, ?, ?, 'online', 0, ?)
-                    """,
-                    (
-                        normalized_id,
-                        normalized_name or normalized_id,
-                        token_hash,
-                        str(version or "").strip(),
-                        str(protocol_version or "v1").strip() or "v1",
-                        int(config_revision_applied or 0),
-                        now,
-                        now,
-                        metadata_json,
-                    ),
-                )
-            conn.commit()
-        module = self.get_module(normalized_id)
-        if not module:
-            raise ValueError("Failed to persist module")
-        return module
+        return self.modules_admin.register_module(
+            module_id,
+            token,
+            module_name=module_name,
+            version=version,
+            protocol_version=protocol_version,
+            metadata=metadata,
+            config_revision_applied=config_revision_applied,
+            auto_create=auto_create,
+        )
 
     def authenticate_module(self, module_id: str, token: str) -> dict[str, Any]:
-        normalized_id = str(module_id or "").strip()
-        with self._connect() as conn:
-            row = conn.execute(
-                """
-                SELECT module_id, module_name, token_hash, token_ciphertext, status, version, protocol_version,
-                       config_revision_applied, first_seen_at, last_seen_at, install_state, managed,
-                       health_status, error_text, last_validation_at, spool_depth, access_log_exists,
-                       metadata_json
-                FROM modules
-                WHERE module_id = ?
-                """,
-                (normalized_id,),
-            ).fetchone()
-        if not row or str(row["token_hash"]) != _sha256_hex(token):
-            raise ValueError("Invalid module credentials")
-        payload = dict(row)
-        payload.pop("token_hash", None)
-        return _apply_module_metadata(payload, row["metadata_json"])
+        return self.modules_admin.authenticate_module(module_id, token)
 
     def record_module_heartbeat(
         self,
@@ -1141,104 +1057,17 @@ class PlatformStore:
         config_revision_applied: int = 0,
         details: Optional[dict[str, Any]] = None,
     ) -> dict[str, Any]:
-        normalized_id = str(module_id or "").strip()
-        now = _utcnow()
-        details_payload = dict(details or {})
-        details_json = json.dumps(details_payload, ensure_ascii=False)
-        with self._connect() as conn:
-            row = conn.execute(
-                """
-                SELECT module_name, health_status, error_text, last_validation_at, spool_depth, access_log_exists
-                FROM modules WHERE module_id = ?
-                """,
-                (normalized_id,),
-            ).fetchone()
-            if not row:
-                raise ValueError("Module is not registered")
-            health_status, error_text, last_validation_at, spool_depth, access_log_exists = _module_health_snapshot(
-                details_payload,
-                current_status=row["health_status"] if row else "warn",
-                current_error_text=row["error_text"] if row else "",
-                current_last_validation_at=row["last_validation_at"] if row else "",
-                current_spool_depth=row["spool_depth"] if row else 0,
-                current_access_log_exists=row["access_log_exists"] if row else 0,
-            )
-            conn.execute(
-                """
-                UPDATE modules
-                SET status = ?, version = ?, protocol_version = ?, config_revision_applied = ?, last_seen_at = ?, install_state = 'online',
-                    health_status = ?, error_text = ?, last_validation_at = ?, spool_depth = ?, access_log_exists = ?
-                WHERE module_id = ?
-                """,
-                (
-                    str(status or "online").strip() or "online",
-                    str(version or "").strip(),
-                    str(protocol_version or "v1").strip() or "v1",
-                    int(config_revision_applied or 0),
-                    now,
-                    health_status,
-                    error_text,
-                    last_validation_at,
-                    spool_depth,
-                    access_log_exists,
-                    normalized_id,
-                ),
-            )
-            conn.execute(
-                """
-                INSERT INTO module_heartbeats (
-                    module_id, status, version, protocol_version, config_revision_applied, details_json, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    normalized_id,
-                    str(status or "online").strip() or "online",
-                    str(version or "").strip(),
-                    str(protocol_version or "v1").strip() or "v1",
-                    int(config_revision_applied or 0),
-                    details_json,
-                    now,
-                ),
-            )
-            conn.commit()
-        module = self.get_module(normalized_id)
-        if not module:
-            raise ValueError("Module is not registered")
-        return module
+        return self.modules_admin.record_module_heartbeat(
+            module_id,
+            status=status,
+            version=version,
+            protocol_version=protocol_version,
+            config_revision_applied=config_revision_applied,
+            details=details,
+        )
 
     def list_modules(self, stale_after_seconds: int = 180) -> list[dict[str, Any]]:
-        now = datetime.utcnow().replace(microsecond=0)
-        with self._connect() as conn:
-            rows = conn.execute(
-                """
-                SELECT m.module_id, m.module_name, m.status, m.version, m.protocol_version,
-                       m.config_revision_applied, m.first_seen_at, m.last_seen_at, m.install_state,
-                       m.managed, m.health_status, m.error_text, m.last_validation_at,
-                       m.spool_depth, m.access_log_exists, m.metadata_json,
-                       (
-                           SELECT COUNT(*)
-                           FROM review_cases rc
-                           WHERE rc.module_id = m.module_id AND rc.status = 'OPEN'
-                       ) AS open_review_cases,
-                       (
-                           SELECT COUNT(*)
-                           FROM analysis_events ae
-                           WHERE ae.module_id = m.module_id
-                       ) AS analysis_events_count
-                FROM modules m
-                ORDER BY m.last_seen_at DESC, m.module_id ASC
-                """
-            ).fetchall()
-        items: list[dict[str, Any]] = []
-        stale_delta = timedelta(seconds=stale_after_seconds)
-        for row in rows:
-            payload = dict(row)
-            last_seen_raw = str(payload.get("last_seen_at") or "")
-            last_seen = datetime.fromisoformat(last_seen_raw) if last_seen_raw else None
-            payload = _apply_module_metadata(payload, row["metadata_json"])
-            payload["healthy"] = bool(last_seen and now - last_seen <= stale_delta)
-            items.append(payload)
-        return items
+        return self.modules_admin.list_modules(stale_after_seconds=stale_after_seconds)
 
     def ingest_raw_event(
         self,
@@ -1248,37 +1077,7 @@ class PlatformStore:
         occurred_at: str,
         payload: dict[str, Any],
     ) -> bool:
-        with self._connect() as conn:
-            existing = conn.execute(
-                "SELECT 1 FROM ingested_raw_events WHERE event_uid = ?",
-                (event_uid,),
-            ).fetchone()
-            if existing:
-                return False
-            conn.execute(
-                """
-                INSERT INTO ingested_raw_events (
-                    event_uid, module_id, module_name, occurred_at, log_offset,
-                    subject_uuid, username, system_id, telegram_id, ip, tag, raw_payload_json
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    event_uid,
-                    module_id,
-                    module_name,
-                    occurred_at,
-                    payload.get("log_offset"),
-                    payload.get("uuid"),
-                    payload.get("username"),
-                    payload.get("system_id"),
-                    payload.get("telegram_id"),
-                    payload.get("ip"),
-                    payload.get("tag"),
-                    json.dumps(payload, ensure_ascii=False),
-                ),
-            )
-            conn.commit()
-            return True
+        return self.modules_admin.ingest_raw_event(module_id, module_name, event_uid, occurred_at, payload)
 
     def mark_raw_event_processed(
         self,
@@ -1287,16 +1086,11 @@ class PlatformStore:
         analysis_event_id: Optional[int] = None,
         review_case_id: Optional[int] = None,
     ) -> None:
-        with self._connect() as conn:
-            conn.execute(
-                """
-                UPDATE ingested_raw_events
-                SET processed_at = ?, analysis_event_id = ?, review_case_id = ?
-                WHERE event_uid = ?
-                """,
-                (_utcnow(), analysis_event_id, review_case_id, event_uid),
-            )
-            conn.commit()
+        self.modules_admin.mark_raw_event_processed(
+            event_uid,
+            analysis_event_id=analysis_event_id,
+            review_case_id=review_case_id,
+        )
 
     def get_live_rules(self) -> dict[str, Any]:
         return self.get_live_rules_state()["rules"]
@@ -1436,50 +1230,10 @@ class PlatformStore:
         tag: str,
         bundle: DecisionBundle,
     ) -> int:
-        now = _utcnow()
-        payload = bundle.to_dict()
-        module_id = str((user or {}).get("module_id") or "").strip() or None
-        module_name = str((user or {}).get("module_name") or "").strip() or module_id
-        with self._connect() as conn:
-            cursor = conn.execute(
-                """
-                INSERT INTO analysis_events (
-                    created_at, module_id, module_name, uuid, username, system_id, telegram_id, ip, tag,
-                    verdict, confidence_band, score, isp, asn, punitive_eligible,
-                    reasons_json, signal_flags_json, bundle_json
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    now,
-                    module_id,
-                    module_name,
-                    (user or {}).get("uuid"),
-                    (user or {}).get("username"),
-                    _coerce_optional_int((user or {}).get("id")),
-                    str((user or {}).get("telegramId")) if (user or {}).get("telegramId") is not None else None,
-                    ip,
-                    tag,
-                    bundle.verdict,
-                    bundle.confidence_band,
-                    bundle.score,
-                    bundle.isp,
-                    bundle.asn,
-                    int(bundle.punitive_eligible),
-                    json.dumps([reason.to_dict() for reason in bundle.reasons], ensure_ascii=False),
-                    json.dumps(bundle.signal_flags, ensure_ascii=False),
-                    json.dumps(payload, ensure_ascii=False),
-                ),
-            )
-            conn.commit()
-            return int(cursor.lastrowid)
+        return self.review_admin.record_analysis_event(user, ip, tag, bundle)
 
     def build_review_url(self, case_id: int) -> str:
-        base_url = str(self.get_live_rules().get("settings", {}).get("review_ui_base_url", "")).rstrip("/")
-        if not base_url:
-            base_url = str(self.base_config.get("settings", {}).get("review_ui_base_url", "")).rstrip("/")
-        if not base_url:
-            return ""
-        return f"{base_url}/reviews/{case_id}"
+        return self.review_admin.build_review_url(case_id)
 
     def ensure_review_case(
         self,
@@ -1490,117 +1244,7 @@ class PlatformStore:
         event_id: int,
         review_reason: str,
     ) -> ReviewCaseSummary:
-        now = _utcnow()
-        module_id = str((user or {}).get("module_id") or "").strip()
-        module_name = str((user or {}).get("module_name") or "").strip() or module_id
-        unique_key = f"{module_id or 'legacy'}:{(user or {}).get('uuid', 'unknown')}:{ip}:{tag}"
-        reason_codes = json.dumps(bundle.reason_codes, ensure_ascii=False)
-        with self._connect() as conn:
-            existing = conn.execute(
-                "SELECT id, repeat_count FROM review_cases WHERE unique_key = ? AND module_id = ?",
-                (unique_key, module_id),
-            ).fetchone()
-            if existing:
-                conn.execute(
-                    """
-                    UPDATE review_cases
-                    SET status = 'OPEN',
-                        review_reason = ?,
-                        module_name = ?,
-                        username = ?,
-                        system_id = ?,
-                        telegram_id = ?,
-                        verdict = ?,
-                        confidence_band = ?,
-                        score = ?,
-                        isp = ?,
-                        asn = ?,
-                        punitive_eligible = ?,
-                        latest_event_id = ?,
-                        repeat_count = ?,
-                        reason_codes_json = ?,
-                        updated_at = ?
-                    WHERE id = ?
-                    """,
-                    (
-                        review_reason,
-                        module_name,
-                        (user or {}).get("username"),
-                        _coerce_optional_int((user or {}).get("id")),
-                        str((user or {}).get("telegramId")) if (user or {}).get("telegramId") is not None else None,
-                        bundle.verdict,
-                        bundle.confidence_band,
-                        bundle.score,
-                        bundle.isp,
-                        bundle.asn,
-                        int(bundle.punitive_eligible),
-                        event_id,
-                        int(existing["repeat_count"]) + 1,
-                        reason_codes,
-                        now,
-                        existing["id"],
-                    ),
-                )
-                case_id = int(existing["id"])
-            else:
-                cursor = conn.execute(
-                    """
-                    INSERT INTO review_cases (
-                        unique_key, status, review_reason, module_id, module_name, uuid, username, system_id, telegram_id, ip, tag,
-                        verdict, confidence_band, score, isp, asn, punitive_eligible, latest_event_id, repeat_count,
-                        reason_codes_json, opened_at, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    (
-                        unique_key,
-                        "OPEN",
-                        review_reason,
-                        module_id,
-                        module_name,
-                        (user or {}).get("uuid"),
-                        (user or {}).get("username"),
-                        _coerce_optional_int((user or {}).get("id")),
-                        str((user or {}).get("telegramId")) if (user or {}).get("telegramId") is not None else None,
-                        ip,
-                        tag,
-                        bundle.verdict,
-                        bundle.confidence_band,
-                        bundle.score,
-                        bundle.isp,
-                        bundle.asn,
-                        int(bundle.punitive_eligible),
-                        event_id,
-                        1,
-                        reason_codes,
-                        now,
-                        now,
-                    ),
-                )
-                case_id = int(cursor.lastrowid)
-            conn.commit()
-        summary = self.get_review_case(case_id)
-        return ReviewCaseSummary(
-            id=summary["id"],
-            status=summary["status"],
-            review_reason=summary["review_reason"],
-            module_id=summary.get("module_id") or "",
-            module_name=summary.get("module_name") or "",
-            uuid=summary.get("uuid") or "",
-            username=summary.get("username") or "",
-            system_id=summary.get("system_id"),
-            telegram_id=summary.get("telegram_id"),
-            ip=summary["ip"],
-            tag=summary.get("tag") or "",
-            verdict=summary["verdict"],
-            confidence_band=summary["confidence_band"],
-            score=summary["score"],
-            isp=summary.get("isp") or "",
-            asn=summary.get("asn"),
-            repeat_count=summary["repeat_count"],
-            reason_codes=summary.get("reason_codes", []),
-            updated_at=summary.get("updated_at", ""),
-            review_url=summary.get("review_url", ""),
-        )
+        return self.review_admin.ensure_review_case(user, ip, tag, bundle, event_id, review_reason)
 
     def recheck_review_case(
         self,
@@ -1614,247 +1258,33 @@ class PlatformStore:
         actor_tg_id: Optional[int] = None,
         note: str = "",
     ) -> dict[str, Any]:
-        now = _utcnow()
-        reason_codes = json.dumps(bundle.reason_codes, ensure_ascii=False)
+        return self.review_admin.recheck_review_case(
+            case_id,
+            user,
+            ip,
+            tag,
+            bundle,
+            review_reason,
+            actor,
+            actor_tg_id,
+            note,
+        )
 
-        with self._connect() as conn:
-            case_row = conn.execute(
-                "SELECT id, review_reason, repeat_count FROM review_cases WHERE id = ?",
-                (case_id,),
-            ).fetchone()
-            if not case_row:
-                raise KeyError(f"Review case {case_id} not found")
-        event_id = self.record_analysis_event(user, ip, tag, bundle)
+    def _hydrate_review_list_item(
+        self,
+        conn: sqlite3.Connection,
+        row: sqlite3.Row | dict[str, Any],
+    ) -> dict[str, Any]:
+        return self.review_admin._hydrate_review_list_item(conn, row)
 
-        with self._connect() as conn:
-            next_status = "OPEN" if review_reason else "SKIPPED"
-            stored_review_reason = str(review_reason or case_row["review_reason"] or "unsure")
-            conn.execute(
-                """
-                UPDATE review_cases
-                SET status = ?,
-                    review_reason = ?,
-                    module_id = ?,
-                    module_name = ?,
-                    uuid = ?,
-                    username = ?,
-                    system_id = ?,
-                    telegram_id = ?,
-                    tag = ?,
-                    verdict = ?,
-                    confidence_band = ?,
-                    score = ?,
-                    isp = ?,
-                    asn = ?,
-                    punitive_eligible = ?,
-                    latest_event_id = ?,
-                    reason_codes_json = ?,
-                    updated_at = ?
-                WHERE id = ?
-                """,
-                (
-                    next_status,
-                    stored_review_reason,
-                    str((user or {}).get("module_id") or "").strip(),
-                    str((user or {}).get("module_name") or "").strip() or str((user or {}).get("module_id") or "").strip(),
-                    (user or {}).get("uuid"),
-                    (user or {}).get("username"),
-                    _coerce_optional_int((user or {}).get("id")),
-                    str((user or {}).get("telegramId")) if (user or {}).get("telegramId") is not None else None,
-                    tag,
-                    bundle.verdict,
-                    bundle.confidence_band,
-                    bundle.score,
-                    bundle.isp,
-                    bundle.asn,
-                    int(bundle.punitive_eligible),
-                    event_id,
-                    reason_codes,
-                    now,
-                    case_id,
-                ),
-            )
-            if next_status == "SKIPPED":
-                conn.execute(
-                    """
-                    INSERT INTO review_resolutions (case_id, event_id, resolution, actor, actor_tg_id, note, created_at)
-                    VALUES (?, ?, 'SKIP', ?, ?, ?, ?)
-                    """,
-                    (case_id, event_id, actor, actor_tg_id, note, now),
-                )
-                conn.execute(
-                    """
-                    DELETE FROM exact_ip_overrides
-                    WHERE ip = ? AND source = 'review_resolution'
-                    """,
-                    (ip,),
-                )
-                conn.execute(
-                    """
-                    DELETE FROM review_labels
-                    WHERE case_id = ?
-                    """,
-                    (case_id,),
-                )
-            conn.commit()
-
-        return self.get_review_case(case_id)
+    def _decode_analysis_event_payload(self, event_row: sqlite3.Row | None) -> dict[str, Any]:
+        return self.review_admin._decode_analysis_event_payload(event_row)
 
     def list_review_cases(self, filters: Optional[dict[str, Any]] = None) -> dict[str, Any]:
-        filters = filters or {}
-        page = max(int(filters.get("page", 1) or 1), 1)
-        page_size = min(max(int(filters.get("page_size", 25) or 25), 1), 100)
-        sort = str(filters.get("sort", "updated_desc") or "updated_desc")
-        sort_map = {
-            "updated_desc": "updated_at DESC",
-            "updated_asc": "updated_at ASC",
-            "score_desc": "score DESC",
-            "score_asc": "score ASC",
-            "repeat_desc": "repeat_count DESC",
-            "repeat_asc": "repeat_count ASC",
-        }
-        order_by = sort_map.get(sort, "updated_at DESC")
-        query = [
-            """SELECT id, status, review_reason, module_id, module_name, uuid, username, system_id, telegram_id, ip, tag, verdict, confidence_band,
-               score, isp, asn, punitive_eligible, repeat_count, reason_codes_json, opened_at, updated_at,
-               CASE
-                   WHEN punitive_eligible = 1 THEN 'critical'
-                   WHEN confidence_band = 'HIGH_HOME' THEN 'high'
-                   WHEN confidence_band = 'PROBABLE_HOME' THEN 'medium'
-                   ELSE 'low'
-               END AS severity
-               FROM review_cases"""
-        ]
-        clauses = []
-        params: list[Any] = []
-        if filters.get("status"):
-            clauses.append("status = ?")
-            params.append(filters["status"])
-        if filters.get("confidence_band"):
-            clauses.append("confidence_band = ?")
-            params.append(filters["confidence_band"])
-        if filters.get("asn") not in (None, ""):
-            clauses.append("asn = ?")
-            params.append(int(filters["asn"]))
-        if filters.get("username"):
-            clauses.append("username LIKE ?")
-            params.append(f"%{filters['username']}%")
-        if filters.get("module_id"):
-            clauses.append("module_id = ?")
-            params.append(str(filters["module_id"]))
-        if filters.get("system_id") not in (None, ""):
-            clauses.append("system_id = ?")
-            params.append(int(filters["system_id"]))
-        if filters.get("telegram_id") not in (None, ""):
-            clauses.append("telegram_id = ?")
-            params.append(str(filters["telegram_id"]))
-        if filters.get("review_reason"):
-            clauses.append("review_reason = ?")
-            params.append(filters["review_reason"])
-        if filters.get("severity"):
-            severity = str(filters["severity"])
-            if severity == "critical":
-                clauses.append("punitive_eligible = 1")
-            elif severity == "high":
-                clauses.append("punitive_eligible = 0 AND confidence_band = 'HIGH_HOME'")
-            elif severity == "medium":
-                clauses.append("confidence_band = 'PROBABLE_HOME'")
-            elif severity == "low":
-                clauses.append("confidence_band = 'UNSURE'")
-        if filters.get("punitive_eligible") not in (None, ""):
-            clauses.append("punitive_eligible = ?")
-            params.append(1 if str(filters["punitive_eligible"]).lower() in {"1", "true", "yes"} else 0)
-        if filters.get("repeat_count_min") not in (None, ""):
-            clauses.append("repeat_count >= ?")
-            params.append(int(filters["repeat_count_min"]))
-        if filters.get("repeat_count_max") not in (None, ""):
-            clauses.append("repeat_count <= ?")
-            params.append(int(filters["repeat_count_max"]))
-        if filters.get("opened_from"):
-            clauses.append("opened_at >= ?")
-            params.append(_parse_day_boundary(filters["opened_from"], end_of_day=False))
-        if filters.get("opened_to"):
-            clauses.append("opened_at <= ?")
-            params.append(_parse_day_boundary(filters["opened_to"], end_of_day=True))
-        if filters.get("q"):
-            search = f"%{filters['q']}%"
-            clauses.append(
-                "(ip LIKE ? OR username LIKE ? OR isp LIKE ? OR uuid LIKE ? OR telegram_id LIKE ? OR CAST(system_id AS TEXT) LIKE ?)"
-            )
-            params.extend([search] * 6)
-        if clauses:
-            query.append("WHERE " + " AND ".join(clauses))
-        where_sql = (" WHERE " + " AND ".join(clauses)) if clauses else ""
-        count_sql = f"SELECT COUNT(*) AS cnt FROM review_cases{where_sql}"
-        query.append(f"ORDER BY {order_by} LIMIT ? OFFSET ?")
-        sql = " ".join(query)
-        with self._connect() as conn:
-            total = conn.execute(count_sql, params).fetchone()["cnt"]
-            rows = conn.execute(sql, [*params, page_size, (page - 1) * page_size]).fetchall()
-        items = []
-        with self._connect() as conn:
-            for row in rows:
-                item = _resolve_review_module_name(conn, _normalize_review_identity_payload(dict(row)))
-                item["reason_codes"] = json.loads(item.pop("reason_codes_json"))
-                item["review_url"] = self.build_review_url(item["id"])
-                items.append(item)
-        return {
-            "items": items,
-            "count": total,
-            "page": page,
-            "page_size": page_size,
-        }
+        return self.review_admin.list_review_cases(filters)
 
     def get_review_case(self, case_id: int) -> dict[str, Any]:
-        with self._connect() as conn:
-            case_row = conn.execute(
-                """
-                SELECT * FROM review_cases WHERE id = ?
-                """,
-                (case_id,),
-            ).fetchone()
-            if not case_row:
-                raise KeyError(f"Review case {case_id} not found")
-            event_row = conn.execute(
-                "SELECT * FROM analysis_events WHERE id = ?",
-                (case_row["latest_event_id"],),
-            ).fetchone()
-            resolutions = conn.execute(
-                """
-                SELECT id, resolution, actor, actor_tg_id, note, created_at
-                FROM review_resolutions
-                WHERE case_id = ?
-                ORDER BY created_at DESC
-                """,
-                (case_id,),
-            ).fetchall()
-            related_cases = conn.execute(
-                """
-                SELECT id, status, module_id, module_name, ip, verdict, confidence_band, updated_at, username, uuid, system_id, telegram_id
-                FROM review_cases
-                WHERE id != ? AND (uuid = ? OR ip = ?)
-                ORDER BY updated_at DESC
-                LIMIT 10
-                """,
-                (case_id, case_row["uuid"], case_row["ip"]),
-            ).fetchall()
-        with self._connect() as conn:
-            case = _resolve_review_module_name(conn, _normalize_review_identity_payload(dict(case_row)))
-        case["reason_codes"] = json.loads(case.pop("reason_codes_json"))
-        event_payload = dict(event_row) if event_row else {}
-        if event_payload:
-            event_payload["reasons"] = json.loads(event_payload.pop("reasons_json"))
-            event_payload["signal_flags"] = json.loads(event_payload.pop("signal_flags_json"))
-            event_payload["bundle"] = json.loads(event_payload.pop("bundle_json"))
-        case["latest_event"] = event_payload
-        case["resolutions"] = [dict(row) for row in resolutions]
-        with self._connect() as conn:
-            case["related_cases"] = [
-                _resolve_review_module_name(conn, _normalize_review_identity_payload(dict(row)))
-                for row in related_cases
-            ]
-        case["review_url"] = self.build_review_url(case_id)
-        return case
+        return self.review_admin.get_review_case(case_id)
 
     def _record_labels_for_resolution(
         self,
@@ -1864,141 +1294,13 @@ class PlatformStore:
         bundle: DecisionBundle,
         decision: str,
     ) -> None:
-        labels: set[tuple[str, str]] = set()
-        if bundle.asn:
-            labels.add(("asn", str(bundle.asn)))
-        provider_evidence = bundle.signal_flags.get("provider_evidence")
-        if isinstance(provider_evidence, dict):
-            provider_key = str(provider_evidence.get("provider_key") or "").strip().lower()
-            service_type_hint = str(provider_evidence.get("service_type_hint") or "").strip().lower()
-            if provider_key:
-                labels.add(("provider", provider_key))
-                if service_type_hint and service_type_hint != "unknown":
-                    labels.add(("provider_service", f"{provider_key}:{service_type_hint}"))
-        for reason in bundle.reasons:
-            metadata = reason.metadata or {}
-            for keyword in metadata.get("keywords", []):
-                labels.add(("keyword", str(keyword)))
-            if metadata.get("combo_key"):
-                labels.add(("combo", str(metadata["combo_key"])))
-            if metadata.get("ptr_domain"):
-                labels.add(("ptr_domain", str(metadata["ptr_domain"])))
-            if metadata.get("subnet"):
-                labels.add(("subnet", str(metadata["subnet"])))
-
-        now = _utcnow()
-        for pattern_type, pattern_value in labels:
-            conn.execute(
-                """
-                INSERT OR IGNORE INTO review_labels (case_id, event_id, pattern_type, pattern_value, decision, created_at)
-                VALUES (?, ?, ?, ?, ?, ?)
-                """,
-                (case_id, event_id, pattern_type, pattern_value, decision, now),
-            )
+        self.review_admin._record_labels_for_resolution(conn, case_id, event_id, bundle, decision)
 
     def promote_learning_patterns(self) -> None:
-        live_rules = self.get_live_rules()
-        settings = live_rules.get("settings", {})
-        asn_min_support = int(settings.get("learning_promote_asn_min_support", 10))
-        asn_min_precision = float(settings.get("learning_promote_asn_min_precision", 0.95))
-        combo_min_support = int(settings.get("learning_promote_combo_min_support", 5))
-        combo_min_precision = float(settings.get("learning_promote_combo_min_precision", 0.90))
-
-        with self._connect() as conn:
-            rows = conn.execute(
-                """
-                SELECT pattern_type, pattern_value, decision, COUNT(*) AS support
-                FROM review_labels
-                GROUP BY pattern_type, pattern_value, decision
-                """
-            ).fetchall()
-            stats: dict[tuple[str, str], dict[str, int]] = {}
-            for row in rows:
-                key = (row["pattern_type"], row["pattern_value"])
-                stats.setdefault(key, {})
-                stats[key][row["decision"]] = int(row["support"])
-
-            conn.execute("DELETE FROM learning_pattern_stats")
-            conn.execute("DELETE FROM learning_patterns_active")
-            now = _utcnow()
-            for (pattern_type, pattern_value), decision_counts in stats.items():
-                total = sum(decision_counts.values())
-                best_decision = None
-                best_support = -1
-                best_precision = -1.0
-                ambiguous = False
-                for decision, support in decision_counts.items():
-                    precision = support / total if total else 0.0
-                    conn.execute(
-                        """
-                        INSERT INTO learning_pattern_stats (
-                            pattern_type, pattern_value, decision, support, total, precision, updated_at, metadata_json
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                        """,
-                        (
-                            pattern_type,
-                            pattern_value,
-                            decision,
-                            support,
-                            total,
-                            precision,
-                            now,
-                            json.dumps({"counts": decision_counts}, ensure_ascii=False),
-                        ),
-                    )
-                    if support > best_support or (
-                        support == best_support and precision > best_precision
-                    ):
-                        best_decision = decision
-                        best_support = support
-                        best_precision = precision
-                        ambiguous = False
-                    elif support == best_support and abs(precision - best_precision) < 1e-9:
-                        ambiguous = True
-
-                if ambiguous or not best_decision:
-                    continue
-                if pattern_type == "asn":
-                    min_support = asn_min_support
-                    min_precision = asn_min_precision
-                else:
-                    min_support = combo_min_support
-                    min_precision = combo_min_precision
-
-                if best_support >= min_support and best_precision >= min_precision:
-                    conn.execute(
-                        """
-                        INSERT INTO learning_patterns_active (
-                            pattern_type, pattern_value, decision, support, precision, promoted_at, metadata_json
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?)
-                        """,
-                        (
-                            pattern_type,
-                            pattern_value,
-                            best_decision,
-                            best_support,
-                            best_precision,
-                            now,
-                            json.dumps({"total": total}, ensure_ascii=False),
-                        ),
-                    )
-            conn.commit()
+        self.review_admin.promote_learning_patterns()
 
     def get_promoted_pattern(self, pattern_type: str, pattern_value: str) -> Optional[dict[str, Any]]:
-        with self._connect() as conn:
-            row = conn.execute(
-                """
-                SELECT pattern_type, pattern_value, decision, support, precision, metadata_json
-                FROM learning_patterns_active
-                WHERE pattern_type = ? AND pattern_value = ?
-                """,
-                (pattern_type, pattern_value),
-            ).fetchone()
-        if not row:
-            return None
-        payload = dict(row)
-        payload["metadata"] = json.loads(payload.pop("metadata_json"))
-        return payload
+        return self.review_admin.get_promoted_pattern(pattern_type, pattern_value)
 
     def resolve_review_case(
         self,
@@ -2008,75 +1310,7 @@ class PlatformStore:
         actor_tg_id: Optional[int] = None,
         note: str = "",
     ) -> dict[str, Any]:
-        if resolution not in {"MOBILE", "HOME", "SKIP"}:
-            raise ValueError("Resolution must be MOBILE, HOME or SKIP")
-
-        with self._connect() as conn:
-            case_row = conn.execute(
-                "SELECT * FROM review_cases WHERE id = ?",
-                (case_id,),
-            ).fetchone()
-            if not case_row:
-                raise KeyError(f"Review case {case_id} not found")
-            event_row = conn.execute(
-                "SELECT bundle_json, ip FROM analysis_events WHERE id = ?",
-                (case_row["latest_event_id"],),
-            ).fetchone()
-            now = _utcnow()
-            conn.execute(
-                """
-                INSERT INTO review_resolutions (case_id, event_id, resolution, actor, actor_tg_id, note, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-                """,
-                (case_id, case_row["latest_event_id"], resolution, actor, actor_tg_id, note, now),
-            )
-            status = "RESOLVED" if resolution in {"MOBILE", "HOME"} else "SKIPPED"
-            conn.execute(
-                """
-                UPDATE review_cases
-                SET status = ?, updated_at = ?
-                WHERE id = ?
-                """,
-                (status, now, case_id),
-            )
-            if resolution == "SKIP":
-                conn.execute(
-                    """
-                    DELETE FROM exact_ip_overrides
-                    WHERE ip = ? AND source = 'review_resolution'
-                    """,
-                    (event_row["ip"],),
-                )
-                conn.execute(
-                    """
-                    DELETE FROM review_labels
-                    WHERE case_id = ?
-                    """,
-                    (case_id,),
-                )
-            else:
-                expires_at = (datetime.utcnow() + timedelta(days=7)).replace(microsecond=0).isoformat()
-                conn.execute(
-                    """
-                    INSERT INTO exact_ip_overrides (ip, decision, source, actor, actor_tg_id, created_at, updated_at, expires_at)
-                    VALUES (?, ?, 'review_resolution', ?, ?, ?, ?, ?)
-                    ON CONFLICT(ip) DO UPDATE SET
-                        decision = excluded.decision,
-                        source = excluded.source,
-                        actor = excluded.actor,
-                        actor_tg_id = excluded.actor_tg_id,
-                        updated_at = excluded.updated_at,
-                        expires_at = excluded.expires_at
-                    """,
-                    (event_row["ip"], resolution, actor, actor_tg_id, now, now, expires_at),
-                )
-                bundle = DecisionBundle.from_dict(json.loads(event_row["bundle_json"]))
-                self._record_labels_for_resolution(conn, case_id, case_row["latest_event_id"], bundle, resolution)
-            conn.commit()
-
-        if resolution in {"HOME", "MOBILE"}:
-            self.promote_learning_patterns()
-        return self.get_review_case(case_id)
+        return self.review_admin.resolve_review_case(case_id, resolution, actor, actor_tg_id, note)
 
     def get_quality_metrics(self, module_id: str | None = None) -> dict[str, Any]:
         live_rules_state = self.get_live_rules_state()
@@ -2297,6 +1531,254 @@ class PlatformStore:
             },
         }
 
+    def get_db_maintenance_settings(self) -> dict[str, int]:
+        settings = self.get_live_rules_state()["rules"].get("settings", {})
+        subnet_mobile_ttl = _coerce_positive_int(
+            settings.get("subnet_mobile_ttl_days"),
+            int(DEFAULT_SETTINGS.get("subnet_mobile_ttl_days", 45)),
+        )
+        subnet_home_ttl = _coerce_positive_int(
+            settings.get("subnet_home_ttl_days"),
+            int(DEFAULT_SETTINGS.get("subnet_home_ttl_days", 21)),
+        )
+        resolved_review_retention_days = _coerce_positive_int(
+            settings.get("resolved_review_retention_days"),
+            int(DEFAULT_SETTINGS["resolved_review_retention_days"]),
+        )
+        return {
+            "db_cleanup_interval_minutes": _coerce_positive_int(
+                settings.get("db_cleanup_interval_minutes"),
+                int(DEFAULT_SETTINGS["db_cleanup_interval_minutes"]),
+            ),
+            "module_heartbeats_retention_days": _coerce_positive_int(
+                settings.get("module_heartbeats_retention_days"),
+                int(DEFAULT_SETTINGS["module_heartbeats_retention_days"]),
+            ),
+            "ingested_raw_events_retention_days": _coerce_positive_int(
+                settings.get("ingested_raw_events_retention_days"),
+                int(DEFAULT_SETTINGS["ingested_raw_events_retention_days"]),
+            ),
+            "ip_history_retention_days": _coerce_positive_int(
+                settings.get("ip_history_retention_days"),
+                int(DEFAULT_SETTINGS["ip_history_retention_days"]),
+            ),
+            "orphan_analysis_events_retention_days": _coerce_positive_int(
+                settings.get("orphan_analysis_events_retention_days"),
+                int(DEFAULT_SETTINGS["orphan_analysis_events_retention_days"]),
+            ),
+            "resolved_review_retention_days": resolved_review_retention_days,
+            "violation_history_retention_days": resolved_review_retention_days,
+            "subnet_evidence_retention_days": max(subnet_mobile_ttl, subnet_home_ttl),
+        }
+
+    def run_db_maintenance(self, mode: str = "periodic") -> dict[str, Any]:
+        normalized_mode = str(mode or "periodic").strip().lower()
+        if normalized_mode not in {"periodic", "emergency"}:
+            raise ValueError("Maintenance mode must be periodic or emergency")
+
+        settings = self.get_db_maintenance_settings()
+        now_utc = datetime.utcnow().replace(microsecond=0)
+        trackers_cutoff = (now_utc - timedelta(hours=1)).isoformat()
+        ip_decision_cutoff = now_utc.isoformat()
+        unsure_patterns_cutoff = (now_utc - timedelta(days=7)).isoformat()
+        daily_stats_cutoff = (now_utc - timedelta(days=7)).strftime("%Y-%m-%d")
+        exact_override_cutoff = now_utc.isoformat()
+        module_heartbeats_cutoff = (
+            now_utc - timedelta(days=settings["module_heartbeats_retention_days"])
+        ).isoformat()
+        ingested_raw_events_cutoff = (
+            now_utc - timedelta(days=settings["ingested_raw_events_retention_days"])
+        ).isoformat()
+        ip_history_cutoff = (
+            now_utc - timedelta(days=settings["ip_history_retention_days"])
+        ).isoformat()
+        subnet_evidence_cutoff = (
+            now_utc - timedelta(days=settings["subnet_evidence_retention_days"])
+        ).isoformat()
+        violation_history_cutoff = (
+            now_utc - timedelta(days=settings["violation_history_retention_days"])
+        ).isoformat()
+        resolved_review_cutoff = (
+            now_utc - timedelta(days=settings["resolved_review_retention_days"])
+        ).isoformat()
+        orphan_analysis_events_cutoff = (
+            now_utc - timedelta(days=settings["orphan_analysis_events_retention_days"])
+        ).isoformat()
+        deleted: dict[str, int] = {}
+
+        with self._connect() as conn:
+            if self._table_exists(conn, "active_trackers"):
+                deleted["active_trackers"] = _execute_with_changes(
+                    conn,
+                    "DELETE FROM active_trackers WHERE last_seen < ?",
+                    (trackers_cutoff,),
+                )
+
+            if self._table_exists(conn, "ip_decisions"):
+                deleted["ip_decisions"] = _execute_with_changes(
+                    conn,
+                    "DELETE FROM ip_decisions WHERE expires < ?",
+                    (ip_decision_cutoff,),
+                )
+
+            if self._table_exists(conn, "unsure_patterns"):
+                deleted["unsure_patterns"] = _execute_with_changes(
+                    conn,
+                    "DELETE FROM unsure_patterns WHERE timestamp < ?",
+                    (unsure_patterns_cutoff,),
+                )
+
+            if self._table_exists(conn, "daily_stats"):
+                deleted["daily_stats"] = _execute_with_changes(
+                    conn,
+                    "DELETE FROM daily_stats WHERE date < ?",
+                    (daily_stats_cutoff,),
+                )
+
+            if self._table_exists(conn, "exact_ip_overrides"):
+                deleted["exact_ip_overrides"] = _execute_with_changes(
+                    conn,
+                    "DELETE FROM exact_ip_overrides WHERE expires_at IS NOT NULL AND expires_at < ?",
+                    (exact_override_cutoff,),
+                )
+
+            if self._table_exists(conn, "admin_sessions"):
+                deleted["admin_sessions"] = _execute_with_changes(
+                    conn,
+                    "DELETE FROM admin_sessions WHERE expires_at < ?",
+                    (exact_override_cutoff,),
+                )
+
+            if self._table_exists(conn, "module_heartbeats"):
+                deleted["module_heartbeats"] = _execute_with_changes(
+                    conn,
+                    "DELETE FROM module_heartbeats WHERE created_at < ?",
+                    (module_heartbeats_cutoff,),
+                )
+
+            if self._table_exists(conn, "ingested_raw_events"):
+                deleted["ingested_raw_events"] = _execute_with_changes(
+                    conn,
+                    """
+                    DELETE FROM ingested_raw_events
+                    WHERE COALESCE(processed_at, occurred_at) < ?
+                    """,
+                    (ingested_raw_events_cutoff,),
+                )
+
+            if self._table_exists(conn, "ip_history"):
+                deleted["ip_history"] = _execute_with_changes(
+                    conn,
+                    "DELETE FROM ip_history WHERE timestamp < ?",
+                    (ip_history_cutoff,),
+                )
+
+            if self._table_exists(conn, "subnet_evidence"):
+                deleted["subnet_evidence"] = _execute_with_changes(
+                    conn,
+                    "DELETE FROM subnet_evidence WHERE last_updated < ?",
+                    (subnet_evidence_cutoff,),
+                )
+
+            if self._table_exists(conn, "violation_history"):
+                deleted["violation_history"] = _execute_with_changes(
+                    conn,
+                    "DELETE FROM violation_history WHERE timestamp < ?",
+                    (violation_history_cutoff,),
+                )
+
+            deleted.setdefault("review_resolutions", 0)
+            deleted.setdefault("review_labels", 0)
+            deleted.setdefault("review_cases", 0)
+            deleted.setdefault("analysis_events_from_cases", 0)
+            if self._table_exists(conn, "review_cases"):
+                stale_case_rows = conn.execute(
+                    """
+                    SELECT id, latest_event_id
+                    FROM review_cases
+                    WHERE status IN ('RESOLVED', 'SKIPPED') AND updated_at < ?
+                    """,
+                    (resolved_review_cutoff,),
+                ).fetchall()
+                stale_case_ids = [int(row["id"]) for row in stale_case_rows]
+                stale_event_ids = sorted(
+                    {
+                        int(row["latest_event_id"])
+                        for row in stale_case_rows
+                        if row["latest_event_id"] is not None
+                    }
+                )
+                if stale_case_ids:
+                    case_placeholders = ", ".join("?" for _ in stale_case_ids)
+                    if self._table_exists(conn, "review_resolutions"):
+                        deleted["review_resolutions"] = _execute_with_changes(
+                            conn,
+                            f"DELETE FROM review_resolutions WHERE case_id IN ({case_placeholders})",
+                            tuple(stale_case_ids),
+                        )
+                    if self._table_exists(conn, "review_labels"):
+                        deleted["review_labels"] = _execute_with_changes(
+                            conn,
+                            f"DELETE FROM review_labels WHERE case_id IN ({case_placeholders})",
+                            tuple(stale_case_ids),
+                        )
+                    deleted["review_cases"] = _execute_with_changes(
+                        conn,
+                        f"DELETE FROM review_cases WHERE id IN ({case_placeholders})",
+                        tuple(stale_case_ids),
+                    )
+                    if stale_event_ids and self._table_exists(conn, "analysis_events"):
+                        event_placeholders = ", ".join("?" for _ in stale_event_ids)
+                        deleted["analysis_events_from_cases"] = _execute_with_changes(
+                            conn,
+                            f"""
+                            DELETE FROM analysis_events
+                            WHERE id IN ({event_placeholders})
+                              AND NOT EXISTS (
+                                  SELECT 1
+                                  FROM review_cases rc
+                                  WHERE rc.latest_event_id = analysis_events.id
+                              )
+                            """,
+                            tuple(stale_event_ids),
+                        )
+
+            deleted.setdefault("orphan_analysis_events", 0)
+            if self._table_exists(conn, "analysis_events"):
+                deleted["orphan_analysis_events"] = _execute_with_changes(
+                    conn,
+                    """
+                    DELETE FROM analysis_events
+                    WHERE created_at < ?
+                      AND NOT EXISTS (
+                          SELECT 1
+                          FROM review_cases rc
+                          WHERE rc.latest_event_id = analysis_events.id
+                      )
+                    """,
+                    (orphan_analysis_events_cutoff,),
+                )
+
+            conn.commit()
+            checkpoint_mode = "TRUNCATE" if normalized_mode == "emergency" else "PASSIVE"
+            checkpoint_row = conn.execute(f"PRAGMA wal_checkpoint({checkpoint_mode})").fetchone()
+            conn.commit()
+
+        vacuumed = False
+        if normalized_mode == "emergency":
+            with self._connect() as conn:
+                conn.execute("VACUUM")
+                vacuumed = True
+
+        return {
+            "mode": normalized_mode,
+            "started_at": now_utc.isoformat(),
+            "deleted": deleted,
+            "settings": settings,
+            "wal_checkpoint": list(checkpoint_row) if checkpoint_row else [],
+            "vacuumed": vacuumed,
+        }
+
     def create_admin_session(self, payload: dict[str, Any], session_ttl_hours: int = 24) -> dict[str, Any]:
         return self.sessions.create(payload, session_ttl_hours=session_ttl_hours)
 
@@ -2430,3 +1912,7 @@ class PlatformStore:
     ) -> None:
         loop = asyncio.get_running_loop()
         await loop.run_in_executor(None, self.update_service_heartbeat, service_name, status, details)
+
+    async def async_run_db_maintenance(self, mode: str = "periodic") -> dict[str, Any]:
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(None, self.run_db_maintenance, mode)

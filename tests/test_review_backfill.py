@@ -108,33 +108,102 @@ class ReviewBackfillTests(unittest.TestCase):
                     "2026-04-12T10:01:00",
                 ),
             )
+            conn.execute(
+                """
+                INSERT INTO analysis_events (
+                    created_at, module_id, module_name, uuid, username, system_id, telegram_id, ip, tag,
+                    verdict, confidence_band, score, isp, asn, punitive_eligible,
+                    reasons_json, signal_flags_json, bundle_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    "2026-04-12T10:05:00",
+                    "node-a",
+                    "Node A",
+                    None,
+                    None,
+                    211,
+                    None,
+                    "1.2.3.5",
+                    "TAG",
+                    "UNSURE",
+                    "UNSURE",
+                    0,
+                    "ISP",
+                    None,
+                    0,
+                    "[]",
+                    "{}",
+                    "{}",
+                ),
+            )
+            second_event_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+            conn.execute(
+                """
+                INSERT INTO review_cases (
+                    unique_key, status, review_reason, module_id, module_name, uuid, username, system_id, telegram_id,
+                    ip, tag, verdict, confidence_band, score, isp, asn, punitive_eligible,
+                    latest_event_id, repeat_count, reason_codes_json, opened_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    "node-a:unknown:1.2.3.5:TAG",
+                    "OPEN",
+                    "unsure",
+                    "node-a",
+                    "Node A",
+                    None,
+                    None,
+                    211,
+                    None,
+                    "1.2.3.5",
+                    "TAG",
+                    "UNSURE",
+                    "UNSURE",
+                    0,
+                    "ISP",
+                    None,
+                    0,
+                    second_event_id,
+                    1,
+                    "[]",
+                    "2026-04-12T10:05:00",
+                    "2026-04-12T10:06:00",
+                ),
+            )
             conn.commit()
 
     def tearDown(self):
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
     def test_list_and_detail_backfill_review_identity_from_panel_client(self):
+        calls: list[str] = []
+
         fake_client = SimpleNamespace(
-            get_user_data=lambda identifier: {
-                "uuid": "b0a99119-98e9-413b-8a78-fce4d0095c98",
-                "id": 211,
-                "username": "user_999818198",
-                "telegramId": 999818198,
-            }
+            get_user_data=lambda identifier: (
+                calls.append(str(identifier)) or {
+                    "uuid": "b0a99119-98e9-413b-8a78-fce4d0095c98",
+                    "id": 211,
+                    "username": "user_999818198",
+                    "telegramId": 999818198,
+                }
+            )
             if str(identifier) == "211"
             else None
         )
 
-        with patch.object(review_service, "panel_client", return_value=fake_client):
+        with patch("api.services.review_backfill.panel_client", return_value=fake_client):
             listing = review_service.list_reviews(self.container, {"page": 1, "page_size": 25, "status": "OPEN"})
             detail = review_service.get_review(self.container, 1)
 
         self.assertEqual(listing["items"][0]["username"], "user_999818198")
         self.assertEqual(listing["items"][0]["uuid"], "b0a99119-98e9-413b-8a78-fce4d0095c98")
         self.assertEqual(listing["items"][0]["telegram_id"], "999818198")
+        self.assertEqual(listing["items"][1]["username"], "user_999818198")
         self.assertEqual(detail["username"], "user_999818198")
         self.assertEqual(detail["uuid"], "b0a99119-98e9-413b-8a78-fce4d0095c98")
         self.assertEqual(detail["telegram_id"], "999818198")
+        self.assertEqual(calls.count("211"), 1)
 
         with self.store._connect() as conn:
             case_row = conn.execute(
@@ -143,6 +212,9 @@ class ReviewBackfillTests(unittest.TestCase):
             event_row = conn.execute(
                 "SELECT uuid, username, system_id, telegram_id FROM analysis_events WHERE id = 1"
             ).fetchone()
+            second_case_row = conn.execute(
+                "SELECT uuid, username, system_id, telegram_id FROM review_cases WHERE id = 2"
+            ).fetchone()
 
         self.assertEqual(case_row["username"], "user_999818198")
         self.assertEqual(case_row["uuid"], "b0a99119-98e9-413b-8a78-fce4d0095c98")
@@ -150,6 +222,7 @@ class ReviewBackfillTests(unittest.TestCase):
         self.assertEqual(event_row["username"], "user_999818198")
         self.assertEqual(event_row["uuid"], "b0a99119-98e9-413b-8a78-fce4d0095c98")
         self.assertEqual(event_row["telegram_id"], "999818198")
+        self.assertEqual(second_case_row["username"], "user_999818198")
 
 
 if __name__ == "__main__":

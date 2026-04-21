@@ -63,6 +63,14 @@ class MutableScoreState:
     provider_review_recommended: bool = False
 
 
+@dataclass(frozen=True)
+class DecisionOutcome:
+    verdict: str
+    confidence: str
+    automation_blocked: bool = False
+    automation_block_reason: str = ""
+
+
 def _finalize_bundle(state: MutableScoreState, rules: RuntimeRuleView, verdict: str, confidence: str, details: str) -> DecisionBundle:
     bundle = state.bundle
     bundle.verdict = verdict
@@ -242,12 +250,13 @@ def _apply_provider_guardrail(
     state: MutableScoreState,
     rules: RuntimeRuleView,
     provisional_verdict: str,
-) -> None:
+) -> DecisionOutcome:
     state.provider_review_recommended = False
     profile = state.matched_provider
     if not profile or profile.classification != "mixed" or not rules.thresholds.provider_conflict_review_only:
+        state.bundle.signal_flags["automation_guardrail"] = {"blocked": False, "reason": ""}
         _refresh_provider_evidence(state, rules)
-        return
+        return DecisionOutcome(provisional_verdict, "")
 
     if state.provider_service_conflict:
         state.provider_review_recommended = True
@@ -280,7 +289,40 @@ def _apply_provider_guardrail(
             message=f"Mixed provider {profile.key} requires manual review before automation",
             metadata=_provider_metadata(state),
         )
+    state.bundle.signal_flags["automation_guardrail"] = {
+        "blocked": state.provider_review_recommended,
+        "reason": "provider_review" if state.provider_review_recommended else "",
+    }
     _refresh_provider_evidence(state, rules)
+    return DecisionOutcome(
+        provisional_verdict,
+        "",
+        automation_blocked=state.provider_review_recommended,
+        automation_block_reason="provider_review" if state.provider_review_recommended else "",
+    )
+
+
+def _derive_score_outcome(state: MutableScoreState, rules: RuntimeRuleView) -> DecisionOutcome:
+    if state.concurrency_immunity and state.score < rules.thresholds.threshold_mobile:
+        state.bundle.add_reason(
+            code="cgnat_immunity",
+            source="concurrency",
+            weight=0,
+            kind="soft",
+            direction="NEUTRAL",
+            message="CGNAT immunity blocks punitive HOME verdict",
+        )
+        return DecisionOutcome("UNSURE", "UNSURE")
+
+    if state.score >= rules.thresholds.threshold_mobile:
+        return DecisionOutcome("MOBILE", "HIGH_MOBILE")
+    if state.score >= rules.thresholds.threshold_probable_mobile:
+        return DecisionOutcome("MOBILE", "PROBABLE_MOBILE")
+    if state.score <= -rules.thresholds.threshold_probable_home:
+        return DecisionOutcome("HOME", "HIGH_HOME")
+    if state.score <= -rules.thresholds.threshold_home:
+        return DecisionOutcome("HOME", "PROBABLE_HOME")
+    return DecisionOutcome("UNSURE", "UNSURE")
 
 
 async def evaluate_mobile_network(
@@ -640,36 +682,26 @@ async def evaluate_mobile_network(
     state.log.append(f" Score after fallback: {state.score}")
 
     state.log.append(" Computing final verdict")
-    if state.concurrency_immunity and state.score < rules.thresholds.threshold_mobile:
-        verdict = "UNSURE"
-        confidence = "UNSURE"
-        state.bundle.add_reason(
-            code="cgnat_immunity",
-            source="concurrency",
-            weight=0,
-            kind="soft",
-            direction="NEUTRAL",
-            message="CGNAT immunity blocks punitive HOME verdict",
+    score_outcome = _derive_score_outcome(state, rules)
+    state.log.append(
+        f" Score outcome: verdict={score_outcome.verdict} confidence={score_outcome.confidence} score={state.score}"
+    )
+    provider_outcome = _apply_provider_guardrail(state, rules, score_outcome.verdict)
+    if provider_outcome.automation_blocked:
+        state.log.append(
+            f" Provider guardrail: automation blocked ({provider_outcome.automation_block_reason})"
         )
-    elif state.score >= rules.thresholds.threshold_mobile:
-        verdict = "MOBILE"
-        confidence = "HIGH_MOBILE"
-    elif state.score >= rules.thresholds.threshold_probable_mobile:
-        verdict = "MOBILE"
-        confidence = "PROBABLE_MOBILE"
-    elif state.score <= rules.thresholds.threshold_home:
-        verdict = "HOME"
-        confidence = "HIGH_HOME"
-    elif state.score <= rules.thresholds.threshold_probable_home:
-        verdict = "HOME"
-        confidence = "PROBABLE_HOME"
     else:
-        verdict = "UNSURE"
-        confidence = "UNSURE"
+        state.log.append(" Provider guardrail: no block")
 
-    _apply_provider_guardrail(state, rules, verdict)
-    finalized = _finalize_bundle(state, rules, verdict, confidence, f"{state.isp_name} (Score {state.score})")
-    if context.uuid and verdict in ("MOBILE", "HOME"):
-        await deps.record_decision(context.ip, context.uuid, verdict)
-    deps.record_stats(state.asn, verdict, None, state.org)
+    finalized = _finalize_bundle(
+        state,
+        rules,
+        score_outcome.verdict,
+        score_outcome.confidence,
+        f"{state.isp_name} (Score {state.score})",
+    )
+    if context.uuid and score_outcome.verdict in ("MOBILE", "HOME"):
+        await deps.record_decision(context.ip, context.uuid, score_outcome.verdict)
+    deps.record_stats(state.asn, score_outcome.verdict, None, state.org)
     return finalized

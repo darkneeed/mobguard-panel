@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
-import { api, RulesState } from "../api/client";
+import { api, EnforcementSettingsResponse, RulesState } from "../api/client";
 import { FieldLabel } from "../components/FieldLabel";
 import {
   getSettingInputValue,
@@ -22,10 +22,6 @@ import {
   RulesDraft
 } from "../rulesMeta";
 import { formatDisplayDateTime } from "../utils/datetime";
-
-type EnforcementPayload = {
-  settings: Record<string, string | number | boolean | string[]>;
-};
 
 type GeneralSettingKey =
   | "usage_time_threshold"
@@ -65,7 +61,7 @@ const GENERAL_SETTINGS_FIELDS: GeneralSettingField[] = [
 const LIST_SECTIONS = Array.from(
   new Set(RULE_LIST_FIELDS.filter((field) => field.sectionKey !== "access").map((field) => field.sectionKey))
 );
-const RULES_SECTIONS = ["general", "thresholds", "lists", "providers", "policy", "learning"] as const;
+const RULES_SECTIONS = ["general", "thresholds", "lists", "providers", "policy", "learning", "retention"] as const;
 type RulesSection = (typeof RULES_SECTIONS)[number];
 
 function blankProviderProfile(): ProviderProfileDraft {
@@ -116,7 +112,7 @@ export function RulesPage() {
 
         const typedDetection = detectionPayload as RulesState;
         const normalizedRules = normalizeRulesDraft(typedDetection.rules);
-        const typedEnforcement = enforcementPayload as EnforcementPayload;
+        const typedEnforcement = enforcementPayload as EnforcementSettingsResponse;
         const normalizedGeneral = normalizeGeneralSettingsDraft(typedEnforcement.settings, GENERAL_SETTINGS_FIELDS);
 
         setState(typedDetection);
@@ -307,7 +303,7 @@ export function RulesPage() {
     try {
       const response = (await api.updateEnforcementSettings({
         settings: serializeGeneralSettings(generalDraft)
-      })) as EnforcementPayload;
+      })) as EnforcementSettingsResponse;
       const normalized = normalizeGeneralSettingsDraft(response.settings, GENERAL_SETTINGS_FIELDS);
       setGeneralDraft(normalized);
       setSavedGeneralDraft(normalized);
@@ -677,6 +673,13 @@ export function RulesPage() {
               t("rules.sectionTitles.learning"),
               t("rules.sectionDescriptions.learning"),
               ["learning"]
+            )
+          : null}
+        {activeSection === "retention"
+          ? renderSettingPanel(
+              t("rules.sectionTitles.retention"),
+              t("rules.sectionDescriptions.retention"),
+              ["retention"]
             )
           : null}
       </>

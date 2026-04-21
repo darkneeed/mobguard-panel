@@ -105,6 +105,13 @@ export type ModuleProvisioningPayload = {
   inbound_tags: string[];
 };
 
+export type DetectionSettingsResponse = {
+  rules: Record<string, unknown>;
+  revision: number;
+  updated_at: string;
+  updated_by: string;
+};
+
 export type RulesState = {
   rules: Record<string, unknown>;
   revision: number;
@@ -114,12 +121,107 @@ export type RulesState = {
 
 export type ReviewListParams = Record<string, string | number | boolean | undefined>;
 
+export type SettingsScalar = string | number | boolean | string[];
+
+export type EnforcementSettingsResponse = {
+  settings: Record<string, SettingsScalar>;
+};
+
 export type SettingsSectionUpdatePayload = {
   settings?: Record<string, unknown>;
   lists?: Record<string, unknown[]>;
   env?: Record<string, string>;
   revision?: number;
   updated_at?: string;
+};
+
+export type UserIdentity = {
+  uuid?: string | null;
+  username?: string | null;
+  system_id?: number | null;
+  telegram_id?: string | null;
+};
+
+export type UserSearchItem = UserIdentity & {
+  updated_at?: string | null;
+};
+
+export type UserSearchResponse = {
+  items: UserSearchItem[];
+  panel_match: Record<string, unknown> | null;
+};
+
+export type UserCardFlags = {
+  exempt_system_id?: boolean;
+  exempt_telegram_id?: boolean;
+  active_ban?: boolean;
+  active_warning?: boolean;
+};
+
+export type UserCardResponse = {
+  identity?: UserIdentity;
+  panel_user?: Record<string, unknown> | null;
+  violation?: Record<string, unknown> | null;
+  history?: Array<Record<string, unknown>>;
+  active_trackers?: Array<Record<string, unknown>>;
+  ip_history?: Array<Record<string, unknown>>;
+  review_cases?: Array<Record<string, unknown>>;
+  analysis_events?: Array<Record<string, unknown>>;
+  flags?: UserCardFlags;
+  remote_updated?: boolean;
+  remote_changed?: boolean;
+  remote_error?: string;
+  traffic_cap?: Record<string, unknown>;
+};
+
+export type UserCardExportResponse = UserCardResponse & {
+  export_meta?: {
+    generated_at?: string;
+    identifier?: string;
+    lookup_fields?: Record<string, unknown>;
+    record_counts?: Record<string, unknown>;
+  };
+};
+
+export type ReviewResolution = {
+  id: number;
+  resolution: string;
+  actor: string;
+  actor_tg_id?: number | null;
+  note?: string | null;
+  created_at: string;
+};
+
+export type ReviewDetailResponse = Partial<ReviewItem> & {
+  latest_event?: Record<string, unknown>;
+  resolutions?: ReviewResolution[];
+  related_cases?: Array<Record<string, unknown>>;
+};
+
+export type ViolationsResponse = {
+  active: Array<Record<string, unknown>>;
+  history: Array<Record<string, unknown>>;
+};
+
+export type OverridesResponse = {
+  exact_ip: Array<Record<string, unknown>>;
+  unsure_patterns: Array<Record<string, unknown>>;
+};
+
+export type CacheAdminResponse = {
+  items: Array<Record<string, unknown>>;
+};
+
+export type LearningAdminResponse = {
+  promoted_active: Array<Record<string, unknown>>;
+  promoted_stats: Array<Record<string, unknown>>;
+  legacy: Array<Record<string, unknown>>;
+  promoted_provider_active: Array<Record<string, unknown>>;
+  promoted_provider_service_active: Array<Record<string, unknown>>;
+  promoted_provider_stats: Array<Record<string, unknown>>;
+  promoted_provider_service_stats: Array<Record<string, unknown>>;
+  legacy_provider: Array<Record<string, unknown>>;
+  legacy_provider_service: Array<Record<string, unknown>>;
 };
 
 export type CalibrationReadinessCheck = {

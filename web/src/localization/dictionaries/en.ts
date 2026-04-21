@@ -59,7 +59,8 @@ export const enDictionary: TranslationDictionary = {
         lists: "Lists",
         providers: "Providers",
         policy: "Policy",
-        learning: "Learning"
+        learning: "Learning",
+        retention: "Retention"
       },
       data: {
         users: "Users",
@@ -426,7 +427,8 @@ export const enDictionary: TranslationDictionary = {
     sectionTitles: {
       thresholds: "Thresholds, scores, and behavior",
       policy: "Detection policy",
-      learning: "Learning controls"
+      learning: "Learning controls",
+      retention: "Database retention"
     },
     sectionDescriptions: {
       general: "Runtime-wide escalation, warning, and access switching settings in one dedicated place.",
@@ -434,7 +436,8 @@ export const enDictionary: TranslationDictionary = {
       lists: "ASN and keyword lists that shape primary evidence and exclusions.",
       providers: "Provider aliases, markers, and carrier-specific hints used in review-first flows.",
       policy: "Live decision policy plus enforcement-side access switching controls.",
-      learning: "Promotion thresholds that decide when runtime learning becomes trusted."
+      learning: "Promotion thresholds that decide when runtime learning becomes trusted.",
+      retention: "Storage retention windows that cap SQLite growth without removing active review state."
     },
     providerProfiles: {
       description: "Carrier-specific aliases and service markers for mixed-provider review-first scoring.",
@@ -874,7 +877,8 @@ export const enDictionary: TranslationDictionary = {
       scores: "Scores",
       behavior: "Behavior",
       policy: "Policy",
-      learning: "Learning"
+      learning: "Learning",
+      retention: "Retention"
     },
     listFields: {
       admin_tg_ids: {
@@ -1078,6 +1082,36 @@ export const enDictionary: TranslationDictionary = {
         label: "Live rules refresh interval",
         description: "How often the runtime reloads live rules from storage.",
         recommendation: "10–30 seconds is usually enough."
+      },
+      db_cleanup_interval_minutes: {
+        label: "DB cleanup interval (minutes)",
+        description: "How often the API process runs the periodic SQLite maintenance pass.",
+        recommendation: "30 minutes is a safe default for steady-state cleanup."
+      },
+      module_heartbeats_retention_days: {
+        label: "Module heartbeat retention (days)",
+        description: "How long to keep historical module heartbeat rows before pruning them.",
+        recommendation: "Keep it short because current module status is stored in the modules table."
+      },
+      ingested_raw_events_retention_days: {
+        label: "Raw ingested event retention (days)",
+        description: "How long to keep ingested module events once they are old enough for normal operations.",
+        recommendation: "30 days is a practical default unless you rely on long replay windows."
+      },
+      ip_history_retention_days: {
+        label: "IP history retention (days)",
+        description: "How many days of behavioral IP history to preserve for churn and long-window analysis.",
+        recommendation: "Keep this aligned with the longest history-based scoring window you actually trust."
+      },
+      orphan_analysis_events_retention_days: {
+        label: "Orphan analysis event retention (days)",
+        description: "How long to keep analysis events that are no longer referenced by any review case.",
+        recommendation: "A shorter window limits growth while keeping recent operator context available."
+      },
+      resolved_review_retention_days: {
+        label: "Resolved review retention (days)",
+        description: "How long to keep resolved or skipped review cases and related audit history.",
+        recommendation: "Use the long audit window here; active OPEN cases are never pruned by this setting."
       },
       learning_promote_asn_min_support: {
         label: "Promoted ASN min support",

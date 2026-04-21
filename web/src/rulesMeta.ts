@@ -44,10 +44,22 @@ export type RuleSettingKey =
   | "learning_promote_asn_min_precision"
   | "learning_promote_combo_min_support"
   | "learning_promote_combo_min_precision"
-  | "live_rules_refresh_seconds";
+  | "live_rules_refresh_seconds"
+  | "db_cleanup_interval_minutes"
+  | "module_heartbeats_retention_days"
+  | "ingested_raw_events_retention_days"
+  | "ip_history_retention_days"
+  | "orphan_analysis_events_retention_days"
+  | "resolved_review_retention_days";
 
 export type RuleListSectionKey = "access" | "asnLists" | "keywords";
-export type RuleSettingSectionKey = "thresholds" | "scores" | "behavior" | "policy" | "learning";
+export type RuleSettingSectionKey =
+  | "thresholds"
+  | "scores"
+  | "behavior"
+  | "policy"
+  | "learning"
+  | "retention";
 
 export type RuleSettingValue = string | number | boolean | null | undefined;
 
@@ -144,5 +156,11 @@ export const RULE_SETTING_FIELDS: RuleSettingFieldMeta[] = [
     sectionKey: "learning",
     inputType: "number",
     step: 0.01
-  }
+  },
+  { key: "db_cleanup_interval_minutes", sectionKey: "retention", inputType: "number" },
+  { key: "module_heartbeats_retention_days", sectionKey: "retention", inputType: "number" },
+  { key: "ingested_raw_events_retention_days", sectionKey: "retention", inputType: "number" },
+  { key: "ip_history_retention_days", sectionKey: "retention", inputType: "number" },
+  { key: "orphan_analysis_events_retention_days", sectionKey: "retention", inputType: "number" },
+  { key: "resolved_review_retention_days", sectionKey: "retention", inputType: "number" }
 ];

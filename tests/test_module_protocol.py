@@ -161,6 +161,74 @@ class ModuleProtocolTests(unittest.TestCase):
         self.assertEqual(result["duplicates"], 1)
         self.assertEqual(result["processed"], 1)
 
+    def test_event_batch_builds_runtime_context_once(self):
+        self.store.create_managed_module(
+            "node-a",
+            "token-a",
+            "encrypted-token-a",
+            module_name="Node A",
+            metadata={
+                "inbound_tags": ["SELFSTEAL_RU-YANDEX_TCP"],
+            },
+        )
+        module_service.register_module(
+            self.container,
+            {
+                "module_id": "node-a",
+                "module_name": "Node A",
+                "version": "1.0.0",
+                "protocol_version": "v1",
+            },
+            "token-a",
+        )
+
+        async def fake_process(_runtime, _module, payload):
+            return {
+                "status": "processed",
+                "event_id": 100 + int(str(payload["event_uid"]).split("-")[-1]),
+                "review_case_id": None,
+                "bundle": {"ip": payload["ip"]},
+                "review_reason": None,
+                "enforcement": None,
+            }
+
+        original_builder = module_service._build_batch_context
+        with patch.object(module_service, "_process_module_event", fake_process), patch.object(
+            module_service,
+            "_build_batch_context",
+            wraps=original_builder,
+        ) as runtime_builder:
+            result = asyncio.run(
+                module_service.ingest_module_events(
+                    self.container,
+                    {
+                        "module_id": "node-a",
+                        "protocol_version": "v1",
+                        "items": [
+                            {
+                                "event_uid": "batch-1",
+                                "occurred_at": "2026-04-11T12:00:00",
+                                "ip": "1.2.3.4",
+                                "tag": "SELFSTEAL_RU-YANDEX_TCP",
+                                "uuid": "uuid-1",
+                            },
+                            {
+                                "event_uid": "batch-2",
+                                "occurred_at": "2026-04-11T12:00:01",
+                                "ip": "1.2.3.5",
+                                "tag": "SELFSTEAL_RU-YANDEX_TCP",
+                                "uuid": "uuid-2",
+                            },
+                        ],
+                    },
+                    "token-a",
+                )
+            )
+
+        self.assertEqual(runtime_builder.call_count, 1)
+        self.assertEqual(result["accepted"], 2)
+        self.assertEqual(result["processed"], 2)
+
 
 if __name__ == "__main__":
     unittest.main()

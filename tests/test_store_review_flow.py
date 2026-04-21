@@ -660,6 +660,8 @@ class StoreReviewFlowTests(unittest.TestCase):
         self.assertIn("system_id", analysis_columns)
         self.assertIn("system_id", review_columns)
         self.assertIn("idx_review_cases_system_id", indexes)
+        self.assertIn("idx_review_cases_uuid_updated", indexes)
+        self.assertIn("idx_review_cases_username_updated", indexes)
 
     def test_health_snapshot_reflects_core_heartbeat(self):
         previous = os.environ.get("IPINFO_TOKEN")

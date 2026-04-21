@@ -39,7 +39,8 @@ export const rulesNavigation: NavigationItem[] = [
   { to: "/rules/lists", labelKey: "layout.subnav.rules.lists" },
   { to: "/rules/providers", labelKey: "layout.subnav.rules.providers" },
   { to: "/rules/policy", labelKey: "layout.subnav.rules.policy" },
-  { to: "/rules/learning", labelKey: "layout.subnav.rules.learning" }
+  { to: "/rules/learning", labelKey: "layout.subnav.rules.learning" },
+  { to: "/rules/retention", labelKey: "layout.subnav.rules.retention" }
 ];
 
 export const dataNavigation: NavigationItem[] = [

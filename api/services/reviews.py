@@ -6,81 +6,8 @@ from typing import Any
 from fastapi import HTTPException
 
 from mobguard_platform import review_reason_for_bundle, validate_live_rules_patch
-from .modules import _analyze_event
-from .runtime_state import panel_client
-
-
-def _needs_identity_backfill(payload: dict[str, Any]) -> bool:
-    return any(payload.get(key) in (None, "") for key in ("uuid", "username", "telegram_id"))
-
-
-def _lookup_identifier(payload: dict[str, Any]) -> str:
-    for key in ("system_id", "telegram_id", "uuid", "username"):
-        value = payload.get(key)
-        if value not in (None, ""):
-            return str(value)
-    return ""
-
-
-def _persist_review_identity(store: Any, case_id: int, latest_event_id: int | None, user: dict[str, Any]) -> None:
-    uuid = str(user.get("uuid") or "").strip() or None
-    username = str(user.get("username") or "").strip() or None
-    system_id = user.get("id")
-    try:
-        normalized_system_id = int(system_id) if system_id is not None else None
-    except (TypeError, ValueError):
-        normalized_system_id = None
-    telegram_id = user.get("telegramId")
-    normalized_telegram_id = str(telegram_id).strip() if telegram_id not in (None, "") else None
-
-    with store._connect() as conn:
-        conn.execute(
-            """
-            UPDATE review_cases
-            SET uuid = ?, username = ?, system_id = ?, telegram_id = ?
-            WHERE id = ?
-            """,
-            (uuid, username, normalized_system_id, normalized_telegram_id, case_id),
-        )
-        if latest_event_id is not None:
-            conn.execute(
-                """
-                UPDATE analysis_events
-                SET uuid = ?, username = ?, system_id = ?, telegram_id = ?
-                WHERE id = ?
-                """,
-                (uuid, username, normalized_system_id, normalized_telegram_id, latest_event_id),
-            )
-        conn.commit()
-
-
-def _backfill_review_case_identity(container: Any, case_id: int) -> bool:
-    with container.store._connect() as conn:
-        row = conn.execute(
-            """
-            SELECT id, latest_event_id, uuid, username, system_id, telegram_id
-            FROM review_cases
-            WHERE id = ?
-            """,
-            (case_id,),
-        ).fetchone()
-    if not row:
-        return False
-
-    payload = dict(row)
-    if not _needs_identity_backfill(payload):
-        return False
-
-    identifier = _lookup_identifier(payload)
-    if not identifier:
-        return False
-
-    user = panel_client(container).get_user_data(identifier)
-    if not user:
-        return False
-
-    _persist_review_identity(container.store, int(payload["id"]), payload.get("latest_event_id"), user)
-    return True
+from .modules import _analyze_event, _build_batch_context
+from .review_backfill import backfill_review_case_identities
 
 
 def list_reviews(container: Any, filters: dict[str, Any]) -> dict[str, Any]:
@@ -88,16 +15,16 @@ def list_reviews(container: Any, filters: dict[str, Any]) -> dict[str, Any]:
         payload = container.store.list_review_cases(filters)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    refreshed = False
-    for item in payload.get("items", []):
-        if _backfill_review_case_identity(container, int(item["id"])):
-            refreshed = True
+    refreshed = backfill_review_case_identities(
+        container,
+        [int(item["id"]) for item in payload.get("items", [])],
+    )
     return container.store.list_review_cases(filters) if refreshed else payload
 
 
 def get_review(container: Any, case_id: int) -> dict[str, Any]:
     try:
-        _backfill_review_case_identity(container, case_id)
+        backfill_review_case_identities(container, [case_id], max_remote_lookups=1)
         return container.store.get_review_case(case_id)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -134,8 +61,11 @@ async def recheck_reviews(
 
     listing = list_reviews(container, review_filters)
     rules_state = container.store.get_live_rules_state()
-    rules = rules_state["rules"]
     revision = int(rules_state.get("revision") or 0)
+    scoring_runtime = _build_batch_context(
+        container,
+        {"module_id": "review-recheck", "module_name": "review-recheck"},
+    )
 
     changed_counts: Counter[str] = Counter()
     items: list[dict[str, Any]] = []
@@ -159,10 +89,9 @@ async def recheck_reviews(
             "tag": detail.get("tag"),
         }
         bundle = await _analyze_event(
-            container,
+            scoring_runtime,
             user_data,
             payload,
-            rules,
             persist_behavior_state=False,
             persist_decision=False,
         )

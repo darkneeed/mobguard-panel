@@ -207,7 +207,69 @@ class ScoringPipelineTests(unittest.TestCase):
             evaluate_mobile_network(ScoringContext(ip="5.5.5.5"), BASE_CONFIG, deps)
         )
         self.assertEqual(bundle.score, 0)
+        self.assertEqual(bundle.verdict, "UNSURE")
+
+    def test_soft_negative_score_maps_to_probable_home(self):
+        deps, _ = self.make_deps(
+            org="Unknown ISP",
+            hostname="",
+            behavior={
+                "logs": ["-20 Stable same IP"],
+                "total_behavior_score": -20,
+                "concurrency_immunity": False,
+                "churn_bonus": 0,
+                "churn_rate": 0,
+                "history_summary": {
+                    "top_same_ip": "5.5.5.5",
+                    "top_same_ip_count": 6,
+                    "top_same_ip_span_hours": 30,
+                    "lookback_days": 14,
+                    "min_gap_minutes": 30,
+                },
+                "history_mobile_bonus": 0,
+                "history_home_penalty": -20,
+                "lifetime_penalty": 0,
+                "lifetime_hours": 0,
+                "subnet_bonus": 0,
+                "subnet": None,
+            },
+        )
+        bundle = asyncio.run(
+            evaluate_mobile_network(ScoringContext(ip="5.5.5.6", uuid="u-home", tag="TAG"), BASE_CONFIG, deps)
+        )
         self.assertEqual(bundle.verdict, "HOME")
+        self.assertEqual(bundle.confidence_band, "PROBABLE_HOME")
+
+    def test_strong_negative_score_maps_to_high_home(self):
+        deps, _ = self.make_deps(
+            org="Unknown ISP",
+            hostname="",
+            behavior={
+                "logs": ["-35 Stable same IP"],
+                "total_behavior_score": -35,
+                "concurrency_immunity": False,
+                "churn_bonus": 0,
+                "churn_rate": 0,
+                "history_summary": {
+                    "top_same_ip": "5.5.5.5",
+                    "top_same_ip_count": 8,
+                    "top_same_ip_span_hours": 48,
+                    "lookback_days": 14,
+                    "min_gap_minutes": 30,
+                },
+                "history_mobile_bonus": 0,
+                "history_home_penalty": -35,
+                "lifetime_penalty": 0,
+                "lifetime_hours": 0,
+                "subnet_bonus": 0,
+                "subnet": None,
+            },
+        )
+        bundle = asyncio.run(
+            evaluate_mobile_network(ScoringContext(ip="5.5.5.7", uuid="u-home", tag="TAG"), BASE_CONFIG, deps)
+        )
+        self.assertEqual(bundle.verdict, "HOME")
+        self.assertEqual(bundle.confidence_band, "HIGH_HOME")
 
     def test_mixed_provider_cases_capture_extended_evidence(self):
         deps, _ = self.make_deps(org="AS8359 Rostelecom", hostname="gpon.rostelecom")

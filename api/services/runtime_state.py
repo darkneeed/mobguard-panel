@@ -146,23 +146,44 @@ def panel_client(container: APIContainer) -> PanelClient:
     return PanelClient(remnawave_url, remnawave_token)
 
 
+def _runtime_identity_columns(query: str) -> list[tuple[str, Any]]:
+    candidates: list[tuple[str, Any]] = []
+    if query.isdigit():
+        candidates.append(("system_id", int(query)))
+        candidates.append(("telegram_id", query))
+    if len(query) > 20 and "-" in query:
+        candidates.append(("uuid", query))
+    candidates.append(("username", query))
+    candidates.append(("uuid", query))
+    unique: list[tuple[str, Any]] = []
+    seen: set[tuple[str, str]] = set()
+    for column, value in candidates:
+        marker = (column, str(value))
+        if marker in seen:
+            continue
+        seen.add(marker)
+        unique.append((column, value))
+    return unique
+
+
 def get_runtime_user_match(store: Any, identifier: str) -> Optional[dict[str, Any]]:
     query = identifier.strip()
     if not query:
         return None
     with store._connect() as conn:
-        exact = conn.execute(
-            """
-            SELECT uuid, username, system_id, telegram_id, updated_at
-            FROM review_cases
-            WHERE uuid = ? OR username = ? OR telegram_id = ? OR CAST(system_id AS TEXT) = ?
-            ORDER BY updated_at DESC
-            LIMIT 1
-            """,
-            (query, query, query, query),
-        ).fetchone()
-        if exact:
-            return dict(exact)
+        for column, value in _runtime_identity_columns(query):
+            exact = conn.execute(
+                f"""
+                SELECT uuid, username, system_id, telegram_id, updated_at
+                FROM review_cases
+                WHERE {column} = ?
+                ORDER BY updated_at DESC
+                LIMIT 1
+                """,
+                (value,),
+            ).fetchone()
+            if exact:
+                return dict(exact)
         like = f"%{query}%"
         row = conn.execute(
             """
@@ -178,10 +199,38 @@ def get_runtime_user_match(store: Any, identifier: str) -> Optional[dict[str, An
 
 
 def search_runtime_users(store: Any, query: str) -> list[dict[str, Any]]:
-    search = f"%{query.strip()}%"
-    if not query.strip():
+    normalized = query.strip()
+    if not normalized:
         return []
     with store._connect() as conn:
+        exact_rows: list[Any] = []
+        for column, value in _runtime_identity_columns(normalized):
+            exact_rows.extend(
+                conn.execute(
+                    f"""
+                    SELECT uuid, username, system_id, telegram_id, updated_at
+                    FROM review_cases
+                    WHERE {column} = ?
+                    ORDER BY updated_at DESC
+                    LIMIT 20
+                    """,
+                    (value,),
+                ).fetchall()
+            )
+        if exact_rows:
+            deduped: list[dict[str, Any]] = []
+            seen: set[tuple[Any, ...]] = set()
+            for row in sorted(exact_rows, key=lambda item: str(item["updated_at"] or ""), reverse=True):
+                marker = (row["uuid"], row["username"], row["system_id"], row["telegram_id"])
+                if marker in seen:
+                    continue
+                seen.add(marker)
+                deduped.append(dict(row))
+                if len(deduped) >= 20:
+                    break
+            return deduped
+
+        search = f"%{normalized}%"
         rows = conn.execute(
             """
             SELECT uuid, username, system_id, telegram_id, MAX(updated_at) AS updated_at

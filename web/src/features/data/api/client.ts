@@ -1,48 +1,63 @@
 import { buildSearchParams, request, requestBlob } from "../../../shared/api/request";
-import { ModuleProvisioningPayload, ReviewListParams } from "../../../shared/api/types";
+import {
+  CacheAdminResponse,
+  CalibrationExportPreview,
+  HealthSnapshot,
+  LearningAdminResponse,
+  ModuleDetailResponse,
+  ModuleListResponse,
+  ModuleProvisioningPayload,
+  OverridesResponse,
+  ReviewListParams,
+  ReviewListResponse,
+  UserCardExportResponse,
+  UserCardResponse,
+  UserSearchResponse,
+  ViolationsResponse
+} from "../../../shared/api/types";
 
 export const dataApi = {
   searchUsers: (query: string) =>
-    request<Record<string, unknown>>(`/admin/data/users/search?query=${encodeURIComponent(query)}`),
+    request<UserSearchResponse>(`/admin/data/users/search?query=${encodeURIComponent(query)}`),
   getUserCard: (identifier: string) =>
-    request<Record<string, unknown>>(`/admin/data/users/${encodeURIComponent(identifier)}`),
+    request<UserCardResponse>(`/admin/data/users/${encodeURIComponent(identifier)}`),
   getUserCardExport: (identifier: string) =>
-    request<Record<string, unknown>>(`/admin/data/users/${encodeURIComponent(identifier)}/export`),
+    request<UserCardExportResponse>(`/admin/data/users/${encodeURIComponent(identifier)}/export`),
   banUser: (identifier: string, minutes: number) =>
-    request<Record<string, unknown>>(`/admin/data/users/${encodeURIComponent(identifier)}/ban`, {
+    request<UserCardResponse>(`/admin/data/users/${encodeURIComponent(identifier)}/ban`, {
       method: "POST",
       body: JSON.stringify({ minutes })
     }),
   unbanUser: (identifier: string) =>
-    request<Record<string, unknown>>(`/admin/data/users/${encodeURIComponent(identifier)}/unban`, {
+    request<UserCardResponse>(`/admin/data/users/${encodeURIComponent(identifier)}/unban`, {
       method: "POST"
     }),
   applyUserTrafficCap: (identifier: string, gigabytes: number) =>
-    request<Record<string, unknown>>(`/admin/data/users/${encodeURIComponent(identifier)}/traffic-cap`, {
+    request<UserCardResponse>(`/admin/data/users/${encodeURIComponent(identifier)}/traffic-cap`, {
       method: "POST",
       body: JSON.stringify({ gigabytes })
     }),
   restoreUserTrafficCap: (identifier: string) =>
-    request<Record<string, unknown>>(`/admin/data/users/${encodeURIComponent(identifier)}/traffic-cap/restore`, {
+    request<UserCardResponse>(`/admin/data/users/${encodeURIComponent(identifier)}/traffic-cap/restore`, {
       method: "POST"
     }),
   updateUserWarnings: (identifier: string, action: string, count = 1) =>
-    request<Record<string, unknown>>(`/admin/data/users/${encodeURIComponent(identifier)}/warnings`, {
+    request<UserCardResponse>(`/admin/data/users/${encodeURIComponent(identifier)}/warnings`, {
       method: "POST",
       body: JSON.stringify({ action, count })
     }),
   updateUserStrikes: (identifier: string, action: string, count: number) =>
-    request<Record<string, unknown>>(`/admin/data/users/${encodeURIComponent(identifier)}/strikes`, {
+    request<UserCardResponse>(`/admin/data/users/${encodeURIComponent(identifier)}/strikes`, {
       method: "POST",
       body: JSON.stringify({ action, count })
     }),
   updateUserExempt: (identifier: string, kind: string, enabled: boolean) =>
-    request<Record<string, unknown>>(`/admin/data/users/${encodeURIComponent(identifier)}/exempt`, {
+    request<UserCardResponse>(`/admin/data/users/${encodeURIComponent(identifier)}/exempt`, {
       method: "POST",
       body: JSON.stringify({ kind, enabled })
     }),
-  getViolations: () => request<Record<string, unknown>>("/admin/data/violations"),
-  getOverrides: () => request<Record<string, unknown>>("/admin/data/overrides"),
+  getViolations: () => request<ViolationsResponse>("/admin/data/violations"),
+  getOverrides: () => request<OverridesResponse>("/admin/data/overrides"),
   upsertExactOverride: (ip: string, decision: string, ttl_days = 7) =>
     request<Record<string, unknown>>(`/admin/data/overrides/ip/${encodeURIComponent(ip)}`, {
       method: "PUT",
@@ -61,7 +76,7 @@ export const dataApi = {
     request<Record<string, unknown>>(`/admin/data/overrides/unsure/${encodeURIComponent(ip)}`, {
       method: "DELETE"
     }),
-  getCache: () => request<Record<string, unknown>>("/admin/data/cache"),
+  getCache: () => request<CacheAdminResponse>("/admin/data/cache"),
   patchCache: (ip: string, payload: Record<string, unknown>) =>
     request<Record<string, unknown>>(`/admin/data/cache/${encodeURIComponent(ip)}`, {
       method: "PATCH",
@@ -71,7 +86,7 @@ export const dataApi = {
     request<Record<string, unknown>>(`/admin/data/cache/${encodeURIComponent(ip)}`, {
       method: "DELETE"
     }),
-  getLearningAdmin: () => request<Record<string, unknown>>("/admin/data/learning"),
+  getLearningAdmin: () => request<LearningAdminResponse>("/admin/data/learning"),
   patchLegacyLearning: (rowId: number, payload: Record<string, unknown>) =>
     request<Record<string, unknown>>(`/admin/data/learning/legacy/${rowId}`, {
       method: "PATCH",
@@ -84,21 +99,21 @@ export const dataApi = {
   exportCalibration: (params: Record<string, string | number | boolean | undefined>) =>
     requestBlob(`/admin/data/exports/calibration?${buildSearchParams(params)}`),
   previewCalibration: (params: Record<string, string | number | boolean | undefined>) =>
-    request<Record<string, unknown>>(`/admin/data/exports/calibration/preview?${buildSearchParams(params)}`),
+    request<CalibrationExportPreview>(`/admin/data/exports/calibration/preview?${buildSearchParams(params)}`),
   listCases: (params: ReviewListParams) =>
-    request<Record<string, unknown>>(`/admin/data/cases?${buildSearchParams(params)}`),
+    request<ReviewListResponse>(`/admin/data/cases?${buildSearchParams(params)}`),
   getQuality: (params: Record<string, string | number | boolean | undefined> = {}) =>
     request<Record<string, unknown>>(`/admin/metrics/quality?${buildSearchParams(params)}`),
-  getModules: () => request<Record<string, unknown>>("/admin/modules"),
+  getModules: () => request<ModuleListResponse>("/admin/modules"),
   getModuleDetail: (moduleId: string) =>
-    request<Record<string, unknown>>(`/admin/modules/${encodeURIComponent(moduleId)}`),
+    request<ModuleDetailResponse>(`/admin/modules/${encodeURIComponent(moduleId)}`),
   createModule: (payload: ModuleProvisioningPayload) =>
-    request<Record<string, unknown>>("/admin/modules", {
+    request<ModuleDetailResponse>("/admin/modules", {
       method: "POST",
       body: JSON.stringify(payload)
     }),
   updateModule: (moduleId: string, payload: ModuleProvisioningPayload) =>
-    request<Record<string, unknown>>(`/admin/modules/${encodeURIComponent(moduleId)}`, {
+    request<ModuleDetailResponse>(`/admin/modules/${encodeURIComponent(moduleId)}`, {
       method: "PUT",
       body: JSON.stringify(payload)
     }),
@@ -106,5 +121,5 @@ export const dataApi = {
     request<Record<string, unknown>>(`/admin/modules/${encodeURIComponent(moduleId)}/token/reveal`, {
       method: "POST"
     }),
-  getHealth: () => request<Record<string, unknown>>("/health")
+  getHealth: () => request<HealthSnapshot>("/health")
 };

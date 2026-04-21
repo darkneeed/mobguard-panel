@@ -8,8 +8,13 @@ def _provider_review_required(bundle: DecisionBundle) -> bool:
     return isinstance(evidence, dict) and bool(evidence.get("review_recommended"))
 
 
+def _automation_guardrail_blocked(bundle: DecisionBundle) -> bool:
+    guardrail = bundle.signal_flags.get("automation_guardrail")
+    return isinstance(guardrail, dict) and bool(guardrail.get("blocked"))
+
+
 def derive_punitive_eligibility(bundle: DecisionBundle) -> bool:
-    if _provider_review_required(bundle):
+    if _provider_review_required(bundle) or _automation_guardrail_blocked(bundle):
         return False
     if bundle.verdict != "HOME":
         return False

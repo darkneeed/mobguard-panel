@@ -1,12 +1,17 @@
 import { buildSearchParams, request } from "../../../shared/api/request";
-import { ReviewListParams, ReviewListResponse, RulesState } from "../../../shared/api/types";
+import {
+  ReviewDetailResponse,
+  ReviewListParams,
+  ReviewListResponse,
+  RulesState
+} from "../../../shared/api/types";
 
 export const reviewsApi = {
   listReviews: (params: ReviewListParams) =>
     request<ReviewListResponse>(`/admin/reviews?${buildSearchParams(params)}`),
-  getReview: (caseId: string) => request<Record<string, unknown>>(`/admin/reviews/${caseId}`),
+  getReview: (caseId: string) => request<ReviewDetailResponse>(`/admin/reviews/${caseId}`),
   resolveReview: (caseId: string, resolution: string, note: string) =>
-    request<Record<string, unknown>>(`/admin/reviews/${caseId}/resolve`, {
+    request<ReviewDetailResponse>(`/admin/reviews/${caseId}/resolve`, {
       method: "POST",
       body: JSON.stringify({ resolution, note })
     }),

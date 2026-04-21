@@ -9,6 +9,14 @@ from typing import Any, Optional
 from .storage.sqlite import SQLiteStorage
 
 
+def utcnow() -> datetime:
+    return datetime.utcnow().replace(microsecond=0)
+
+
+def utcnow_iso() -> str:
+    return utcnow().isoformat()
+
+
 class AnalysisStore:
     def __init__(self, db_path: str):
         self.db_path = db_path
@@ -174,7 +182,7 @@ class AnalysisStore:
         if not row:
             return None
         expires_at = row["expires"]
-        if expires_at and datetime.fromisoformat(str(expires_at)) <= datetime.now():
+        if expires_at and datetime.fromisoformat(str(expires_at)) <= utcnow():
             return None
         return {
             "status": row["status"],
@@ -186,7 +194,7 @@ class AnalysisStore:
         }
 
     async def cache_decision(self, ip: str, data: dict[str, Any]) -> None:
-        expires = datetime.now() + timedelta(days=3)
+        expires = utcnow() + timedelta(days=3)
         await self.execute(
             """
             INSERT OR REPLACE INTO ip_decisions (ip, status, confidence, details, asn, expires, log_json, bundle_json)
@@ -209,7 +217,7 @@ class AnalysisStore:
         return str(row["decision"]) if row else None
 
     async def set_unsure_pattern(self, ip: str, decision: str) -> None:
-        now = datetime.now().isoformat()
+        now = utcnow_iso()
         await self.execute(
             """
             INSERT OR REPLACE INTO unsure_patterns (ip_pattern, decision, timestamp)
@@ -233,7 +241,7 @@ class AnalysisStore:
         return int(row["confidence"]) if row else 0
 
     async def count_concurrent_users(self, ip: str, minutes: int = 15) -> int:
-        cutoff = (datetime.now() - timedelta(minutes=minutes)).isoformat()
+        cutoff = (utcnow() - timedelta(minutes=minutes)).isoformat()
         row = await self.fetch_one(
             """
             SELECT COUNT(DISTINCT SUBSTR(key, 1, INSTR(key, ':') - 1)) AS cnt
@@ -245,7 +253,7 @@ class AnalysisStore:
         return int(row["cnt"]) if row else 0
 
     async def get_churn_rate(self, uuid: str, hours: int) -> int:
-        cutoff = (datetime.now() - timedelta(hours=hours)).isoformat()
+        cutoff = (utcnow() - timedelta(hours=hours)).isoformat()
         row = await self.fetch_one(
             "SELECT COUNT(DISTINCT ip) AS cnt FROM ip_history WHERE uuid = ? AND timestamp > ?",
             (uuid, cutoff),
@@ -259,7 +267,7 @@ class AnalysisStore:
         *,
         limit: int = 1000,
     ) -> list[dict[str, str]]:
-        cutoff = (datetime.now() - timedelta(days=max(days, 1))).isoformat()
+        cutoff = (utcnow() - timedelta(days=max(days, 1))).isoformat()
         rows = await self.fetch_all(
             """
             SELECT ip, timestamp
@@ -292,7 +300,7 @@ class AnalysisStore:
 
     async def record_subnet_signal(self, ip: str, uuid: str, signal: str) -> None:
         subnet = self.get_subnet(ip)
-        now = datetime.now().isoformat()
+        now = utcnow_iso()
         mobile = 1 if signal == "MOBILE" else 0
         home = 1 if signal == "HOME" else 0
         await self.execute(
@@ -319,12 +327,12 @@ class AnalysisStore:
     async def update_ip_history(self, uuid: str, ip: str) -> None:
         await self.execute(
             "INSERT INTO ip_history (uuid, ip, timestamp) VALUES (?, ?, ?)",
-            (uuid, ip, datetime.now().isoformat()),
+            (uuid, ip, utcnow_iso()),
         )
 
     async def update_session(self, uuid: str, ip: str, tag: str) -> None:
         key = f"{uuid}:{ip}"
-        now = datetime.now().isoformat()
+        now = utcnow_iso()
         await self.execute(
             """
             INSERT INTO active_trackers (key, start_time, last_seen)

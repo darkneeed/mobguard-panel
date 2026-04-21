@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 
-import { api } from "../api/client";
+import { api, ReviewDetailResponse, ReviewResolution } from "../api/client";
 import { useToast } from "../components/ToastProvider";
 import { useI18n } from "../localization";
 import { formatDisplayDateTime } from "../utils/datetime";
@@ -13,14 +13,6 @@ type ReviewReason = {
   weight?: number;
   direction?: string;
   metadata?: Record<string, unknown>;
-};
-
-type ReviewResolution = {
-  id?: number;
-  resolution?: string;
-  actor?: string;
-  created_at?: string;
-  note?: string;
 };
 
 type RelatedCase = {
@@ -35,11 +27,7 @@ type RelatedCase = {
   uuid?: string | null;
 };
 
-type ReviewPayload = Record<string, unknown> & {
-  system_id?: number | null;
-  telegram_id?: string | null;
-  username?: string | null;
-  uuid?: string | null;
+type ReviewPayload = ReviewDetailResponse & {
   latest_event?: Record<string, unknown> & { bundle?: Record<string, unknown> };
   resolutions?: ReviewResolution[];
   related_cases?: RelatedCase[];
@@ -183,8 +171,8 @@ export function ReviewDetailPage() {
         .filter((source) => source.length > 0)
     )
   );
-  const relatedCases = Array.isArray(data?.related_cases) ? data.related_cases : [];
-  const resolutions = Array.isArray(data?.resolutions) ? data.resolutions : [];
+  const relatedCases = (Array.isArray(data?.related_cases) ? data.related_cases : []) as RelatedCase[];
+  const resolutions = (Array.isArray(data?.resolutions) ? data.resolutions : []) as ReviewResolution[];
 
   return (
     <section className="page review-detail-page">

@@ -9,6 +9,10 @@ from pathlib import Path
 from datetime import datetime, timedelta
 from typing import Optional, Tuple, Dict, Any, List, Set
 
+# Compatibility-only runtime:
+# panel/shared logic is the canonical implementation. Keep this module working,
+# but avoid introducing new primary business logic here.
+
 from aiogram import Bot, Dispatcher
 from aiogram.filters import Command, CommandObject
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton

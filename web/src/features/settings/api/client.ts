@@ -1,10 +1,14 @@
 import { request } from "../../../shared/api/request";
-import { SettingsSectionUpdatePayload } from "../../../shared/api/types";
+import {
+  DetectionSettingsResponse,
+  EnforcementSettingsResponse,
+  SettingsSectionUpdatePayload
+} from "../../../shared/api/types";
 
 export const settingsApi = {
-  getDetectionSettings: () => request<Record<string, unknown>>("/admin/settings/detection"),
+  getDetectionSettings: () => request<DetectionSettingsResponse>("/admin/settings/detection"),
   updateDetectionSettings: (payload: { rules: Record<string, unknown>; revision?: number; updated_at?: string }) =>
-    request<Record<string, unknown>>("/admin/settings/detection", {
+    request<DetectionSettingsResponse>("/admin/settings/detection", {
       method: "PUT",
       body: JSON.stringify(payload)
     }),
@@ -20,9 +24,9 @@ export const settingsApi = {
       method: "PUT",
       body: JSON.stringify(payload)
     }),
-  getEnforcementSettings: () => request<Record<string, unknown>>("/admin/settings/enforcement"),
+  getEnforcementSettings: () => request<EnforcementSettingsResponse>("/admin/settings/enforcement"),
   updateEnforcementSettings: (payload: SettingsSectionUpdatePayload) =>
-    request<Record<string, unknown>>("/admin/settings/enforcement", {
+    request<EnforcementSettingsResponse>("/admin/settings/enforcement", {
       method: "PUT",
       body: JSON.stringify(payload)
     })

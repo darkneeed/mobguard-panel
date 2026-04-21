@@ -86,6 +86,23 @@ class LiveRulesValidationTests(unittest.TestCase):
         self.assertEqual(payload["settings"]["history_mobile_bonus"], 40)
         self.assertEqual(payload["settings"]["history_home_penalty"], -25)
 
+    def test_retention_settings_are_accepted(self):
+        payload = validate_live_rules_patch(
+            {
+                "settings": {
+                    "db_cleanup_interval_minutes": 30,
+                    "module_heartbeats_retention_days": 14,
+                    "ingested_raw_events_retention_days": 30,
+                    "ip_history_retention_days": 30,
+                    "orphan_analysis_events_retention_days": 30,
+                    "resolved_review_retention_days": 90,
+                }
+            }
+        )
+        self.assertEqual(payload["settings"]["db_cleanup_interval_minutes"], 30)
+        self.assertEqual(payload["settings"]["module_heartbeats_retention_days"], 14)
+        self.assertEqual(payload["settings"]["resolved_review_retention_days"], 90)
+
 
 if __name__ == "__main__":
     unittest.main()

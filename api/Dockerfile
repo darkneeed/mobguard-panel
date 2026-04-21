@@ -11,6 +11,7 @@ RUN pip install --no-cache-dir -r requirements-api.txt
 COPY api ./api
 COPY mobguard_core ./mobguard_core
 COPY mobguard_platform ./mobguard_platform
+COPY scripts ./scripts
 COPY behavioral_analyzers.py ./behavioral_analyzers.py
 COPY ipinfo_api.py ./ipinfo_api.py
 
