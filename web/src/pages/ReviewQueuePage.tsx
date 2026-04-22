@@ -137,6 +137,10 @@ export function ReviewQueuePage({ session }: { session?: Session }) {
     return `${label}: ${value === null || value === undefined || value === "" ? t("common.notAvailable") : value}`;
   }
 
+  function formatInventoryDate(value: string | undefined) {
+    return formatDisplayDateTime(value || "", t("common.notAvailable"), language);
+  }
+
   useEffect(() => {
     let cancelled = false;
 
@@ -616,105 +620,157 @@ export function ReviewQueuePage({ session }: { session?: Session }) {
         <div className="queue-grid review-queue-grid">
         {list.items.map((item, index) => (
           <article key={item.id} className="queue-card">
-            <div className="queue-card-top">
-              <label className="inline-check queue-check">
-                <input
-                  type="checkbox"
-                  checked={selectedIds.includes(item.id)}
-                  onChange={(event) =>
-                    setSelectedIds((prev) =>
-                      event.target.checked ? [...prev, item.id] : prev.filter((value) => value !== item.id)
-                    )
-                  }
-                />
-              </label>
-              <strong>{item.username || item.uuid || formatIdentifier(t("reviewQueue.identifiers.user"), item.system_id)}</strong>
-              <span className={`status-badge status-${item.status.toLowerCase()}`}>{item.status}</span>
-            </div>
-            <div className="queue-card-identifiers">
-              <span>{formatIdentifier(t("reviewQueue.identifiers.module"), item.module_name || item.module_id)}</span>
-              <span>{formatIdentifier(t("reviewQueue.identifiers.system"), item.system_id)}</span>
-              <span>{formatIdentifier(t("reviewQueue.identifiers.telegram"), item.telegram_id)}</span>
-              <span>{formatIdentifier(t("reviewQueue.identifiers.uuid"), item.uuid)}</span>
-            </div>
-            <div className="queue-card-stack">
-              <div className="queue-card-meta">
-                <span>{t("reviewQueue.card.ip")}</span>
-                <strong>{item.ip}</strong>
-              </div>
-              <div className="queue-card-meta">
-                <span>{t("reviewQueue.card.asn")}</span>
-                <strong>{t("reviewQueue.card.asnValue", { value: item.asn ?? "?" })}</strong>
-              </div>
-              <div className="queue-card-meta">
-                <span>{t("reviewQueue.card.decision")}</span>
-                <strong>{item.verdict} / {item.confidence_band}</strong>
-              </div>
-            </div>
-            <div className="queue-card-meta">
-              <span className={`tag severity-${item.severity}`}>{item.severity}</span>
-              <span className={item.punitive_eligible ? "tag punitive" : "tag review-only"}>
-                {item.punitive_eligible ? t("reviewQueue.card.punitiveEligible") : t("reviewQueue.card.reviewOnly")}
-              </span>
-              {typeof item.usage_profile_priority === "number" ? (
-                <span className="tag">{t("reviewQueue.card.priority", { value: item.usage_profile_priority })}</span>
-              ) : null}
-              {typeof item.usage_profile_signal_count === "number" && item.usage_profile_signal_count > 0 ? (
-                <span className="tag">{t("reviewQueue.card.usageSignals", { count: item.usage_profile_signal_count })}</span>
-              ) : null}
-            </div>
-            <p>{item.isp}</p>
-            {item.usage_profile_summary ? <p>{item.usage_profile_summary}</p> : null}
-            <div className="queue-card-tags">
-              {item.reason_codes.slice(0, 4).map((code) => (
-                <span key={code} className="tag">
-                  {code}
-                </span>
-              ))}
-              {(item.usage_profile_soft_reasons || []).slice(0, 3).map((code) => (
-                <span key={`usage-${code}`} className="tag">
-                  {code}
-                </span>
-              ))}
-            </div>
-            <div className="action-row queue-card-actions">
-              <Link
-                to={`/reviews/${item.id}`}
-                state={{
-                  reviewQueueSearch: queueSearch,
-                  reviewQueueItemIds: visibleQueueIds,
-                  reviewQueueCurrentIndex: index
-                }}
-                className="button-link ghost small-button"
-                onMouseEnter={() => prefetchRouteModule(`/reviews/${item.id}`)}
-                onFocus={() => prefetchRouteModule(`/reviews/${item.id}`)}
-              >
-                {t("reviewQueue.actions.openCase")}
-              </Link>
-            </div>
-            {item.status === "OPEN" && canResolve ? (
-              <div className="action-row">
-                <button className="small-button" disabled={resolvingId === item.id} onClick={(event) => quickResolve(event, item, "MOBILE")}>
-                  {resolvingId === item.id ? t("reviewQueue.actions.processing") : t("reviewQueue.actions.mobile")}
-                </button>
-                <button className="small-button" disabled={resolvingId === item.id} onClick={(event) => quickResolve(event, item, "HOME")}>
-                  {t("reviewQueue.actions.home")}
-                </button>
-                <button className="small-button ghost" disabled={resolvingId === item.id} onClick={(event) => quickResolve(event, item, "SKIP")}>
-                  {t("reviewQueue.actions.skip")}
-                </button>
-              </div>
-            ) : null}
-            <div className="queue-card-bottom">
-              <span>{t("reviewQueue.card.repeat", { count: item.repeat_count })}</span>
-              <span>
-                {t("reviewQueue.card.ongoing", {
-                  value: item.usage_profile_ongoing_duration_text || t("common.notAvailable")
-                })}
-              </span>
-              <span>{t("reviewQueue.card.opened", { value: formatDisplayDateTime(item.opened_at, t("common.notAvailable"), language) })}</span>
-              <span>{formatDisplayDateTime(item.updated_at, t("common.notAvailable"), language)}</span>
-            </div>
+            {(() => {
+              const ipInventory = Array.isArray(item.ip_inventory) && item.ip_inventory.length > 0
+                ? item.ip_inventory
+                : [
+                    {
+                      ip: item.ip,
+                      hit_count: Math.max(item.repeat_count || 1, 1),
+                      first_seen_at: item.opened_at,
+                      last_seen_at: item.updated_at,
+                      isp: item.isp,
+                      asn: item.asn
+                    }
+                  ];
+              const moduleInventory = Array.isArray(item.module_inventory) ? item.module_inventory : [];
+              const providerKey = item.provider_key || "";
+              const serviceHint = item.provider_service_hint || "unknown";
+              const moduleCount = item.module_count || moduleInventory.length;
+              return (
+                <>
+                  <div className="queue-card-top">
+                    <label className="inline-check queue-check">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.includes(item.id)}
+                        onChange={(event) =>
+                          setSelectedIds((prev) =>
+                            event.target.checked ? [...prev, item.id] : prev.filter((value) => value !== item.id)
+                          )
+                        }
+                      />
+                    </label>
+                    <strong>{item.username || item.uuid || formatIdentifier(t("reviewQueue.identifiers.user"), item.system_id)}</strong>
+                    <span className={`status-badge status-${item.status.toLowerCase()}`}>{item.status}</span>
+                  </div>
+                  <div className="queue-card-identifiers">
+                    <span>{formatIdentifier(t("reviewQueue.identifiers.module"), item.module_name || item.module_id)}</span>
+                    <span>{formatIdentifier(t("reviewQueue.identifiers.system"), item.system_id)}</span>
+                    <span>{formatIdentifier(t("reviewQueue.identifiers.telegram"), item.telegram_id)}</span>
+                    <span>{formatIdentifier(t("reviewQueue.identifiers.uuid"), item.uuid)}</span>
+                  </div>
+                  <div className="queue-card-stack">
+                    <div className="queue-card-meta">
+                      <span>{t("reviewQueue.card.asn")}</span>
+                      <strong>{t("reviewQueue.card.asnValue", { value: item.asn ?? "?" })}</strong>
+                    </div>
+                    <div className="queue-card-meta">
+                      <span>{t("reviewQueue.card.decision")}</span>
+                      <strong>{item.verdict} / {item.confidence_band}</strong>
+                    </div>
+                  </div>
+                  <div className="queue-card-meta">
+                    <span className={`tag severity-${item.severity}`}>{item.severity}</span>
+                    <span className={item.punitive_eligible ? "tag punitive" : "tag review-only"}>
+                      {item.punitive_eligible ? t("reviewQueue.card.punitiveEligible") : t("reviewQueue.card.reviewOnly")}
+                    </span>
+                    {typeof item.usage_profile_priority === "number" ? (
+                      <span className="tag">{t("reviewQueue.card.priority", { value: item.usage_profile_priority })}</span>
+                    ) : null}
+                    {typeof item.usage_profile_signal_count === "number" && item.usage_profile_signal_count > 0 ? (
+                      <span className="tag">{t("reviewQueue.card.usageSignals", { count: item.usage_profile_signal_count })}</span>
+                    ) : null}
+                  </div>
+                  <div className="queue-card-flags">
+                    {providerKey ? <span className="tag queue-flag">{t("reviewQueue.card.provider", { value: providerKey })}</span> : null}
+                    {providerKey && serviceHint !== "unknown" ? (
+                      <span className={`tag queue-flag queue-flag-${serviceHint}`}>{t("reviewQueue.card.serviceHint", { value: serviceHint })}</span>
+                    ) : null}
+                    {item.provider_conflict ? <span className="tag severity-high">{t("reviewQueue.card.providerConflict")}</span> : null}
+                    {providerKey ? (
+                      <span className={item.provider_review_recommended ? "tag review-only" : "tag status-resolved"}>
+                        {item.provider_review_recommended
+                          ? t("reviewQueue.card.reviewFirst")
+                          : t("reviewQueue.card.autoReady")}
+                      </span>
+                    ) : null}
+                    {moduleCount > 0 ? <span className="tag queue-flag">{t("reviewQueue.card.moduleCount", { count: moduleCount })}</span> : null}
+                  </div>
+                  <div className="queue-card-inventory">
+                    <span className="queue-card-section-label">
+                      {t("reviewQueue.card.ipInventory", { count: item.distinct_ip_count || ipInventory.length })}
+                    </span>
+                    <div className="queue-card-chip-list">
+                      {ipInventory.map((entry) => (
+                        <span
+                          key={`${entry.ip}-${entry.last_seen_at}`}
+                          className="tag queue-inventory-tag"
+                          title={t("reviewQueue.card.ipSeen", {
+                            first: formatInventoryDate(entry.first_seen_at),
+                            last: formatInventoryDate(entry.last_seen_at)
+                          })}
+                        >
+                          {entry.ip} ×{entry.hit_count}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                  <p>{item.isp}</p>
+                  {item.usage_profile_summary ? <p>{item.usage_profile_summary}</p> : null}
+                  <div className="queue-card-tags">
+                    {item.reason_codes.slice(0, 4).map((code) => (
+                      <span key={code} className="tag">
+                        {code}
+                      </span>
+                    ))}
+                    {(item.usage_profile_soft_reasons || []).slice(0, 3).map((code) => (
+                      <span key={`usage-${code}`} className="tag">
+                        {code}
+                      </span>
+                    ))}
+                  </div>
+                  <div className="action-row queue-card-actions">
+                    <Link
+                      to={`/reviews/${item.id}`}
+                      state={{
+                        reviewQueueSearch: queueSearch,
+                        reviewQueueItemIds: visibleQueueIds,
+                        reviewQueueCurrentIndex: index
+                      }}
+                      className="button-link ghost small-button"
+                      onMouseEnter={() => prefetchRouteModule(`/reviews/${item.id}`)}
+                      onFocus={() => prefetchRouteModule(`/reviews/${item.id}`)}
+                    >
+                      {t("reviewQueue.actions.openCase")}
+                    </Link>
+                  </div>
+                  {item.status === "OPEN" && canResolve ? (
+                    <div className="action-row">
+                      <button className="small-button" disabled={resolvingId === item.id} onClick={(event) => quickResolve(event, item, "MOBILE")}>
+                        {resolvingId === item.id ? t("reviewQueue.actions.processing") : t("reviewQueue.actions.mobile")}
+                      </button>
+                      <button className="small-button" disabled={resolvingId === item.id} onClick={(event) => quickResolve(event, item, "HOME")}>
+                        {t("reviewQueue.actions.home")}
+                      </button>
+                      <button className="small-button ghost" disabled={resolvingId === item.id} onClick={(event) => quickResolve(event, item, "SKIP")}>
+                        {t("reviewQueue.actions.skip")}
+                      </button>
+                    </div>
+                  ) : null}
+                  <div className="queue-card-bottom">
+                    <span>{t("reviewQueue.card.repeat", { count: item.repeat_count })}</span>
+                    <span>
+                      {t("reviewQueue.card.ongoing", {
+                        value: item.usage_profile_ongoing_duration_text || t("common.notAvailable")
+                      })}
+                    </span>
+                    <span>{t("reviewQueue.card.opened", { value: formatDisplayDateTime(item.opened_at, t("common.notAvailable"), language) })}</span>
+                    <span>{formatDisplayDateTime(item.updated_at, t("common.notAvailable"), language)}</span>
+                  </div>
+                </>
+              );
+            })()}
           </article>
         ))}
         </div>

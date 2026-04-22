@@ -18,3 +18,11 @@ def get_quality(
     container=Depends(get_container),
 ) -> dict[str, Any]:
     return container.store.get_quality_metrics(module_id=module_id)
+
+
+@router.get("/metrics/overview")
+def get_overview(
+    _: dict[str, Any] = Depends(require_permission(PERMISSION_QUALITY_READ)),
+    container=Depends(get_container),
+) -> dict[str, Any]:
+    return container.store.get_overview_metrics()

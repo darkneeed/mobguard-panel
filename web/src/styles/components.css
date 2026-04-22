@@ -201,6 +201,47 @@
   flex-wrap: wrap;
 }
 
+.queue-card-flags,
+.queue-card-chip-list {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.queue-card-inventory {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.queue-card-section-label {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.queue-inventory-tag {
+  background: var(--surface-soft);
+}
+
+.queue-flag {
+  background: rgba(21, 33, 26, 0.05);
+}
+
+.queue-flag-home {
+  color: var(--warning);
+  border-color: rgba(199, 125, 26, 0.28);
+}
+
+.queue-flag-mobile {
+  color: var(--accent);
+  border-color: rgba(15, 118, 110, 0.28);
+}
+
+.queue-flag-conflict {
+  color: var(--danger);
+  border-color: rgba(180, 35, 24, 0.28);
+}
+
 .queue-card .action-row button,
 .queue-card .action-row .button-link {
   flex: 1 1 0;

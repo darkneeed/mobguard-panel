@@ -362,3 +362,31 @@ class ScoringPipelineTests(unittest.TestCase):
         self.assertNotIn("keyword_home", bundle.reason_codes)
         self.assertEqual(evidence["home_keywords"], [])
         self.assertEqual(evidence["mobile_keywords"], [])
+
+    def test_runtime_config_megafon_mobile_cases_do_not_fall_back_to_unsure(self):
+        deps, _ = self.make_deps(
+            org="AS31163 MegaFon",
+            hostname="lte.megafon.mobile",
+        )
+        bundle = asyncio.run(
+            evaluate_mobile_network(ScoringContext(ip="7.7.7.8"), RUNTIME_CONFIG, deps)
+        )
+        evidence = bundle.signal_flags["provider_evidence"]
+        self.assertEqual(bundle.verdict, "MOBILE")
+        self.assertEqual(evidence["provider_key"], "megafon")
+        self.assertEqual(evidence["provider_classification"], "mobile")
+        self.assertFalse(evidence["review_recommended"])
+
+    def test_runtime_config_t2_mobile_cases_do_not_fall_back_to_unsure(self):
+        deps, _ = self.make_deps(
+            org="AS8373 T2 Mobile",
+            hostname="lte.tele2.mobile",
+        )
+        bundle = asyncio.run(
+            evaluate_mobile_network(ScoringContext(ip="7.7.7.9"), RUNTIME_CONFIG, deps)
+        )
+        evidence = bundle.signal_flags["provider_evidence"]
+        self.assertEqual(bundle.verdict, "MOBILE")
+        self.assertEqual(evidence["provider_key"], "t2")
+        self.assertEqual(evidence["provider_classification"], "mobile")
+        self.assertFalse(evidence["review_recommended"])

@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from .runtime_state import panel_client
+from mobguard_platform.review_context import subject_key_from_identity
 
 
 def _needs_identity_backfill(payload: dict[str, Any]) -> bool:
@@ -27,23 +28,31 @@ def _persist_review_identity(conn: Any, case_id: int, latest_event_id: int | Non
         normalized_system_id = None
     telegram_id = user.get("telegramId")
     normalized_telegram_id = str(telegram_id).strip() if telegram_id not in (None, "") else None
+    subject_key = subject_key_from_identity(
+        {
+            "uuid": uuid,
+            "username": username,
+            "system_id": normalized_system_id,
+            "telegram_id": normalized_telegram_id,
+        }
+    )
 
     conn.execute(
         """
         UPDATE review_cases
-        SET uuid = ?, username = ?, system_id = ?, telegram_id = ?
+        SET uuid = ?, username = ?, system_id = ?, telegram_id = ?, subject_key = ?
         WHERE id = ?
         """,
-        (uuid, username, normalized_system_id, normalized_telegram_id, case_id),
+        (uuid, username, normalized_system_id, normalized_telegram_id, subject_key, case_id),
     )
     if latest_event_id is not None:
         conn.execute(
             """
             UPDATE analysis_events
-            SET uuid = ?, username = ?, system_id = ?, telegram_id = ?
+            SET uuid = ?, username = ?, system_id = ?, telegram_id = ?, subject_key = ?
             WHERE id = ?
             """,
-            (uuid, username, normalized_system_id, normalized_telegram_id, latest_event_id),
+            (uuid, username, normalized_system_id, normalized_telegram_id, subject_key, latest_event_id),
         )
 
 

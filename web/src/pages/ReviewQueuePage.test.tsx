@@ -50,6 +50,45 @@ describe("ReviewQueuePage", () => {
         severity: "critical",
         repeat_count: 2,
         reason_codes: ["provider_conflict"],
+        ip_inventory: [
+          {
+            ip: "1.1.1.1",
+            hit_count: 2,
+            first_seen_at: "2026-04-10T23:00:00Z",
+            last_seen_at: "2026-04-11T00:00:00Z",
+            isp: "ISP A",
+            asn: 123
+          },
+          {
+            ip: "1.1.1.2",
+            hit_count: 1,
+            first_seen_at: "2026-04-10T22:00:00Z",
+            last_seen_at: "2026-04-10T22:00:00Z",
+            isp: "ISP A",
+            asn: 123
+          }
+        ],
+        distinct_ip_count: 2,
+        module_inventory: [
+          {
+            module_id: "node-a",
+            module_name: "Node A",
+            first_seen_at: "2026-04-10T23:00:00Z",
+            last_seen_at: "2026-04-11T00:00:00Z"
+          },
+          {
+            module_id: "node-c",
+            module_name: "Node C",
+            first_seen_at: "2026-04-10T22:00:00Z",
+            last_seen_at: "2026-04-10T22:00:00Z"
+          }
+        ],
+        module_count: 2,
+        provider_key: "mts",
+        provider_classification: "mixed",
+        provider_service_hint: "home",
+        provider_conflict: true,
+        provider_review_recommended: true,
         usage_profile_summary: "IPs 3; devices 2; flags geo_impossible_travel",
         usage_profile_signal_count: 2,
         usage_profile_priority: 980,
@@ -80,6 +119,31 @@ describe("ReviewQueuePage", () => {
         severity: "high",
         repeat_count: 1,
         reason_codes: ["unsure"],
+        ip_inventory: [
+          {
+            ip: "2.2.2.2",
+            hit_count: 1,
+            first_seen_at: "2026-04-11T00:00:00Z",
+            last_seen_at: "2026-04-11T00:00:00Z",
+            isp: "ISP B",
+            asn: 456
+          }
+        ],
+        distinct_ip_count: 1,
+        module_inventory: [
+          {
+            module_id: "node-b",
+            module_name: "Node B",
+            first_seen_at: "2026-04-11T00:00:00Z",
+            last_seen_at: "2026-04-11T00:00:00Z"
+          }
+        ],
+        module_count: 1,
+        provider_key: "t2",
+        provider_classification: "mobile",
+        provider_service_hint: "mobile",
+        provider_conflict: false,
+        provider_review_recommended: false,
         usage_profile_summary: "",
         usage_profile_signal_count: 0,
         usage_profile_priority: 210,
@@ -126,6 +190,10 @@ describe("ReviewQueuePage", () => {
     );
     expect(document.querySelector(".review-queue-grid")).not.toBeNull();
     expect(screen.getByText("priority 980")).toBeInTheDocument();
+    expect(screen.getByText("2 linked IPs")).toBeInTheDocument();
+    expect(screen.getByText("provider mts")).toBeInTheDocument();
+    expect(screen.getByText("Provider conflict")).toBeInTheDocument();
+    expect(screen.getByText("2 modules")).toBeInTheDocument();
 
     const [pageSizeSelect] = screen.getAllByLabelText("Cards per page");
     await userEvent.selectOptions(pageSizeSelect, "48");

@@ -7,6 +7,7 @@ import json
 import logging
 import os
 import sqlite3
+import time
 from datetime import datetime, timedelta
 from typing import Any, Optional
 
@@ -461,6 +462,7 @@ class PlatformStore:
         self._rules_cache_meta: Optional[dict[str, Any]] = None
         self._rules_cache_mtime: Optional[float] = None
         self._mirrored_live_rules_marker: Optional[tuple[int, str, str]] = None
+        self._read_cache: dict[str, tuple[float, Any]] = {}
         self.storage = SQLiteStorage(db_path)
         self.sessions = AdminSessionRepository(self.storage)
         self.admin_security = AdminSecurityRepository(self.storage)
@@ -487,6 +489,15 @@ class PlatformStore:
             (table_name,),
         ).fetchone()
         return row is not None
+
+    def _ttl_cache_get(self, cache_key: str, ttl_seconds: float, loader) -> Any:
+        now = time.monotonic()
+        cached = self._read_cache.get(cache_key)
+        if cached and cached[0] > now:
+            return copy.deepcopy(cached[1])
+        payload = loader()
+        self._read_cache[cache_key] = (now + ttl_seconds, copy.deepcopy(payload))
+        return payload
 
     def build_seed_rules(self) -> dict[str, Any]:
         return self._normalize_rules({})
@@ -688,6 +699,7 @@ class PlatformStore:
                     created_at TEXT NOT NULL,
                     module_id TEXT,
                     module_name TEXT,
+                    subject_key TEXT NOT NULL DEFAULT '',
                     uuid TEXT,
                     username TEXT,
                     system_id INTEGER,
@@ -725,6 +737,7 @@ class PlatformStore:
                     unique_key TEXT NOT NULL UNIQUE,
                     status TEXT NOT NULL,
                     review_reason TEXT NOT NULL,
+                    subject_key TEXT NOT NULL DEFAULT '',
                     module_id TEXT,
                     module_name TEXT,
                     uuid TEXT,
@@ -738,6 +751,11 @@ class PlatformStore:
                     score INTEGER NOT NULL DEFAULT 0,
                     isp TEXT,
                     asn INTEGER,
+                    provider_key TEXT,
+                    provider_classification TEXT NOT NULL DEFAULT 'unknown',
+                    provider_service_hint TEXT NOT NULL DEFAULT 'unknown',
+                    provider_conflict INTEGER NOT NULL DEFAULT 0,
+                    provider_review_recommended INTEGER NOT NULL DEFAULT 0,
                     punitive_eligible INTEGER NOT NULL DEFAULT 0,
                     latest_event_id INTEGER NOT NULL,
                     repeat_count INTEGER NOT NULL DEFAULT 1,
@@ -750,6 +768,32 @@ class PlatformStore:
                     usage_profile_ongoing_duration_text TEXT NOT NULL DEFAULT '',
                     opened_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS review_case_ips (
+                    case_id INTEGER NOT NULL,
+                    ip TEXT NOT NULL,
+                    hit_count INTEGER NOT NULL DEFAULT 1,
+                    first_seen_at TEXT NOT NULL,
+                    last_seen_at TEXT NOT NULL,
+                    isp TEXT,
+                    asn INTEGER,
+                    PRIMARY KEY (case_id, ip)
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS review_case_modules (
+                    case_id INTEGER NOT NULL,
+                    module_id TEXT NOT NULL DEFAULT '',
+                    module_name TEXT,
+                    first_seen_at TEXT NOT NULL,
+                    last_seen_at TEXT NOT NULL,
+                    PRIMARY KEY (case_id, module_id)
                 )
                 """
             )
@@ -945,6 +989,8 @@ class PlatformStore:
                 conn.execute("ALTER TABLE analysis_events ADD COLUMN module_id TEXT")
             if analysis_event_columns and "module_name" not in analysis_event_columns:
                 conn.execute("ALTER TABLE analysis_events ADD COLUMN module_name TEXT")
+            if analysis_event_columns and "subject_key" not in analysis_event_columns:
+                conn.execute("ALTER TABLE analysis_events ADD COLUMN subject_key TEXT NOT NULL DEFAULT ''")
             if analysis_event_columns and "system_id" not in analysis_event_columns:
                 conn.execute("ALTER TABLE analysis_events ADD COLUMN system_id INTEGER")
             if analysis_event_columns and "score" not in analysis_event_columns:
@@ -1000,8 +1046,28 @@ class PlatformStore:
                 conn.execute("ALTER TABLE review_cases ADD COLUMN module_id TEXT")
             if review_case_columns and "module_name" not in review_case_columns:
                 conn.execute("ALTER TABLE review_cases ADD COLUMN module_name TEXT")
+            if review_case_columns and "subject_key" not in review_case_columns:
+                conn.execute("ALTER TABLE review_cases ADD COLUMN subject_key TEXT NOT NULL DEFAULT ''")
             if review_case_columns and "punitive_eligible" not in review_case_columns:
                 conn.execute("ALTER TABLE review_cases ADD COLUMN punitive_eligible INTEGER NOT NULL DEFAULT 0")
+            if review_case_columns and "provider_key" not in review_case_columns:
+                conn.execute("ALTER TABLE review_cases ADD COLUMN provider_key TEXT")
+            if review_case_columns and "provider_classification" not in review_case_columns:
+                conn.execute(
+                    "ALTER TABLE review_cases ADD COLUMN provider_classification TEXT NOT NULL DEFAULT 'unknown'"
+                )
+            if review_case_columns and "provider_service_hint" not in review_case_columns:
+                conn.execute(
+                    "ALTER TABLE review_cases ADD COLUMN provider_service_hint TEXT NOT NULL DEFAULT 'unknown'"
+                )
+            if review_case_columns and "provider_conflict" not in review_case_columns:
+                conn.execute(
+                    "ALTER TABLE review_cases ADD COLUMN provider_conflict INTEGER NOT NULL DEFAULT 0"
+                )
+            if review_case_columns and "provider_review_recommended" not in review_case_columns:
+                conn.execute(
+                    "ALTER TABLE review_cases ADD COLUMN provider_review_recommended INTEGER NOT NULL DEFAULT 0"
+                )
             if review_case_columns and "system_id" not in review_case_columns:
                 conn.execute("ALTER TABLE review_cases ADD COLUMN system_id INTEGER")
             if review_case_columns and "usage_profile_summary" not in review_case_columns:
@@ -1061,6 +1127,9 @@ class PlatformStore:
                 "CREATE INDEX IF NOT EXISTS idx_review_cases_status ON review_cases(status, updated_at)"
             )
             conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_review_cases_subject_status ON review_cases(subject_key, status, updated_at DESC)"
+            )
+            conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_review_cases_priority ON review_cases(status, usage_profile_priority DESC, updated_at DESC)"
             )
             conn.execute(
@@ -1088,6 +1157,12 @@ class PlatformStore:
                 "CREATE INDEX IF NOT EXISTS idx_analysis_events_system_id ON analysis_events(system_id)"
             )
             conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_analysis_events_created_at ON analysis_events(created_at DESC)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_analysis_events_subject_created ON analysis_events(subject_key, created_at DESC)"
+            )
+            conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_analysis_events_module_id ON analysis_events(module_id, created_at DESC)"
             )
             conn.execute(
@@ -1101,6 +1176,15 @@ class PlatformStore:
             )
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_analysis_events_ip ON analysis_events(ip, created_at)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_review_case_ips_last_seen ON review_case_ips(case_id, last_seen_at DESC)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_review_case_modules_module_id ON review_case_modules(module_id, case_id)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_review_case_modules_last_seen ON review_case_modules(case_id, last_seen_at DESC)"
             )
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_review_labels_pattern ON review_labels(pattern_type, pattern_value)"
@@ -1139,6 +1223,8 @@ class PlatformStore:
                     str(seed_meta["updated_at"]),
                     str(seed_meta["updated_by"]),
                 )
+            self.review_admin.backfill_review_subjects_and_contexts(conn)
+            self.review_admin.collapse_open_subject_duplicates(conn)
             conn.commit()
 
     def get_module(self, module_id: str) -> Optional[dict[str, Any]]:
@@ -1225,7 +1311,11 @@ class PlatformStore:
         )
 
     def list_modules(self, stale_after_seconds: int = 180) -> list[dict[str, Any]]:
-        return self.modules_admin.list_modules(stale_after_seconds=stale_after_seconds)
+        return self._ttl_cache_get(
+            f"modules:{int(stale_after_seconds)}",
+            10.0,
+            lambda: self.modules_admin.list_modules(stale_after_seconds=stale_after_seconds),
+        )
 
     def ingest_raw_event(
         self,
@@ -1477,8 +1567,8 @@ class PlatformStore:
     ) -> dict[str, Any]:
         return self.review_admin.resolve_review_case(case_id, resolution, actor, actor_tg_id, note)
 
-    def get_quality_metrics(self, module_id: str | None = None) -> dict[str, Any]:
-        live_rules_state = self.get_live_rules_state()
+    def _build_quality_metrics(self, module_filter: str) -> dict[str, Any]:
+        live_rules_state = self.get_live_rules_state(skip_db_mirror=True)
         runtime_dir = os.path.dirname(self.config_path) if self.config_path else os.path.dirname(self.db_path)
         asn_source = detect_asn_source(runtime_dir, self.base_config.get("settings", {}).get("geoip_db"))
         learning_thresholds = {
@@ -1495,17 +1585,49 @@ class PlatformStore:
                 live_rules_state["rules"].get("settings", {}).get("learning_promote_combo_min_precision", 0.90)
             ),
         }
-        module_filter = str(module_id or "").strip()
-        review_case_where = "WHERE module_id = ?" if module_filter else ""
-        review_case_params: tuple[Any, ...] = (module_filter,) if module_filter else ()
-        open_case_where = "WHERE status = 'OPEN' AND module_id = ?" if module_filter else "WHERE status = 'OPEN'"
-        open_case_params: tuple[Any, ...] = (module_filter,) if module_filter else ()
-        resolution_join = (
-            "FROM review_resolutions rr JOIN review_cases rc ON rc.id = rr.case_id WHERE rc.module_id = ?"
-            if module_filter
-            else "FROM review_resolutions"
-        )
-        resolution_params: tuple[Any, ...] = (module_filter,) if module_filter else ()
+        if module_filter:
+            review_case_where = (
+                "WHERE EXISTS (SELECT 1 FROM review_case_modules rcm WHERE rcm.case_id = review_cases.id AND rcm.module_id = ?)"
+            )
+            review_case_params: tuple[Any, ...] = (module_filter,)
+            open_case_where = (
+                "WHERE status = 'OPEN' AND EXISTS (SELECT 1 FROM review_case_modules rcm WHERE rcm.case_id = review_cases.id AND rcm.module_id = ?)"
+            )
+            open_case_params: tuple[Any, ...] = (module_filter,)
+            resolution_join = (
+                """
+                FROM review_resolutions rr
+                JOIN review_cases rc ON rc.id = rr.case_id
+                WHERE EXISTS (
+                    SELECT 1
+                    FROM review_case_modules rcm
+                    WHERE rcm.case_id = rc.id AND rcm.module_id = ?
+                )
+                """
+            )
+            resolution_params: tuple[Any, ...] = (module_filter,)
+            provider_where = (
+                """
+                WHERE rc.status = 'OPEN'
+                  AND rc.provider_classification = 'mixed'
+                  AND EXISTS (
+                      SELECT 1
+                      FROM review_case_modules rcm
+                      WHERE rcm.case_id = rc.id AND rcm.module_id = ?
+                  )
+                """
+            )
+            provider_params: tuple[Any, ...] = (module_filter,)
+        else:
+            review_case_where = ""
+            review_case_params = ()
+            open_case_where = "WHERE status = 'OPEN'"
+            open_case_params = ()
+            resolution_join = "FROM review_resolutions"
+            resolution_params = ()
+            provider_where = "WHERE rc.status = 'OPEN' AND rc.provider_classification = 'mixed'"
+            provider_params = ()
+
         with self._connect() as conn:
             open_cases = conn.execute(
                 f"SELECT COUNT(*) AS cnt FROM review_cases {open_case_where}",
@@ -1589,14 +1711,12 @@ class PlatformStore:
                 (_utcnow(),),
             ).fetchone()["cnt"]
             provider_rows = conn.execute(
-                """
-                SELECT rc.review_reason, rc.verdict, ae.bundle_json
+                f"""
+                SELECT rc.provider_key, rc.provider_conflict, rc.review_reason, rc.verdict
                 FROM review_cases rc
-                JOIN analysis_events ae ON ae.id = rc.latest_event_id
-                WHERE rc.status = 'OPEN'
-                {module_sql}
-                """.format(module_sql="AND rc.module_id = ?" if module_filter else ""),
-                open_case_params,
+                {provider_where}
+                """,
+                provider_params,
             ).fetchall()
             module_rows = conn.execute(
                 """
@@ -1609,23 +1729,11 @@ class PlatformStore:
         mixed_provider_conflict_cases = 0
         mixed_provider_stats: dict[str, dict[str, Any]] = {}
         for row in provider_rows:
-            try:
-                bundle_payload = json.loads(row["bundle_json"] or "{}")
-            except json.JSONDecodeError:
-                continue
-            signal_flags = bundle_payload.get("signal_flags", {})
-            if not isinstance(signal_flags, dict):
-                continue
-            evidence = signal_flags.get("provider_evidence", {})
-            if not isinstance(evidence, dict):
-                continue
-            if str(evidence.get("provider_classification") or "").lower() != "mixed":
-                continue
-            provider_key = str(evidence.get("provider_key") or "").strip().lower()
+            provider_key = str(row["provider_key"] or "").strip().lower()
             if not provider_key:
                 continue
             mixed_provider_open_cases += 1
-            conflict_case = bool(evidence.get("service_conflict")) or str(row["review_reason"]) == "provider_conflict"
+            conflict_case = bool(row["provider_conflict"]) or str(row["review_reason"]) == "provider_conflict"
             if conflict_case:
                 mixed_provider_conflict_cases += 1
             bucket = mixed_provider_stats.setdefault(
@@ -1695,6 +1803,27 @@ class PlatformStore:
                 },
             },
         }
+
+    def get_quality_metrics(self, module_id: str | None = None) -> dict[str, Any]:
+        module_filter = str(module_id or "").strip()
+        return self._ttl_cache_get(
+            f"quality:{module_filter}",
+            10.0,
+            lambda: self._build_quality_metrics(module_filter),
+        )
+
+    def get_overview_metrics(self) -> dict[str, Any]:
+        return self._ttl_cache_get(
+            "overview",
+            10.0,
+            lambda: {
+                "health": self.get_health_snapshot(),
+                "quality": self.get_quality_metrics(),
+                "latest_cases": self.list_review_cases(
+                    {"status": "OPEN", "page": 1, "page_size": 6, "sort": "updated_desc"}
+                ),
+            },
+        )
 
     def get_db_maintenance_settings(self) -> dict[str, int]:
         settings = self.get_live_rules_state(skip_db_mirror=True)["rules"].get("settings", {})
@@ -2073,7 +2202,13 @@ class PlatformStore:
         return self.health.get_heartbeat(service_name, stale_after_seconds=stale_after_seconds)
 
     def get_health_snapshot(self) -> dict[str, Any]:
-        return self.health.get_snapshot(live_rules_state_loader=self.get_live_rules_state)
+        return self._ttl_cache_get(
+            "health",
+            10.0,
+            lambda: self.health.get_snapshot(
+                live_rules_state_loader=lambda: self.get_live_rules_state(skip_db_mirror=True)
+            ),
+        )
 
     def is_admin_tg_id(self, tg_id: int) -> bool:
         return self.get_admin_role_for_tg_id(tg_id) is not None

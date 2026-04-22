@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { prefetchRouteModule } from "../app/routeModules";
-import { api, HealthSnapshot, ReviewListResponse } from "../api/client";
+import { api, OverviewMetricsResponse } from "../api/client";
 import { useI18n } from "../localization";
 import { formatDisplayDateTime } from "../utils/datetime";
 
@@ -42,9 +42,7 @@ const OVERVIEW_REFRESH_MS = 30000;
 
 export function OverviewPage() {
   const { t, language } = useI18n();
-  const [health, setHealth] = useState<HealthSnapshot | null>(null);
-  const [quality, setQuality] = useState<QualityPayload | null>(null);
-  const [queue, setQueue] = useState<ReviewListResponse | null>(null);
+  const [data, setData] = useState<OverviewMetricsResponse | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [lastLoadedAt, setLastLoadedAt] = useState<string>("");
@@ -54,15 +52,9 @@ export function OverviewPage() {
 
     async function load() {
       try {
-        const [healthPayload, qualityPayload, queuePayload] = await Promise.all([
-          api.getHealth(),
-          api.getQuality(),
-          api.listReviews({ status: "OPEN", page: 1, page_size: 6, sort: "updated_desc" })
-        ]);
+        const payload = await api.getOverview();
         if (cancelled) return;
-        setHealth(healthPayload as HealthSnapshot);
-        setQuality(qualityPayload as QualityPayload);
-        setQueue(queuePayload);
+        setData(payload as OverviewMetricsResponse);
         setError("");
         setLastLoadedAt(new Date().toISOString());
       } catch (err) {
@@ -85,6 +77,10 @@ export function OverviewPage() {
       window.clearInterval(timer);
     };
   }, [t]);
+
+  const health = data?.health || null;
+  const quality = (data?.quality as QualityPayload | undefined) || null;
+  const queue = data?.latest_cases || null;
 
   const systemStatusClass =
     health?.status === "ok" ? "status-resolved" : health?.status ? "severity-high" : "severity-low";

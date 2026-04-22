@@ -495,6 +495,114 @@ class StoreReviewFlowTests(unittest.TestCase):
         self.assertEqual(metrics["mixed_providers"]["conflict_cases"], 1)
         self.assertEqual(metrics["mixed_providers"]["top_open_cases"][0]["provider_key"], "mts")
 
+    def test_review_cases_merge_globally_by_telegram_and_track_inventory(self):
+        self.store.register_module(
+            "node-a",
+            "token-a",
+            module_name="Node A",
+            protocol_version="v1",
+            auto_create=True,
+        )
+        self.store.register_module(
+            "node-b",
+            "token-b",
+            module_name="Node B",
+            protocol_version="v1",
+            auto_create=True,
+        )
+        first_user = {"uuid": "uuid-1", "username": "alice", "telegramId": "1001", "id": 42, "module_id": "node-a", "module_name": "Node A"}
+        second_user = {"uuid": "uuid-2", "username": "alice-alt", "telegramId": "1001", "id": 77, "module_id": "node-b", "module_name": "Node B"}
+        first_bundle = DecisionBundle(
+            ip="10.10.10.10",
+            verdict="UNSURE",
+            confidence_band="UNSURE",
+            score=0,
+            asn=12345,
+            isp="ISP-A",
+        )
+        second_bundle = DecisionBundle(
+            ip="10.10.10.11",
+            verdict="UNSURE",
+            confidence_band="UNSURE",
+            score=0,
+            asn=12345,
+            isp="ISP-B",
+        )
+
+        first_event = self.store.record_analysis_event(first_user, first_bundle.ip, "TAG", first_bundle)
+        first_case = self.store.ensure_review_case(first_user, first_bundle.ip, "TAG", first_bundle, first_event, "unsure")
+        second_event = self.store.record_analysis_event(second_user, second_bundle.ip, "TAG", second_bundle)
+        merged_case = self.store.ensure_review_case(second_user, second_bundle.ip, "TAG", second_bundle, second_event, "unsure")
+        detail = self.store.get_review_case(merged_case.id)
+        modules = {item["module_id"]: item["open_review_cases"] for item in self.store.list_modules()}
+
+        self.assertEqual(first_case.id, merged_case.id)
+        self.assertEqual(detail["subject_key"], "tg:1001")
+        self.assertEqual(detail["ip"], "10.10.10.11")
+        self.assertEqual(detail["module_id"], "node-b")
+        self.assertEqual(detail["distinct_ip_count"], 2)
+        self.assertEqual({item["ip"] for item in detail["ip_inventory"]}, {"10.10.10.10", "10.10.10.11"})
+        self.assertEqual(detail["module_count"], 2)
+        self.assertEqual({item["module_id"] for item in detail["module_inventory"]}, {"node-a", "node-b"})
+        self.assertEqual(modules["node-a"], 1)
+        self.assertEqual(modules["node-b"], 1)
+
+    def test_quality_metrics_use_persisted_provider_summary_without_bundle_decode(self):
+        user = {"uuid": "uuid-1", "username": "alice", "telegramId": "1001", "id": 42}
+        bundle = DecisionBundle(
+            ip="10.10.10.21",
+            verdict="HOME",
+            confidence_band="HIGH_HOME",
+            score=-18,
+            asn=12345,
+            isp="MTS Fiber",
+        )
+        bundle.signal_flags["provider_evidence"] = {
+            "provider_key": "mts",
+            "provider_classification": "mixed",
+            "service_type_hint": "home",
+            "service_conflict": False,
+            "review_recommended": True,
+        }
+        event_id = self.store.record_analysis_event(user, bundle.ip, "TAG", bundle)
+        self.store.ensure_review_case(user, bundle.ip, "TAG", bundle, event_id, "provider_conflict")
+
+        with self.store._connect() as conn:
+            conn.execute("UPDATE analysis_events SET bundle_json = ? WHERE id = ?", ("{invalid", event_id))
+            conn.commit()
+
+        metrics = self.store.get_quality_metrics()
+
+        self.assertEqual(metrics["mixed_providers"]["open_cases"], 1)
+        self.assertEqual(metrics["mixed_providers"]["top_open_cases"][0]["provider_key"], "mts")
+
+    def test_quality_and_health_snapshots_use_short_ttl_cache(self):
+        metrics_before = self.store.get_quality_metrics()
+        health_before = self.store.get_health_snapshot()
+
+        user = {"uuid": "uuid-1", "username": "alice", "telegramId": "1001", "id": 42}
+        bundle = DecisionBundle(
+            ip="10.10.10.30",
+            verdict="UNSURE",
+            confidence_band="UNSURE",
+            score=0,
+            asn=12345,
+            isp="ISP",
+        )
+        event_id = self.store.record_analysis_event(user, bundle.ip, "TAG", bundle)
+        self.store.ensure_review_case(user, bundle.ip, "TAG", bundle, event_id, "unsure")
+
+        metrics_cached = self.store.get_quality_metrics()
+        health_cached = self.store.get_health_snapshot()
+        self.store._read_cache.clear()
+        metrics_refreshed = self.store.get_quality_metrics()
+        health_refreshed = self.store.get_health_snapshot()
+
+        self.assertEqual(metrics_cached["open_cases"], metrics_before["open_cases"])
+        self.assertEqual(health_cached["analysis_24h"]["total"], health_before["analysis_24h"]["total"])
+        self.assertEqual(metrics_refreshed["open_cases"], metrics_before["open_cases"] + 1)
+        self.assertEqual(health_refreshed["analysis_24h"]["total"], health_before["analysis_24h"]["total"] + 1)
+
     def test_build_review_url_falls_back_to_base_config_when_live_rules_are_empty(self):
         self.assertEqual(
             self.store.build_review_url(7),

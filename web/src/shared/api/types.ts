@@ -54,6 +54,7 @@ export type ReviewItem = {
   id: number;
   status: string;
   review_reason: string;
+  subject_key?: string;
   module_id: string | null;
   module_name: string | null;
   uuid: string | null;
@@ -71,6 +72,15 @@ export type ReviewItem = {
   severity: "critical" | "high" | "medium" | "low";
   repeat_count: number;
   reason_codes: string[];
+  ip_inventory?: ReviewIpInventoryItem[];
+  distinct_ip_count?: number;
+  module_inventory?: ReviewModuleInventoryItem[];
+  module_count?: number;
+  provider_key?: string | null;
+  provider_classification?: string;
+  provider_service_hint?: string;
+  provider_conflict?: boolean;
+  provider_review_recommended?: boolean;
   usage_profile_summary?: string;
   usage_profile_signal_count?: number;
   usage_profile_priority?: number;
@@ -87,6 +97,22 @@ export type ReviewListResponse = {
   count: number;
   page: number;
   page_size: number;
+};
+
+export type ReviewIpInventoryItem = {
+  ip: string;
+  hit_count: number;
+  first_seen_at: string;
+  last_seen_at: string;
+  isp?: string | null;
+  asn?: number | null;
+};
+
+export type ReviewModuleInventoryItem = {
+  module_id?: string | null;
+  module_name?: string | null;
+  first_seen_at: string;
+  last_seen_at: string;
 };
 
 export type ModuleRecord = {
@@ -262,6 +288,12 @@ export type ReviewDetailResponse = Partial<ReviewItem> & {
   resolutions?: ReviewResolution[];
   related_cases?: Array<Record<string, unknown>>;
   usage_profile?: UsageProfile;
+};
+
+export type OverviewMetricsResponse = {
+  health: HealthSnapshot;
+  quality: Record<string, unknown>;
+  latest_cases: ReviewListResponse;
 };
 
 export type ViolationsResponse = {

@@ -176,7 +176,7 @@ class ReviewBackfillTests(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
-    def test_list_and_detail_backfill_review_identity_from_panel_client(self):
+    def test_detail_backfill_review_identity_from_panel_client_without_list_side_effects(self):
         calls: list[str] = []
 
         fake_client = SimpleNamespace(
@@ -202,14 +202,14 @@ class ReviewBackfillTests(unittest.TestCase):
             listing = review_service.list_reviews(self.container, {"page": 1, "page_size": 25, "status": "OPEN"})
             detail = review_service.get_review(self.container, 1)
 
-        self.assertEqual(listing["items"][0]["username"], "synthetic_user")
-        self.assertEqual(listing["items"][0]["uuid"], "b0a99119-98e9-413b-8a78-fce4d0095c98")
-        self.assertEqual(listing["items"][0]["telegram_id"], "42424242")
-        self.assertEqual(listing["items"][1]["username"], "synthetic_user")
+        self.assertIsNone(listing["items"][0]["username"])
+        self.assertIsNone(listing["items"][0]["uuid"])
+        self.assertIsNone(listing["items"][0]["telegram_id"])
+        self.assertIsNone(listing["items"][1]["username"])
         self.assertEqual(detail["username"], "synthetic_user")
         self.assertEqual(detail["uuid"], "b0a99119-98e9-413b-8a78-fce4d0095c98")
         self.assertEqual(detail["telegram_id"], "42424242")
-        self.assertEqual(calls.count("211"), 2)
+        self.assertGreaterEqual(calls.count("211"), 1)
 
         with self.store._connect() as conn:
             case_row = conn.execute(
@@ -228,7 +228,7 @@ class ReviewBackfillTests(unittest.TestCase):
         self.assertEqual(event_row["username"], "synthetic_user")
         self.assertEqual(event_row["uuid"], "b0a99119-98e9-413b-8a78-fce4d0095c98")
         self.assertEqual(event_row["telegram_id"], "42424242")
-        self.assertEqual(second_case_row["username"], "synthetic_user")
+        self.assertIsNone(second_case_row["username"])
 
 
 if __name__ == "__main__":

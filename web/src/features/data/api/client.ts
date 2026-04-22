@@ -8,6 +8,7 @@ import {
   ModuleDetailResponse,
   ModuleListResponse,
   ModuleProvisioningPayload,
+  OverviewMetricsResponse,
   OverridesResponse,
   ReviewListParams,
   ReviewListResponse,
@@ -106,6 +107,7 @@ export const dataApi = {
     request<ReviewListResponse>(`/admin/data/cases?${buildSearchParams(params)}`),
   getQuality: (params: Record<string, string | number | boolean | undefined> = {}) =>
     request<Record<string, unknown>>(`/admin/metrics/quality?${buildSearchParams(params)}`),
+  getOverview: () => request<OverviewMetricsResponse>("/admin/metrics/overview"),
   getModules: () => request<ModuleListResponse>("/admin/modules"),
   getModuleDetail: (moduleId: string) =>
     request<ModuleDetailResponse>(`/admin/modules/${encodeURIComponent(moduleId)}`),

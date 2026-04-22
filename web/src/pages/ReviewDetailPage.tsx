@@ -2,7 +2,15 @@ import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 
 import { hasPermission } from "../app/permissions";
-import { api, ReviewDetailResponse, ReviewResolution, Session, UsageProfile } from "../api/client";
+import {
+  api,
+  ReviewDetailResponse,
+  ReviewIpInventoryItem,
+  ReviewModuleInventoryItem,
+  ReviewResolution,
+  Session,
+  UsageProfile
+} from "../api/client";
 import { useToast } from "../components/ToastProvider";
 import { useI18n } from "../localization";
 import { formatDisplayDateTime } from "../utils/datetime";
@@ -175,6 +183,36 @@ export function ReviewDetailPage({ session }: { session?: Session }) {
   );
   const relatedCases = (Array.isArray(data?.related_cases) ? data.related_cases : []) as RelatedCase[];
   const resolutions = (Array.isArray(data?.resolutions) ? data.resolutions : []) as ReviewResolution[];
+  const ipInventory = (
+    Array.isArray(data?.ip_inventory) && data.ip_inventory.length > 0
+      ? data.ip_inventory
+      : data?.ip
+        ? [
+            {
+              ip: data.ip,
+              hit_count: Math.max(Number(data.repeat_count || 1), 1),
+              first_seen_at: String(data.opened_at || data.updated_at || ""),
+              last_seen_at: String(data.updated_at || data.opened_at || ""),
+              isp: data.isp || null,
+              asn: data.asn ?? null
+            }
+          ]
+        : []
+  ) as ReviewIpInventoryItem[];
+  const moduleInventory = (
+    Array.isArray(data?.module_inventory) && data.module_inventory.length > 0
+      ? data.module_inventory
+      : data?.module_id || data?.module_name
+        ? [
+            {
+              module_id: data.module_id || null,
+              module_name: data.module_name || null,
+              first_seen_at: String(data.opened_at || data.updated_at || ""),
+              last_seen_at: String(data.updated_at || data.opened_at || "")
+            }
+          ]
+        : []
+  ) as ReviewModuleInventoryItem[];
   const usageProfile = (data?.usage_profile || undefined) as UsageProfile | undefined;
   const usageTravel = (usageProfile?.travel_flags || {}) as Record<string, unknown>;
   const usageGeo = (usageProfile?.geo_summary || {}) as Record<string, unknown>;
@@ -380,6 +418,72 @@ export function ReviewDetailPage({ session }: { session?: Session }) {
                       {formatList(providerEvidence.provider_home_markers)}
                     </span>
                   </li>
+                </ul>
+              </div>
+
+              <div className="panel">
+                <h2>{t("reviewDetail.sections.ipInventory")}</h2>
+                <ul className="reason-list review-detail-list">
+                  {ipInventory.length === 0 ? (
+                    <li className="review-detail-item review-detail-item-empty">
+                      <span className="review-detail-item-meta">{t("common.notAvailable")}</span>
+                    </li>
+                  ) : null}
+                  {ipInventory.map((item) => (
+                    <li className="review-detail-item" key={`${item.ip}-${item.last_seen_at}`}>
+                      <strong className="review-detail-item-title">{item.ip}</strong>
+                      <span className="review-detail-item-copy">
+                        {t("reviewDetail.ipInventory.summary", {
+                          count: item.hit_count,
+                          isp: formatValue(item.isp),
+                          asn: item.asn ?? "?"
+                        })}
+                      </span>
+                      <span className="review-detail-item-meta">
+                        {t("reviewDetail.ipInventory.firstSeen", {
+                          value: formatDisplayDateTime(item.first_seen_at, t("common.notAvailable"), language)
+                        })}
+                      </span>
+                      <span className="review-detail-item-meta">
+                        {t("reviewDetail.ipInventory.lastSeen", {
+                          value: formatDisplayDateTime(item.last_seen_at, t("common.notAvailable"), language)
+                        })}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              <div className="panel">
+                <h2>{t("reviewDetail.sections.moduleInventory")}</h2>
+                <ul className="reason-list review-detail-list">
+                  {moduleInventory.length === 0 ? (
+                    <li className="review-detail-item review-detail-item-empty">
+                      <span className="review-detail-item-meta">{t("common.notAvailable")}</span>
+                    </li>
+                  ) : null}
+                  {moduleInventory.map((item, index) => (
+                    <li className="review-detail-item" key={`${String(item.module_id || item.module_name || index)}-${item.last_seen_at}`}>
+                      <strong className="review-detail-item-title">
+                        {formatValue(item.module_name || item.module_id)}
+                      </strong>
+                      <span className="review-detail-item-copy">
+                        {t("reviewDetail.moduleInventory.moduleId", {
+                          value: formatValue(item.module_id)
+                        })}
+                      </span>
+                      <span className="review-detail-item-meta">
+                        {t("reviewDetail.moduleInventory.firstSeen", {
+                          value: formatDisplayDateTime(item.first_seen_at, t("common.notAvailable"), language)
+                        })}
+                      </span>
+                      <span className="review-detail-item-meta">
+                        {t("reviewDetail.moduleInventory.lastSeen", {
+                          value: formatDisplayDateTime(item.last_seen_at, t("common.notAvailable"), language)
+                        })}
+                      </span>
+                    </li>
+                  ))}
                 </ul>
               </div>
 

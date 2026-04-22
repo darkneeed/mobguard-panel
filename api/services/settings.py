@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 from fastapi import HTTPException
@@ -12,7 +13,7 @@ from mobguard_platform.runtime_admin_defaults import (
 )
 
 from ..context import APIContainer
-from .reviews import update_rules
+from .reviews import provider_tuning_changed, recheck_provider_sensitive_reviews, update_rules
 from .runtime_state import (
     ACCESS_ENV_FIELDS,
     ACCESS_LIST_KEYS,
@@ -51,7 +52,7 @@ def update_detection_settings(
     revision: int | None,
     updated_at: str | None,
 ) -> dict[str, Any]:
-    return update_rules(
+    result = update_rules(
         container.store,
         payload,
         actor,
@@ -59,6 +60,9 @@ def update_detection_settings(
         expected_revision=revision,
         expected_updated_at=updated_at,
     )
+    if provider_tuning_changed(payload):
+        asyncio.run(recheck_provider_sensitive_reviews(container, actor, actor_tg_id))
+    return result
 
 
 def get_access_settings(container: APIContainer) -> dict[str, Any]:

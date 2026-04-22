@@ -15,14 +15,9 @@ from .runtime_state import enrich_panel_user_usage_context, panel_client
 
 def list_reviews(container: Any, filters: dict[str, Any]) -> dict[str, Any]:
     try:
-        payload = container.store.list_review_cases(filters)
+        return container.store.list_review_cases(filters)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    refreshed = backfill_review_case_identities(
-        container,
-        [int(item["id"]) for item in payload.get("items", [])],
-    )
-    return container.store.list_review_cases(filters) if refreshed else payload
 
 
 def get_review(container: Any, case_id: int) -> dict[str, Any]:
@@ -89,6 +84,16 @@ async def recheck_reviews(
         review_filters["review_reason"] = filters["review_reason"]
 
     listing = list_reviews(container, review_filters)
+    case_ids = [int(item["id"]) for item in listing.get("items", [])]
+    return await _recheck_case_ids(container, case_ids, actor, actor_tg_id)
+
+
+async def _recheck_case_ids(
+    container: Any,
+    case_ids: list[int],
+    actor: str,
+    actor_tg_id: int,
+) -> dict[str, Any]:
     rules_state = container.store.get_live_rules_state()
     revision = int(rules_state.get("revision") or 0)
     scoring_runtime = _build_batch_context(
@@ -98,8 +103,7 @@ async def recheck_reviews(
 
     changed_counts: Counter[str] = Counter()
     items: list[dict[str, Any]] = []
-    for row in listing.get("items", []):
-        case_id = int(row["id"])
+    for case_id in case_ids:
         detail = container.store.get_review_case(case_id)
         user_data = {
             "uuid": detail.get("uuid"),
@@ -172,6 +176,51 @@ async def recheck_reviews(
         "revision": revision,
         "count": len(items),
     }
+
+
+def provider_tuning_changed(payload: dict[str, Any]) -> bool:
+    if not isinstance(payload, dict):
+        return False
+    if "provider_profiles" in payload:
+        return True
+    settings = payload.get("settings")
+    if not isinstance(settings, dict):
+        return False
+    return any(
+        key in settings
+        for key in (
+            "provider_conflict_review_only",
+            "provider_mobile_marker_bonus",
+            "provider_home_marker_penalty",
+        )
+    )
+
+
+async def recheck_provider_sensitive_reviews(
+    container: Any,
+    actor: str,
+    actor_tg_id: int,
+) -> dict[str, Any]:
+    case_ids: list[int] = []
+    for review_reason in ("unsure", "provider_conflict"):
+        page = 1
+        while True:
+            listing = container.store.list_review_cases(
+                {
+                    "status": "OPEN",
+                    "review_reason": review_reason,
+                    "page": page,
+                    "page_size": 100,
+                    "sort": "updated_desc",
+                }
+            )
+            batch_ids = [int(item["id"]) for item in listing.get("items", [])]
+            case_ids.extend(batch_ids)
+            if not batch_ids or page * int(listing.get("page_size") or 100) >= int(listing.get("count") or 0):
+                break
+            page += 1
+    deduped_case_ids = sorted(set(case_ids))
+    return await _recheck_case_ids(container, deduped_case_ids, actor, actor_tg_id)
 
 
 def get_rules(store: Any) -> dict[str, Any]:

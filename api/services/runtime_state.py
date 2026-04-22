@@ -14,6 +14,7 @@ from mobguard_platform.runtime import (
     update_json_file,
 )
 from mobguard_platform.panel_client import PanelClient
+from mobguard_platform.review_context import subject_key_from_identity
 from mobguard_platform.usage_profile import build_usage_profile_snapshot
 from mobguard_platform.runtime_admin_defaults import (
     ENFORCEMENT_SETTINGS_DEFAULTS,
@@ -308,16 +309,27 @@ def resolve_user_identity(container: APIContainer, store: Any, identifier: str) 
     )
     if not any(value not in (None, "") for value in (uuid, username, system_id, telegram_id)):
         raise HTTPException(status_code=404, detail="User not found")
+    subject_key = subject_key_from_identity(
+        {
+            "uuid": uuid,
+            "username": username,
+            "system_id": system_id,
+            "telegram_id": telegram_id,
+        }
+    )
     return {
         "uuid": uuid,
         "username": username,
         "system_id": system_id,
         "telegram_id": telegram_id,
+        "subject_key": subject_key,
         "panel_user": panel_user,
     }
 
 
 def build_user_lookup_clause(identity: dict[str, Any]) -> tuple[str, list[Any]]:
+    if identity.get("subject_key"):
+        return "subject_key = ?", [str(identity["subject_key"])]
     clauses: list[str] = []
     params: list[Any] = []
     if identity.get("uuid"):

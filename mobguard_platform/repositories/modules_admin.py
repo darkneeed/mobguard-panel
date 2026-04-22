@@ -408,21 +408,27 @@ class ModuleAdminRepository(SQLiteRepository):
         with self.connect() as conn:
             rows = conn.execute(
                 """
+                WITH open_case_counts AS (
+                    SELECT rcm.module_id, COUNT(DISTINCT rcm.case_id) AS open_review_cases
+                    FROM review_case_modules rcm
+                    JOIN review_cases rc ON rc.id = rcm.case_id
+                    WHERE rc.status = 'OPEN'
+                    GROUP BY rcm.module_id
+                ),
+                analysis_counts AS (
+                    SELECT ae.module_id, COUNT(*) AS analysis_events_count
+                    FROM analysis_events ae
+                    GROUP BY ae.module_id
+                )
                 SELECT m.module_id, m.module_name, m.status, m.version, m.protocol_version,
                        m.config_revision_applied, m.first_seen_at, m.last_seen_at, m.install_state,
                        m.managed, m.health_status, m.error_text, m.last_validation_at,
                        m.spool_depth, m.access_log_exists, m.metadata_json,
-                       (
-                           SELECT COUNT(*)
-                           FROM review_cases rc
-                           WHERE rc.module_id = m.module_id AND rc.status = 'OPEN'
-                       ) AS open_review_cases,
-                       (
-                           SELECT COUNT(*)
-                           FROM analysis_events ae
-                           WHERE ae.module_id = m.module_id
-                       ) AS analysis_events_count
+                       COALESCE(occ.open_review_cases, 0) AS open_review_cases,
+                       COALESCE(ac.analysis_events_count, 0) AS analysis_events_count
                 FROM modules m
+                LEFT JOIN open_case_counts occ ON occ.module_id = m.module_id
+                LEFT JOIN analysis_counts ac ON ac.module_id = m.module_id
                 ORDER BY m.last_seen_at DESC, m.module_id ASC
                 """
             ).fetchall()

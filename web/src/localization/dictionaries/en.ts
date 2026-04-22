@@ -258,9 +258,17 @@ export const enDictionary: TranslationDictionary = {
     },
     card: {
       ip: "IP",
+      ipInventory: "{count} linked IPs",
+      ipSeen: "First seen {first} · last seen {last}",
       asn: "ASN",
       asnValue: "AS{value}",
       decision: "Decision",
+      provider: "provider {value}",
+      serviceHint: "service {value}",
+      providerConflict: "Provider conflict",
+      reviewFirst: "Review-first",
+      autoReady: "Auto-ready",
+      moduleCount: "{count} modules",
       punitiveEligible: "punitive eligible",
       reviewOnly: "review only",
       priority: "priority {value}",
@@ -391,6 +399,8 @@ export const enDictionary: TranslationDictionary = {
       summary: "Summary",
       reasons: "Reasons",
       providerEvidence: "Provider evidence",
+      ipInventory: "Linked IP inventory",
+      moduleInventory: "Touched modules",
       usageProfile: "Usage profile",
       log: "Log",
       history: "Resolution history",
@@ -460,6 +470,16 @@ export const enDictionary: TranslationDictionary = {
       ongoing: "Ongoing duration",
       lastSeen: "Last seen",
       updatedAt: "Updated"
+    },
+    ipInventory: {
+      summary: "{count} hits · {isp} · AS{asn}",
+      firstSeen: "First seen {value}",
+      lastSeen: "Last seen {value}"
+    },
+    moduleInventory: {
+      moduleId: "Module ID {value}",
+      firstSeen: "First seen {value}",
+      lastSeen: "Last seen {value}"
     }
   },
   rules: {

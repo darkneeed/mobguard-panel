@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, Query
@@ -157,6 +158,14 @@ def put_rules(
         expected_revision=body.revision,
         expected_updated_at=body.updated_at,
     )
+    if review_service.provider_tuning_changed(body.rules):
+        asyncio.run(
+            review_service.recheck_provider_sensitive_reviews(
+                container,
+                session.get("username") or session.get("first_name") or f"tg:{session['telegram_id']}",
+                session["telegram_id"],
+            )
+        )
     record_admin_action(
         container,
         session,

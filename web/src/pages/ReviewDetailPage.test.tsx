@@ -77,6 +77,38 @@ describe("ReviewDetailPage", () => {
           updated_at: "2026-04-12T03:25:00Z"
         }
       ],
+      ip_inventory: [
+        {
+          ip: "128.71.75.0",
+          hit_count: 2,
+          first_seen_at: "2026-04-12T01:25:00Z",
+          last_seen_at: "2026-04-12T03:25:00Z",
+          isp: "beelinemixed",
+          asn: 16345
+        },
+        {
+          ip: "128.70.186.177",
+          hit_count: 1,
+          first_seen_at: "2026-04-12T00:55:00Z",
+          last_seen_at: "2026-04-12T00:55:00Z",
+          isp: "beelinemixed",
+          asn: 16345
+        }
+      ],
+      module_inventory: [
+        {
+          module_id: "node-a",
+          module_name: "Node A",
+          first_seen_at: "2026-04-12T01:25:00Z",
+          last_seen_at: "2026-04-12T03:25:00Z"
+        },
+        {
+          module_id: "node-b",
+          module_name: "Node B",
+          first_seen_at: "2026-04-12T00:55:00Z",
+          last_seen_at: "2026-04-12T00:55:00Z"
+        }
+      ],
       usage_profile: {
         available: true,
         usage_profile_summary: "IPs 2; providers 2; devices 2",
@@ -120,6 +152,10 @@ describe("ReviewDetailPage", () => {
     expect(screen.getByText("vimpelcom, vimpel")).toBeInTheDocument();
     expect(screen.getByText("Usage profile")).toBeInTheDocument();
     expect(screen.getByText("IPs 2; providers 2; devices 2")).toBeInTheDocument();
+    expect(screen.getByText("Linked IP inventory")).toBeInTheDocument();
+    expect(screen.getByText("Touched modules")).toBeInTheDocument();
+    expect(screen.getByText("128.70.186.177")).toBeInTheDocument();
+    expect(screen.getByText("Node B")).toBeInTheDocument();
   });
 
   it("opens the next case from the current queue after resolve", async () => {

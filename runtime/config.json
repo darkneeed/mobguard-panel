@@ -12,7 +12,7 @@
   ],
   "mixed_asns": [
     8359, 25159, 3216, 12389, 20485, 42437, 12958, 13238, 41798, 28917, 21127,
-    42668, 12714, 16345, 60299, 39927, 31133, 31163
+    42668, 12714, 16345, 60299, 39927, 31133, 31163, 8373
   ],
   "exclude_isp_keywords": [
     "datacenter",
@@ -87,11 +87,19 @@
     },
     {
       "key": "megafon",
-      "classification": "mixed",
+      "classification": "mobile",
       "aliases": ["megafon", "megaphone"],
       "mobile_markers": ["mobile", "lte", "5g", "pgw"],
       "home_markers": ["fiber", "gpon", "fttb", "ftth"],
       "asns": [31163]
+    },
+    {
+      "key": "t2",
+      "classification": "mobile",
+      "aliases": ["t2", "tele2", "tele 2", "t2 mobile"],
+      "mobile_markers": ["mobile", "lte", "5g", "pgw"],
+      "home_markers": [],
+      "asns": [8373]
     },
     {
       "key": "domru",

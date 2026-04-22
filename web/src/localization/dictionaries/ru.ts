@@ -258,9 +258,17 @@ export const ruDictionary: TranslationDictionary = {
     },
     card: {
       ip: "IP",
+      ipInventory: "Связанные IP: {count}",
+      ipSeen: "Первое появление {first} · последнее {last}",
       asn: "ASN",
       asnValue: "AS{value}",
       decision: "Решение",
+      provider: "provider {value}",
+      serviceHint: "service {value}",
+      providerConflict: "Конфликт provider markers",
+      reviewFirst: "Только review-first",
+      autoReady: "Уже auto-ready",
+      moduleCount: "модулей: {count}",
       punitiveEligible: "punitive eligible",
       reviewOnly: "review only",
       priority: "priority {value}",
@@ -391,6 +399,8 @@ export const ruDictionary: TranslationDictionary = {
       summary: "Сводка",
       reasons: "Причины",
       providerEvidence: "Провайдерские сигналы",
+      ipInventory: "Инвентарь связанных IP",
+      moduleInventory: "Затронутые модули",
       usageProfile: "Профиль использования",
       log: "Лог",
       history: "История решений",
@@ -460,6 +470,16 @@ export const ruDictionary: TranslationDictionary = {
       ongoing: "Длительность окна",
       lastSeen: "Последний сигнал",
       updatedAt: "Обновлено"
+    },
+    ipInventory: {
+      summary: "{count} срабатываний · {isp} · AS{asn}",
+      firstSeen: "Первое появление {value}",
+      lastSeen: "Последнее появление {value}"
+    },
+    moduleInventory: {
+      moduleId: "Module ID {value}",
+      firstSeen: "Первое появление {value}",
+      lastSeen: "Последнее появление {value}"
     }
   },
   rules: {

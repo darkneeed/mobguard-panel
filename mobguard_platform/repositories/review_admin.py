@@ -6,6 +6,13 @@ from datetime import datetime, timedelta
 from typing import Any, Callable, Optional
 
 from ..models import DecisionBundle, ReviewCaseSummary
+from ..review_context import (
+    clean_text,
+    coerce_optional_int,
+    normalize_review_identity_payload,
+    provider_summary_from_signal_flags,
+    subject_key_from_identity,
+)
 from ..usage_profile import (
     build_usage_profile_priority,
     build_usage_profile_snapshot,
@@ -18,31 +25,11 @@ def _utcnow() -> str:
     return datetime.utcnow().replace(microsecond=0).isoformat()
 
 
-def _coerce_optional_int(value: Any) -> Optional[int]:
-    if value in (None, ""):
-        return None
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return None
-
-
 def _parse_day_boundary(value: Any, *, end_of_day: bool) -> str:
     parsed = datetime.strptime(str(value), "%Y-%m-%d")
     if end_of_day:
         parsed = parsed.replace(hour=23, minute=59, second=59)
     return parsed.isoformat()
-
-
-def _normalize_review_identity_payload(payload: dict[str, Any]) -> dict[str, Any]:
-    normalized = dict(payload)
-    raw_uuid = normalized.get("uuid")
-    if normalized.get("system_id") in (None, "") and raw_uuid not in (None, ""):
-        raw_uuid_text = str(raw_uuid).strip()
-        if raw_uuid_text.isdigit():
-            normalized["system_id"] = int(raw_uuid_text)
-            normalized["uuid"] = None
-    return normalized
 
 
 def _resolve_review_module_name(conn: sqlite3.Connection, payload: dict[str, Any]) -> dict[str, Any]:
@@ -64,9 +51,17 @@ def _review_identity(user: Optional[dict[str, Any]]) -> dict[str, Any]:
     return {
         "uuid": (user or {}).get("uuid"),
         "username": (user or {}).get("username"),
-        "system_id": _coerce_optional_int((user or {}).get("id")),
+        "system_id": coerce_optional_int((user or {}).get("id")),
         "telegram_id": str((user or {}).get("telegramId")) if (user or {}).get("telegramId") not in (None, "") else None,
     }
+
+
+def _normalized_module_id(value: Any) -> str:
+    return clean_text(value)
+
+
+def _provider_summary_payload(bundle: DecisionBundle) -> dict[str, Any]:
+    return provider_summary_from_signal_flags(bundle.signal_flags)
 
 
 class ReviewAdminRepository(SQLiteRepository):
@@ -94,6 +89,7 @@ class ReviewAdminRepository(SQLiteRepository):
         payload = bundle.to_dict()
         module_id = str((user or {}).get("module_id") or "").strip() or None
         module_name = str((user or {}).get("module_name") or "").strip() or module_id
+        subject_key = subject_key_from_identity(user, ip=ip)
         usage_observation = normalize_usage_observation(
             observation,
             signal_flags=bundle.signal_flags,
@@ -102,22 +98,23 @@ class ReviewAdminRepository(SQLiteRepository):
             cursor = conn.execute(
                 """
                 INSERT INTO analysis_events (
-                    created_at, module_id, module_name, uuid, username, system_id, telegram_id, ip, tag,
+                    created_at, module_id, module_name, subject_key, uuid, username, system_id, telegram_id, ip, tag,
                     verdict, confidence_band, score, isp, asn,
                     country, region, city, loc, latitude, longitude,
                     client_device_id, client_device_label, client_os_family, client_os_version,
                     client_app_name, client_app_version,
                     punitive_eligible,
                     reasons_json, signal_flags_json, bundle_json
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     now,
                     module_id,
                     module_name,
+                    subject_key,
                     (user or {}).get("uuid"),
                     (user or {}).get("username"),
-                    _coerce_optional_int((user or {}).get("id")),
+                    coerce_optional_int((user or {}).get("id")),
                     str((user or {}).get("telegramId")) if (user or {}).get("telegramId") is not None else None,
                     ip,
                     tag,
@@ -155,6 +152,218 @@ class ReviewAdminRepository(SQLiteRepository):
         if not base_url:
             return ""
         return f"{base_url}/reviews/{case_id}"
+
+    def _upsert_review_case_ip(
+        self,
+        conn: sqlite3.Connection,
+        *,
+        case_id: int,
+        ip: str,
+        isp: str | None,
+        asn: int | None,
+        seen_at: str,
+        hit_increment: int = 1,
+        first_seen_at: str | None = None,
+    ) -> None:
+        normalized_ip = clean_text(ip)
+        if not normalized_ip:
+            return
+        initial_seen_at = clean_text(first_seen_at) or seen_at
+        conn.execute(
+            """
+            INSERT INTO review_case_ips (
+                case_id, ip, hit_count, first_seen_at, last_seen_at, isp, asn
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(case_id, ip) DO UPDATE SET
+                hit_count = review_case_ips.hit_count + excluded.hit_count,
+                first_seen_at = CASE
+                    WHEN review_case_ips.first_seen_at <= excluded.first_seen_at
+                    THEN review_case_ips.first_seen_at
+                    ELSE excluded.first_seen_at
+                END,
+                last_seen_at = CASE
+                    WHEN review_case_ips.last_seen_at >= excluded.last_seen_at
+                    THEN review_case_ips.last_seen_at
+                    ELSE excluded.last_seen_at
+                END,
+                isp = CASE
+                    WHEN excluded.last_seen_at >= review_case_ips.last_seen_at AND excluded.isp IS NOT NULL AND excluded.isp != ''
+                    THEN excluded.isp
+                    ELSE review_case_ips.isp
+                END,
+                asn = CASE
+                    WHEN excluded.last_seen_at >= review_case_ips.last_seen_at AND excluded.asn IS NOT NULL
+                    THEN excluded.asn
+                    ELSE review_case_ips.asn
+                END
+            """,
+            (
+                case_id,
+                normalized_ip,
+                max(int(hit_increment or 1), 1),
+                initial_seen_at,
+                seen_at,
+                clean_text(isp) or None,
+                asn,
+            ),
+        )
+
+    def _upsert_review_case_module(
+        self,
+        conn: sqlite3.Connection,
+        *,
+        case_id: int,
+        module_id: str | None,
+        module_name: str | None,
+        seen_at: str,
+        first_seen_at: str | None = None,
+    ) -> None:
+        normalized_module_id = _normalized_module_id(module_id)
+        initial_seen_at = clean_text(first_seen_at) or seen_at
+        conn.execute(
+            """
+            INSERT INTO review_case_modules (
+                case_id, module_id, module_name, first_seen_at, last_seen_at
+            ) VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(case_id, module_id) DO UPDATE SET
+                module_name = CASE
+                    WHEN excluded.last_seen_at >= review_case_modules.last_seen_at AND excluded.module_name IS NOT NULL AND excluded.module_name != ''
+                    THEN excluded.module_name
+                    ELSE review_case_modules.module_name
+                END,
+                first_seen_at = CASE
+                    WHEN review_case_modules.first_seen_at <= excluded.first_seen_at
+                    THEN review_case_modules.first_seen_at
+                    ELSE excluded.first_seen_at
+                END,
+                last_seen_at = CASE
+                    WHEN review_case_modules.last_seen_at >= excluded.last_seen_at
+                    THEN review_case_modules.last_seen_at
+                    ELSE excluded.last_seen_at
+                END
+            """,
+            (
+                case_id,
+                normalized_module_id,
+                clean_text(module_name) or None,
+                initial_seen_at,
+                seen_at,
+            ),
+        )
+
+    def _attach_case_context(
+        self,
+        conn: sqlite3.Connection,
+        *,
+        case_id: int,
+        ip: str,
+        isp: str | None,
+        asn: int | None,
+        module_id: str | None,
+        module_name: str | None,
+        seen_at: str,
+        hit_increment: int = 1,
+        first_seen_at: str | None = None,
+    ) -> None:
+        self._upsert_review_case_ip(
+            conn,
+            case_id=case_id,
+            ip=ip,
+            isp=isp,
+            asn=asn,
+            seen_at=seen_at,
+            hit_increment=hit_increment,
+            first_seen_at=first_seen_at,
+        )
+        self._upsert_review_case_module(
+            conn,
+            case_id=case_id,
+            module_id=module_id,
+            module_name=module_name,
+            seen_at=seen_at,
+            first_seen_at=first_seen_at,
+        )
+
+    def _case_ip_inventory(
+        self,
+        conn: sqlite3.Connection,
+        case_ids: list[int],
+    ) -> dict[int, list[dict[str, Any]]]:
+        if not case_ids:
+            return {}
+        placeholders = ", ".join("?" for _ in case_ids)
+        rows = conn.execute(
+            f"""
+            SELECT case_id, ip, hit_count, first_seen_at, last_seen_at, isp, asn
+            FROM review_case_ips
+            WHERE case_id IN ({placeholders})
+            ORDER BY last_seen_at DESC, ip ASC
+            """,
+            tuple(case_ids),
+        ).fetchall()
+        inventory: dict[int, list[dict[str, Any]]] = {case_id: [] for case_id in case_ids}
+        for row in rows:
+            inventory.setdefault(int(row["case_id"]), []).append(dict(row))
+        return inventory
+
+    def _case_module_inventory(
+        self,
+        conn: sqlite3.Connection,
+        case_ids: list[int],
+    ) -> dict[int, list[dict[str, Any]]]:
+        if not case_ids:
+            return {}
+        placeholders = ", ".join("?" for _ in case_ids)
+        rows = conn.execute(
+            f"""
+            SELECT case_id, module_id, module_name, first_seen_at, last_seen_at
+            FROM review_case_modules
+            WHERE case_id IN ({placeholders})
+            ORDER BY last_seen_at DESC, module_name ASC, module_id ASC
+            """,
+            tuple(case_ids),
+        ).fetchall()
+        inventory: dict[int, list[dict[str, Any]]] = {case_id: [] for case_id in case_ids}
+        for row in rows:
+            payload = dict(row)
+            payload["module_id"] = payload.get("module_id") or None
+            inventory.setdefault(int(row["case_id"]), []).append(payload)
+        return inventory
+
+    def _apply_inventory_payloads(
+        self,
+        item: dict[str, Any],
+        *,
+        ip_inventory: list[dict[str, Any]] | None = None,
+        module_inventory: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
+        ip_payload = list(ip_inventory or [])
+        if not ip_payload and clean_text(item.get("ip")):
+            ip_payload = [
+                {
+                    "ip": clean_text(item.get("ip")),
+                    "hit_count": max(int(item.get("repeat_count") or 1), 1),
+                    "first_seen_at": clean_text(item.get("opened_at") or item.get("updated_at")),
+                    "last_seen_at": clean_text(item.get("updated_at") or item.get("opened_at")),
+                    "isp": clean_text(item.get("isp")) or None,
+                    "asn": item.get("asn"),
+                }
+            ]
+        module_payload = list(module_inventory or [])
+        if not module_payload and (clean_text(item.get("module_id")) or clean_text(item.get("module_name"))):
+            module_payload = [
+                {
+                    "module_id": clean_text(item.get("module_id")) or None,
+                    "module_name": clean_text(item.get("module_name")) or None,
+                    "first_seen_at": clean_text(item.get("opened_at") or item.get("updated_at")),
+                    "last_seen_at": clean_text(item.get("updated_at") or item.get("opened_at")),
+                }
+            ]
+        item["ip_inventory"] = ip_payload
+        item["distinct_ip_count"] = len(ip_payload)
+        item["module_inventory"] = module_payload
+        item["module_count"] = len(module_payload)
+        return item
 
     def _usage_profile_fields(
         self,
@@ -196,12 +405,20 @@ class ReviewAdminRepository(SQLiteRepository):
         now = _utcnow()
         module_id = str((user or {}).get("module_id") or "").strip()
         module_name = str((user or {}).get("module_name") or "").strip() or module_id
-        unique_key = f"{module_id or 'legacy'}:{(user or {}).get('uuid', 'unknown')}:{ip}:{tag}"
+        subject_key = subject_key_from_identity(user, ip=ip)
+        unique_key = f"{subject_key}:{event_id}"
         reason_codes = json.dumps(bundle.reason_codes, ensure_ascii=False)
+        provider_summary = _provider_summary_payload(bundle)
         with self.connect() as conn:
             existing = conn.execute(
-                "SELECT id, repeat_count, opened_at FROM review_cases WHERE unique_key = ? AND module_id = ?",
-                (unique_key, module_id),
+                """
+                SELECT id, repeat_count, opened_at
+                FROM review_cases
+                WHERE subject_key = ? AND status != 'MERGED'
+                ORDER BY updated_at DESC, id DESC
+                LIMIT 1
+                """,
+                (subject_key,),
             ).fetchone()
             if existing:
                 next_repeat_count = int(existing["repeat_count"]) + 1
@@ -216,15 +433,24 @@ class ReviewAdminRepository(SQLiteRepository):
                     UPDATE review_cases
                     SET status = 'OPEN',
                         review_reason = ?,
+                        subject_key = ?,
+                        module_id = ?,
                         module_name = ?,
                         username = ?,
                         system_id = ?,
                         telegram_id = ?,
+                        ip = ?,
+                        tag = ?,
                         verdict = ?,
                         confidence_band = ?,
                         score = ?,
                         isp = ?,
                         asn = ?,
+                        provider_key = ?,
+                        provider_classification = ?,
+                        provider_service_hint = ?,
+                        provider_conflict = ?,
+                        provider_review_recommended = ?,
                         punitive_eligible = ?,
                         latest_event_id = ?,
                         repeat_count = ?,
@@ -240,15 +466,24 @@ class ReviewAdminRepository(SQLiteRepository):
                     """,
                     (
                         review_reason,
+                        subject_key,
+                        module_id,
                         module_name,
                         (user or {}).get("username"),
-                        _coerce_optional_int((user or {}).get("id")),
+                        coerce_optional_int((user or {}).get("id")),
                         str((user or {}).get("telegramId")) if (user or {}).get("telegramId") is not None else None,
+                        ip,
+                        tag,
                         bundle.verdict,
                         bundle.confidence_band,
                         bundle.score,
                         bundle.isp,
                         bundle.asn,
+                        provider_summary["provider_key"],
+                        provider_summary["provider_classification"],
+                        provider_summary["provider_service_hint"],
+                        int(provider_summary["provider_conflict"]),
+                        int(provider_summary["provider_review_recommended"]),
                         int(bundle.punitive_eligible),
                         event_id,
                         next_repeat_count,
@@ -264,6 +499,18 @@ class ReviewAdminRepository(SQLiteRepository):
                     ),
                 )
                 case_id = int(existing["id"])
+                self._attach_case_context(
+                    conn,
+                    case_id=case_id,
+                    ip=ip,
+                    isp=bundle.isp,
+                    asn=bundle.asn,
+                    module_id=module_id,
+                    module_name=module_name,
+                    seen_at=now,
+                    hit_increment=1,
+                    first_seen_at=str(existing["opened_at"] or now),
+                )
             else:
                 usage_fields = self._usage_profile_fields(
                     user,
@@ -274,22 +521,24 @@ class ReviewAdminRepository(SQLiteRepository):
                 cursor = conn.execute(
                     """
                     INSERT INTO review_cases (
-                        unique_key, status, review_reason, module_id, module_name, uuid, username, system_id, telegram_id, ip, tag,
-                        verdict, confidence_band, score, isp, asn, punitive_eligible, latest_event_id, repeat_count,
+                        unique_key, status, review_reason, subject_key, module_id, module_name, uuid, username, system_id, telegram_id, ip, tag,
+                        verdict, confidence_band, score, isp, asn, provider_key, provider_classification, provider_service_hint,
+                        provider_conflict, provider_review_recommended, punitive_eligible, latest_event_id, repeat_count,
                         reason_codes_json, usage_profile_summary, usage_profile_signal_count, usage_profile_priority,
                         usage_profile_soft_reasons_json, usage_profile_ongoing_duration_seconds, usage_profile_ongoing_duration_text,
                         opened_at, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         unique_key,
                         "OPEN",
                         review_reason,
+                        subject_key,
                         module_id,
                         module_name,
                         (user or {}).get("uuid"),
                         (user or {}).get("username"),
-                        _coerce_optional_int((user or {}).get("id")),
+                        coerce_optional_int((user or {}).get("id")),
                         str((user or {}).get("telegramId")) if (user or {}).get("telegramId") is not None else None,
                         ip,
                         tag,
@@ -298,6 +547,11 @@ class ReviewAdminRepository(SQLiteRepository):
                         bundle.score,
                         bundle.isp,
                         bundle.asn,
+                        provider_summary["provider_key"],
+                        provider_summary["provider_classification"],
+                        provider_summary["provider_service_hint"],
+                        int(provider_summary["provider_conflict"]),
+                        int(provider_summary["provider_review_recommended"]),
                         int(bundle.punitive_eligible),
                         event_id,
                         1,
@@ -313,6 +567,18 @@ class ReviewAdminRepository(SQLiteRepository):
                     ),
                 )
                 case_id = int(cursor.lastrowid)
+                self._attach_case_context(
+                    conn,
+                    case_id=case_id,
+                    ip=ip,
+                    isp=bundle.isp,
+                    asn=bundle.asn,
+                    module_id=module_id,
+                    module_name=module_name,
+                    seen_at=now,
+                    hit_increment=1,
+                    first_seen_at=now,
+                )
             conn.commit()
         summary = self.get_review_case(case_id)
         return ReviewCaseSummary(
@@ -367,6 +633,8 @@ class ReviewAdminRepository(SQLiteRepository):
             repeat_count=int(case_row["repeat_count"] or 0),
             anchor_started_at=str(case_row["opened_at"] or now),
         )
+        subject_key = subject_key_from_identity(user, ip=ip)
+        provider_summary = _provider_summary_payload(bundle)
 
         with self.connect() as conn:
             next_status = "OPEN" if review_reason else "SKIPPED"
@@ -376,18 +644,25 @@ class ReviewAdminRepository(SQLiteRepository):
                 UPDATE review_cases
                 SET status = ?,
                     review_reason = ?,
+                    subject_key = ?,
                     module_id = ?,
                     module_name = ?,
                     uuid = ?,
                     username = ?,
                     system_id = ?,
                     telegram_id = ?,
+                    ip = ?,
                     tag = ?,
                     verdict = ?,
                     confidence_band = ?,
                     score = ?,
                     isp = ?,
                     asn = ?,
+                    provider_key = ?,
+                    provider_classification = ?,
+                    provider_service_hint = ?,
+                    provider_conflict = ?,
+                    provider_review_recommended = ?,
                     punitive_eligible = ?,
                     latest_event_id = ?,
                     reason_codes_json = ?,
@@ -403,18 +678,25 @@ class ReviewAdminRepository(SQLiteRepository):
                 (
                     next_status,
                     stored_review_reason,
+                    subject_key,
                     str((user or {}).get("module_id") or "").strip(),
                     str((user or {}).get("module_name") or "").strip() or str((user or {}).get("module_id") or "").strip(),
                     (user or {}).get("uuid"),
                     (user or {}).get("username"),
-                    _coerce_optional_int((user or {}).get("id")),
+                    coerce_optional_int((user or {}).get("id")),
                     str((user or {}).get("telegramId")) if (user or {}).get("telegramId") is not None else None,
+                    ip,
                     tag,
                     bundle.verdict,
                     bundle.confidence_band,
                     bundle.score,
                     bundle.isp,
                     bundle.asn,
+                    provider_summary["provider_key"],
+                    provider_summary["provider_classification"],
+                    provider_summary["provider_service_hint"],
+                    int(provider_summary["provider_conflict"]),
+                    int(provider_summary["provider_review_recommended"]),
                     int(bundle.punitive_eligible),
                     event_id,
                     reason_codes,
@@ -450,6 +732,18 @@ class ReviewAdminRepository(SQLiteRepository):
                     """,
                     (case_id,),
                 )
+            self._attach_case_context(
+                conn,
+                case_id=case_id,
+                ip=ip,
+                isp=bundle.isp,
+                asn=bundle.asn,
+                module_id=str((user or {}).get("module_id") or "").strip(),
+                module_name=str((user or {}).get("module_name") or "").strip() or str((user or {}).get("module_id") or "").strip(),
+                seen_at=now,
+                hit_increment=1,
+                first_seen_at=str(case_row["opened_at"] or now),
+            )
             conn.commit()
 
         return self.get_review_case(case_id)
@@ -459,11 +753,13 @@ class ReviewAdminRepository(SQLiteRepository):
         conn: sqlite3.Connection,
         row: sqlite3.Row | dict[str, Any],
     ) -> dict[str, Any]:
-        item = _resolve_review_module_name(conn, _normalize_review_identity_payload(dict(row)))
+        item = _resolve_review_module_name(conn, normalize_review_identity_payload(dict(row)))
         if "reason_codes_json" in item:
             item["reason_codes"] = json.loads(item.pop("reason_codes_json"))
         if "usage_profile_soft_reasons_json" in item:
             item["usage_profile_soft_reasons"] = json.loads(item.pop("usage_profile_soft_reasons_json"))
+        item["provider_conflict"] = bool(item.get("provider_conflict"))
+        item["provider_review_recommended"] = bool(item.get("provider_review_recommended"))
         item["review_url"] = self.build_review_url(int(item["id"]))
         return item
 
@@ -492,8 +788,9 @@ class ReviewAdminRepository(SQLiteRepository):
         }
         order_by = sort_map.get(sort, "updated_at DESC")
         query = [
-            """SELECT id, status, review_reason, module_id, module_name, uuid, username, system_id, telegram_id, ip, tag, verdict, confidence_band,
+            """SELECT id, status, review_reason, subject_key, module_id, module_name, uuid, username, system_id, telegram_id, ip, tag, verdict, confidence_band,
                score, isp, asn, punitive_eligible, repeat_count, reason_codes_json,
+               provider_key, provider_classification, provider_service_hint, provider_conflict, provider_review_recommended,
                usage_profile_summary, usage_profile_signal_count, usage_profile_priority,
                usage_profile_soft_reasons_json, usage_profile_ongoing_duration_seconds, usage_profile_ongoing_duration_text,
                opened_at, updated_at,
@@ -520,7 +817,15 @@ class ReviewAdminRepository(SQLiteRepository):
             clauses.append("username LIKE ?")
             params.append(f"%{filters['username']}%")
         if filters.get("module_id"):
-            clauses.append("module_id = ?")
+            clauses.append(
+                """
+                EXISTS (
+                    SELECT 1
+                    FROM review_case_modules rcm
+                    WHERE rcm.case_id = review_cases.id AND rcm.module_id = ?
+                )
+                """
+            )
             params.append(str(filters["module_id"]))
         if filters.get("system_id") not in (None, ""):
             clauses.append("system_id = ?")
@@ -572,6 +877,17 @@ class ReviewAdminRepository(SQLiteRepository):
             total = conn.execute(count_sql, params).fetchone()["cnt"]
             rows = conn.execute(sql, [*params, page_size, (page - 1) * page_size]).fetchall()
             items = [self._hydrate_review_list_item(conn, row) for row in rows]
+            case_ids = [int(item["id"]) for item in items]
+            ip_inventory = self._case_ip_inventory(conn, case_ids)
+            module_inventory = self._case_module_inventory(conn, case_ids)
+            items = [
+                self._apply_inventory_payloads(
+                    item,
+                    ip_inventory=ip_inventory.get(int(item["id"]), []),
+                    module_inventory=module_inventory.get(int(item["id"]), []),
+                )
+                for item in items
+            ]
         return {
             "items": items,
             "count": total,
@@ -602,21 +918,187 @@ class ReviewAdminRepository(SQLiteRepository):
                 """,
                 (case_id,),
             ).fetchall()
+            case_subject_key = clean_text(case_row["subject_key"]) or subject_key_from_identity(case_row, ip=case_row["ip"])
             related_cases = conn.execute(
                 """
-                SELECT id, status, module_id, module_name, ip, verdict, confidence_band, updated_at, username, uuid, system_id, telegram_id
+                SELECT id, status, subject_key, module_id, module_name, ip, verdict, confidence_band, updated_at, username, uuid, system_id, telegram_id
                 FROM review_cases
-                WHERE id != ? AND (uuid = ? OR ip = ?)
+                WHERE id != ? AND status != 'MERGED' AND subject_key = ?
                 ORDER BY updated_at DESC
                 LIMIT 10
                 """,
-                (case_id, case_row["uuid"], case_row["ip"]),
+                (case_id, case_subject_key),
             ).fetchall()
             case = self._hydrate_review_list_item(conn, case_row)
+            case = self._apply_inventory_payloads(
+                case,
+                ip_inventory=self._case_ip_inventory(conn, [case_id]).get(case_id, []),
+                module_inventory=self._case_module_inventory(conn, [case_id]).get(case_id, []),
+            )
             case["latest_event"] = self._decode_analysis_event_payload(event_row)
             case["resolutions"] = [dict(row) for row in resolutions]
-            case["related_cases"] = [self._hydrate_review_list_item(conn, row) for row in related_cases]
+            related_items = [self._hydrate_review_list_item(conn, row) for row in related_cases]
+            related_case_ids = [int(item["id"]) for item in related_items]
+            related_ip_inventory = self._case_ip_inventory(conn, related_case_ids)
+            related_module_inventory = self._case_module_inventory(conn, related_case_ids)
+            case["related_cases"] = [
+                self._apply_inventory_payloads(
+                    item,
+                    ip_inventory=related_ip_inventory.get(int(item["id"]), []),
+                    module_inventory=related_module_inventory.get(int(item["id"]), []),
+                )
+                for item in related_items
+            ]
             return case
+
+    def backfill_review_subjects_and_contexts(self, conn: sqlite3.Connection) -> None:
+        case_rows = conn.execute(
+            """
+            SELECT id, subject_key, module_id, module_name, uuid, username, system_id, telegram_id,
+                   ip, isp, asn, opened_at, updated_at, repeat_count
+            FROM review_cases
+            """
+        ).fetchall()
+        for row in case_rows:
+            payload = dict(row)
+            subject_key = subject_key_from_identity(payload, ip=payload.get("ip"))
+            if clean_text(payload.get("subject_key")) != subject_key:
+                conn.execute(
+                    "UPDATE review_cases SET subject_key = ? WHERE id = ?",
+                    (subject_key, int(row["id"])),
+                )
+            conn.execute(
+                """
+                INSERT OR IGNORE INTO review_case_ips (
+                    case_id, ip, hit_count, first_seen_at, last_seen_at, isp, asn
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    int(row["id"]),
+                    clean_text(row["ip"]),
+                    max(int(row["repeat_count"] or 1), 1),
+                    clean_text(row["opened_at"] or row["updated_at"]) or _utcnow(),
+                    clean_text(row["updated_at"] or row["opened_at"]) or _utcnow(),
+                    clean_text(row["isp"]) or None,
+                    row["asn"],
+                ),
+            )
+            conn.execute(
+                """
+                INSERT OR IGNORE INTO review_case_modules (
+                    case_id, module_id, module_name, first_seen_at, last_seen_at
+                ) VALUES (?, ?, ?, ?, ?)
+                """,
+                (
+                    int(row["id"]),
+                    _normalized_module_id(row["module_id"]),
+                    clean_text(row["module_name"]) or None,
+                    clean_text(row["opened_at"] or row["updated_at"]) or _utcnow(),
+                    clean_text(row["updated_at"] or row["opened_at"]) or _utcnow(),
+                ),
+            )
+        event_rows = conn.execute(
+            """
+            SELECT id, subject_key, uuid, username, system_id, telegram_id, ip
+            FROM analysis_events
+            """
+        ).fetchall()
+        for row in event_rows:
+            payload = dict(row)
+            subject_key = subject_key_from_identity(payload, ip=payload.get("ip"))
+            if clean_text(payload.get("subject_key")) != subject_key:
+                conn.execute(
+                    "UPDATE analysis_events SET subject_key = ? WHERE id = ?",
+                    (subject_key, int(row["id"])),
+                )
+
+    def collapse_open_subject_duplicates(self, conn: sqlite3.Connection) -> int:
+        rows = conn.execute(
+            """
+            SELECT id, subject_key, ip, module_id, module_name, repeat_count, opened_at, updated_at,
+                   latest_event_id, verdict, confidence_band, score, isp, asn, punitive_eligible
+            FROM review_cases
+            WHERE status = 'OPEN' AND subject_key IS NOT NULL AND subject_key != ''
+            ORDER BY subject_key ASC, updated_at DESC, id DESC
+            """
+        ).fetchall()
+        grouped: dict[str, list[sqlite3.Row]] = {}
+        for row in rows:
+            grouped.setdefault(str(row["subject_key"]), []).append(row)
+
+        merged_count = 0
+        for subject_key, bucket in grouped.items():
+            if len(bucket) < 2:
+                continue
+            survivor = bucket[0]
+            duplicate_rows = bucket[1:]
+            earliest_opened = min(clean_text(row["opened_at"]) or clean_text(row["updated_at"]) for row in bucket)
+            total_repeat_count = sum(max(int(row["repeat_count"] or 0), 0) for row in bucket)
+            for duplicate in duplicate_rows:
+                duplicate_ip_rows = conn.execute(
+                    """
+                    SELECT ip, hit_count, first_seen_at, last_seen_at, isp, asn
+                    FROM review_case_ips
+                    WHERE case_id = ?
+                    """,
+                    (int(duplicate["id"]),),
+                ).fetchall()
+                for ip_row in duplicate_ip_rows:
+                    self._upsert_review_case_ip(
+                        conn,
+                        case_id=int(survivor["id"]),
+                        ip=str(ip_row["ip"]),
+                        isp=ip_row["isp"],
+                        asn=ip_row["asn"],
+                        seen_at=str(ip_row["last_seen_at"]),
+                        hit_increment=int(ip_row["hit_count"] or 1),
+                        first_seen_at=str(ip_row["first_seen_at"]),
+                    )
+                duplicate_module_rows = conn.execute(
+                    """
+                    SELECT module_id, module_name, first_seen_at, last_seen_at
+                    FROM review_case_modules
+                    WHERE case_id = ?
+                    """,
+                    (int(duplicate["id"]),),
+                ).fetchall()
+                for module_row in duplicate_module_rows:
+                    self._upsert_review_case_module(
+                        conn,
+                        case_id=int(survivor["id"]),
+                        module_id=str(module_row["module_id"] or ""),
+                        module_name=module_row["module_name"],
+                        seen_at=str(module_row["last_seen_at"]),
+                        first_seen_at=str(module_row["first_seen_at"]),
+                    )
+                conn.execute("DELETE FROM review_case_ips WHERE case_id = ?", (int(duplicate["id"]),))
+                conn.execute("DELETE FROM review_case_modules WHERE case_id = ?", (int(duplicate["id"]),))
+                conn.execute(
+                    """
+                    UPDATE review_cases
+                    SET status = 'MERGED',
+                        review_reason = 'merged_subject_key',
+                        subject_key = ?,
+                        updated_at = ?
+                    WHERE id = ?
+                    """,
+                    (subject_key, clean_text(survivor["updated_at"]) or _utcnow(), int(duplicate["id"])),
+                )
+                merged_count += 1
+            conn.execute(
+                """
+                UPDATE review_cases
+                SET repeat_count = ?,
+                    opened_at = ?
+                WHERE id = ?
+                """,
+                (
+                    max(total_repeat_count, 1),
+                    earliest_opened,
+                    int(survivor["id"]),
+                ),
+            )
+        return merged_count
 
     def _record_labels_for_resolution(
         self,
