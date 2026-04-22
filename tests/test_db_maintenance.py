@@ -1,15 +1,19 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import shutil
 import sqlite3
 import tempfile
+import time
 import unittest
 from datetime import datetime, timedelta
 from pathlib import Path
-from unittest.mock import patch
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, patch
 
+from api.services import db_maintenance as db_maintenance_service
 from mobguard_platform import AnalysisStore, PlatformStore
 from scripts import db_maintenance as db_maintenance_script
 
@@ -484,6 +488,56 @@ class DatabaseMaintenanceTests(unittest.TestCase):
         with sqlite3.connect(payload["after"]["db_path"]) as conn:
             row = conn.execute("SELECT COUNT(*) FROM live_rules").fetchone()
         self.assertEqual(int(row[0]), 1)
+
+    def test_run_db_maintenance_skips_when_database_is_locked(self):
+        lock_conn = sqlite3.connect(str(self.db_path), timeout=1, check_same_thread=False)
+        self.addCleanup(lock_conn.close)
+        lock_conn.execute("PRAGMA busy_timeout = 1000")
+        lock_conn.execute("BEGIN IMMEDIATE")
+        lock_conn.execute(
+            """
+            INSERT INTO module_heartbeats (
+                module_id, status, version, protocol_version, config_revision_applied, details_json, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            ("node-a", "online", "1.0.0", "v1", 1, json.dumps({"locked": True}), datetime.utcnow().isoformat()),
+        )
+
+        started_at = time.monotonic()
+        report = self.store.run_db_maintenance(mode="periodic")
+        elapsed = time.monotonic() - started_at
+
+        lock_conn.rollback()
+
+        self.assertLess(elapsed, 3.0)
+        self.assertTrue(report["skipped"])
+        self.assertEqual(report["skip_reason"], "database_locked")
+        self.assertEqual(report["deleted"], {})
+        self.assertEqual(report["wal_checkpoint"], [])
+        self.assertFalse(report["vacuumed"])
+
+
+class DatabaseMaintenanceLoopTests(unittest.IsolatedAsyncioTestCase):
+    async def test_db_maintenance_loop_waits_before_first_pass(self):
+        container = SimpleNamespace(
+            store=SimpleNamespace(get_db_maintenance_settings=lambda: {"db_cleanup_interval_minutes": 7})
+        )
+        observed_sleeps: list[int] = []
+
+        async def fake_sleep(seconds: int) -> None:
+            observed_sleeps.append(seconds)
+            raise asyncio.CancelledError()
+
+        with patch.object(
+            db_maintenance_service,
+            "run_db_maintenance_once",
+            new=AsyncMock(),
+        ) as run_once, patch.object(db_maintenance_service.asyncio, "sleep", new=fake_sleep):
+            with self.assertRaises(asyncio.CancelledError):
+                await db_maintenance_service.db_maintenance_loop(container)
+
+        self.assertEqual(observed_sleeps, [420])
+        run_once.assert_not_awaited()
 
 
 if __name__ == "__main__":

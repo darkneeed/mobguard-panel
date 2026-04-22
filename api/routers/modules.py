@@ -84,6 +84,8 @@ async def module_events_batch(
             payload.model_dump(),
             _bearer_token(authorization),
         )
+    except module_service.ModuleIngestionBusyError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

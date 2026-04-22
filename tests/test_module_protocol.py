@@ -2,12 +2,16 @@ import asyncio
 import json
 import os
 import shutil
+import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
+from fastapi import HTTPException
+from api.routers import modules as modules_router
+from api.schemas.modules import EventBatchRequest
 from api.services import modules as module_service
 from mobguard_platform import AnalysisStore, PlatformStore
 
@@ -160,6 +164,54 @@ class ModuleProtocolTests(unittest.TestCase):
         self.assertEqual(result["accepted"], 1)
         self.assertEqual(result["duplicates"], 1)
         self.assertEqual(result["processed"], 1)
+
+    def test_event_batch_returns_503_when_storage_is_temporarily_busy(self):
+        self.store.create_managed_module(
+            "node-busy",
+            "token-busy",
+            "encrypted-token-busy",
+            module_name="Busy Node",
+            metadata={
+                "inbound_tags": ["SELFSTEAL_RU-YANDEX_TCP"],
+            },
+        )
+        module_service.register_module(
+            self.container,
+            {
+                "module_id": "node-busy",
+                "module_name": "Busy Node",
+                "version": "1.0.0",
+                "protocol_version": "v1",
+            },
+            "token-busy",
+        )
+
+        payload = EventBatchRequest(
+            module_id="node-busy",
+            protocol_version="v1",
+            items=[
+                {
+                    "event_uid": "busy-1",
+                    "occurred_at": "2026-04-11T12:00:00",
+                    "ip": "1.2.3.4",
+                    "tag": "SELFSTEAL_RU-YANDEX_TCP",
+                    "uuid": "uuid-busy",
+                }
+            ],
+        )
+
+        with patch.object(self.store, "ingest_raw_event", side_effect=sqlite3.OperationalError("database is locked")):
+            with self.assertRaises(HTTPException) as ctx:
+                asyncio.run(
+                    modules_router.module_events_batch(
+                        payload,
+                        authorization="Bearer token-busy",
+                        container=self.container,
+                    )
+                )
+
+        self.assertEqual(ctx.exception.status_code, 503)
+        self.assertEqual(ctx.exception.detail, module_service.MODULE_INGEST_BUSY_DETAIL)
 
     def test_event_batch_builds_runtime_context_once(self):
         self.store.create_managed_module(

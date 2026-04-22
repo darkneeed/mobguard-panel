@@ -5,6 +5,7 @@ import copy
 import hashlib
 import os
 import secrets
+import sqlite3
 import textwrap
 import uuid
 from dataclasses import dataclass
@@ -25,6 +26,7 @@ from mobguard_platform.module_secrets import ModuleSecretError, decrypt_module_t
 from mobguard_platform.panel_client import PanelClient
 from mobguard_platform.runtime import read_env_file, read_env_file_only
 from mobguard_platform.runtime_admin_defaults import ENFORCEMENT_SETTINGS_DEFAULTS
+from mobguard_platform.storage.sqlite import is_sqlite_busy_error
 
 from ..context import APIContainer
 
@@ -38,6 +40,11 @@ DEFAULT_MODULE_EVENT_BATCH_SIZE = 25
 
 
 MODULE_INGEST_LOCK = asyncio.Lock()
+MODULE_INGEST_BUSY_DETAIL = "Storage is temporarily busy; retry shortly"
+
+
+class ModuleIngestionBusyError(RuntimeError):
+    pass
 
 
 @dataclass(frozen=True)
@@ -633,40 +640,45 @@ def get_module_config(container: APIContainer, module: dict[str, Any] | None) ->
 async def ingest_module_events(container: APIContainer, payload: dict[str, Any], token: str) -> dict[str, Any]:
     protocol_version = _require_protocol_version(str(payload.get("protocol_version", PROTOCOL_VERSION)))
     module = container.store.authenticate_module(str(payload.get("module_id") or ""), token)
-    async with MODULE_INGEST_LOCK:
-        runtime = _build_batch_context(container, module)
-        accepted = 0
-        duplicates = 0
-        processed = 0
-        review_cases = 0
-        results: list[dict[str, Any]] = []
+    try:
+        async with MODULE_INGEST_LOCK:
+            runtime = _build_batch_context(container, module)
+            accepted = 0
+            duplicates = 0
+            processed = 0
+            review_cases = 0
+            results: list[dict[str, Any]] = []
 
-        for raw_item in list(payload.get("items") or []):
-            item = dict(raw_item)
-            uid = _event_uid(module["module_id"], item)
-            if not container.store.ingest_raw_event(
-                module["module_id"],
-                module["module_name"],
-                uid,
-                str(item.get("occurred_at") or ""),
-                {**item, "event_uid": uid},
-            ):
-                duplicates += 1
-                results.append({"event_uid": uid, "status": "duplicate"})
-                continue
+            for raw_item in list(payload.get("items") or []):
+                item = dict(raw_item)
+                uid = _event_uid(module["module_id"], item)
+                if not container.store.ingest_raw_event(
+                    module["module_id"],
+                    module["module_name"],
+                    uid,
+                    str(item.get("occurred_at") or ""),
+                    {**item, "event_uid": uid},
+                ):
+                    duplicates += 1
+                    results.append({"event_uid": uid, "status": "duplicate"})
+                    continue
 
-            accepted += 1
-            processed_result = await _process_module_event(runtime, module, {**item, "event_uid": uid})
-            await asyncio.to_thread(
-                container.store.mark_raw_event_processed,
-                uid,
-                analysis_event_id=processed_result.get("event_id"),
-                review_case_id=processed_result.get("review_case_id"),
-            )
-            processed += 1
-            if processed_result.get("review_case_id"):
-                review_cases += 1
-            results.append({"event_uid": uid, **processed_result})
+                accepted += 1
+                processed_result = await _process_module_event(runtime, module, {**item, "event_uid": uid})
+                await asyncio.to_thread(
+                    container.store.mark_raw_event_processed,
+                    uid,
+                    analysis_event_id=processed_result.get("event_id"),
+                    review_case_id=processed_result.get("review_case_id"),
+                )
+                processed += 1
+                if processed_result.get("review_case_id"):
+                    review_cases += 1
+                results.append({"event_uid": uid, **processed_result})
+    except sqlite3.OperationalError as exc:
+        if not is_sqlite_busy_error(exc):
+            raise
+        raise ModuleIngestionBusyError(MODULE_INGEST_BUSY_DETAIL) from exc
 
     return {
         "protocol_version": protocol_version,

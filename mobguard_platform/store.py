@@ -18,7 +18,7 @@ from .repositories.modules_admin import ModuleAdminRepository
 from .repositories.review_admin import ReviewAdminRepository
 from .repositories.sessions import AdminSessionRepository
 from .runtime import canonicalize_runtime_bound_settings
-from .storage.sqlite import SQLiteStorage
+from .storage.sqlite import SQLiteStorage, is_sqlite_busy_error
 
 
 EDITABLE_TOP_LEVEL_KEYS = {
@@ -129,6 +129,8 @@ DEFAULT_SETTINGS = {
 
 
 logger = logging.getLogger(__name__)
+LOW_PRIORITY_SQLITE_TIMEOUT_SECONDS = 1
+LOW_PRIORITY_SQLITE_BUSY_TIMEOUT_MS = 1000
 
 
 def _utcnow() -> str:
@@ -472,6 +474,12 @@ class PlatformStore:
 
     def _connect(self) -> sqlite3.Connection:
         return self.storage.connect()
+
+    def _maintenance_connect(self) -> sqlite3.Connection:
+        return self.storage.connect(
+            timeout=LOW_PRIORITY_SQLITE_TIMEOUT_SECONDS,
+            busy_timeout_ms=LOW_PRIORITY_SQLITE_BUSY_TIMEOUT_MS,
+        )
 
     def _table_exists(self, conn: sqlite3.Connection, table_name: str) -> bool:
         row = conn.execute(
@@ -1245,9 +1253,10 @@ class PlatformStore:
     def get_live_rules(self) -> dict[str, Any]:
         return self.get_live_rules_state()["rules"]
 
-    def get_live_rules_state(self) -> dict[str, Any]:
+    def get_live_rules_state(self, *, skip_db_mirror: bool = False) -> dict[str, Any]:
         payload, meta = self._load_rules_from_file()
-        self._mirror_live_rules_state(payload, meta)
+        if not skip_db_mirror:
+            self._mirror_live_rules_state(payload, meta)
         return {
             "rules": payload,
             "revision": int(meta["revision"]),
@@ -1688,7 +1697,7 @@ class PlatformStore:
         }
 
     def get_db_maintenance_settings(self) -> dict[str, int]:
-        settings = self.get_live_rules_state()["rules"].get("settings", {})
+        settings = self.get_live_rules_state(skip_db_mirror=True)["rules"].get("settings", {})
         subnet_mobile_ttl = _coerce_positive_int(
             settings.get("subnet_mobile_ttl_days"),
             int(DEFAULT_SETTINGS.get("subnet_mobile_ttl_days", 45)),
@@ -1761,185 +1770,202 @@ class PlatformStore:
             now_utc - timedelta(days=settings["orphan_analysis_events_retention_days"])
         ).isoformat()
         deleted: dict[str, int] = {}
-
-        with self._connect() as conn:
-            if self._table_exists(conn, "active_trackers"):
-                deleted["active_trackers"] = _execute_with_changes(
-                    conn,
-                    "DELETE FROM active_trackers WHERE last_seen < ?",
-                    (trackers_cutoff,),
-                )
-
-            if self._table_exists(conn, "ip_decisions"):
-                deleted["ip_decisions"] = _execute_with_changes(
-                    conn,
-                    "DELETE FROM ip_decisions WHERE expires < ?",
-                    (ip_decision_cutoff,),
-                )
-
-            if self._table_exists(conn, "unsure_patterns"):
-                deleted["unsure_patterns"] = _execute_with_changes(
-                    conn,
-                    "DELETE FROM unsure_patterns WHERE timestamp < ?",
-                    (unsure_patterns_cutoff,),
-                )
-
-            if self._table_exists(conn, "daily_stats"):
-                deleted["daily_stats"] = _execute_with_changes(
-                    conn,
-                    "DELETE FROM daily_stats WHERE date < ?",
-                    (daily_stats_cutoff,),
-                )
-
-            if self._table_exists(conn, "exact_ip_overrides"):
-                deleted["exact_ip_overrides"] = _execute_with_changes(
-                    conn,
-                    "DELETE FROM exact_ip_overrides WHERE expires_at IS NOT NULL AND expires_at < ?",
-                    (exact_override_cutoff,),
-                )
-
-            if self._table_exists(conn, "admin_sessions"):
-                deleted["admin_sessions"] = _execute_with_changes(
-                    conn,
-                    "DELETE FROM admin_sessions WHERE expires_at < ?",
-                    (exact_override_cutoff,),
-                )
-            if self._table_exists(conn, "admin_totp_challenges"):
-                deleted["admin_totp_challenges"] = _execute_with_changes(
-                    conn,
-                    "DELETE FROM admin_totp_challenges WHERE expires_at < ?",
-                    (exact_override_cutoff,),
-                )
-
-            if self._table_exists(conn, "module_heartbeats"):
-                deleted["module_heartbeats"] = _execute_with_changes(
-                    conn,
-                    "DELETE FROM module_heartbeats WHERE created_at < ?",
-                    (module_heartbeats_cutoff,),
-                )
-
-            if self._table_exists(conn, "ingested_raw_events"):
-                deleted["ingested_raw_events"] = _execute_with_changes(
-                    conn,
-                    """
-                    DELETE FROM ingested_raw_events
-                    WHERE COALESCE(processed_at, occurred_at) < ?
-                    """,
-                    (ingested_raw_events_cutoff,),
-                )
-
-            if self._table_exists(conn, "ip_history"):
-                deleted["ip_history"] = _execute_with_changes(
-                    conn,
-                    "DELETE FROM ip_history WHERE timestamp < ?",
-                    (ip_history_cutoff,),
-                )
-
-            if self._table_exists(conn, "subnet_evidence"):
-                deleted["subnet_evidence"] = _execute_with_changes(
-                    conn,
-                    "DELETE FROM subnet_evidence WHERE last_updated < ?",
-                    (subnet_evidence_cutoff,),
-                )
-
-            if self._table_exists(conn, "violation_history"):
-                deleted["violation_history"] = _execute_with_changes(
-                    conn,
-                    "DELETE FROM violation_history WHERE timestamp < ?",
-                    (violation_history_cutoff,),
-                )
-
-            deleted.setdefault("review_resolutions", 0)
-            deleted.setdefault("review_labels", 0)
-            deleted.setdefault("review_cases", 0)
-            deleted.setdefault("analysis_events_from_cases", 0)
-            if self._table_exists(conn, "review_cases"):
-                stale_case_rows = conn.execute(
-                    """
-                    SELECT id, latest_event_id
-                    FROM review_cases
-                    WHERE status IN ('RESOLVED', 'SKIPPED') AND updated_at < ?
-                    """,
-                    (resolved_review_cutoff,),
-                ).fetchall()
-                stale_case_ids = [int(row["id"]) for row in stale_case_rows]
-                stale_event_ids = sorted(
-                    {
-                        int(row["latest_event_id"])
-                        for row in stale_case_rows
-                        if row["latest_event_id"] is not None
-                    }
-                )
-                if stale_case_ids:
-                    case_placeholders = ", ".join("?" for _ in stale_case_ids)
-                    if self._table_exists(conn, "review_resolutions"):
-                        deleted["review_resolutions"] = _execute_with_changes(
-                            conn,
-                            f"DELETE FROM review_resolutions WHERE case_id IN ({case_placeholders})",
-                            tuple(stale_case_ids),
-                        )
-                    if self._table_exists(conn, "review_labels"):
-                        deleted["review_labels"] = _execute_with_changes(
-                            conn,
-                            f"DELETE FROM review_labels WHERE case_id IN ({case_placeholders})",
-                            tuple(stale_case_ids),
-                        )
-                    deleted["review_cases"] = _execute_with_changes(
-                        conn,
-                        f"DELETE FROM review_cases WHERE id IN ({case_placeholders})",
-                        tuple(stale_case_ids),
-                    )
-                    if stale_event_ids and self._table_exists(conn, "analysis_events"):
-                        event_placeholders = ", ".join("?" for _ in stale_event_ids)
-                        deleted["analysis_events_from_cases"] = _execute_with_changes(
-                            conn,
-                            f"""
-                            DELETE FROM analysis_events
-                            WHERE id IN ({event_placeholders})
-                              AND NOT EXISTS (
-                                  SELECT 1
-                                  FROM review_cases rc
-                                  WHERE rc.latest_event_id = analysis_events.id
-                              )
-                            """,
-                            tuple(stale_event_ids),
-                        )
-
-            deleted.setdefault("orphan_analysis_events", 0)
-            if self._table_exists(conn, "analysis_events"):
-                deleted["orphan_analysis_events"] = _execute_with_changes(
-                    conn,
-                    """
-                    DELETE FROM analysis_events
-                    WHERE created_at < ?
-                      AND NOT EXISTS (
-                          SELECT 1
-                          FROM review_cases rc
-                          WHERE rc.latest_event_id = analysis_events.id
-                      )
-                    """,
-                    (orphan_analysis_events_cutoff,),
-                )
-
-            conn.commit()
-            checkpoint_mode = "TRUNCATE" if normalized_mode == "emergency" else "PASSIVE"
-            checkpoint_row = conn.execute(f"PRAGMA wal_checkpoint({checkpoint_mode})").fetchone()
-            conn.commit()
-
-        vacuumed = False
-        if normalized_mode == "emergency":
-            with self._connect() as conn:
-                conn.execute("VACUUM")
-                vacuumed = True
-
-        return {
+        report = {
             "mode": normalized_mode,
             "started_at": now_utc.isoformat(),
             "deleted": deleted,
             "settings": settings,
-            "wal_checkpoint": list(checkpoint_row) if checkpoint_row else [],
-            "vacuumed": vacuumed,
+            "wal_checkpoint": [],
+            "vacuumed": False,
+            "skipped": False,
+            "skip_reason": None,
         }
+        try:
+            with self._maintenance_connect() as conn:
+                if self._table_exists(conn, "active_trackers"):
+                    deleted["active_trackers"] = _execute_with_changes(
+                        conn,
+                        "DELETE FROM active_trackers WHERE last_seen < ?",
+                        (trackers_cutoff,),
+                    )
+
+                if self._table_exists(conn, "ip_decisions"):
+                    deleted["ip_decisions"] = _execute_with_changes(
+                        conn,
+                        "DELETE FROM ip_decisions WHERE expires < ?",
+                        (ip_decision_cutoff,),
+                    )
+
+                if self._table_exists(conn, "unsure_patterns"):
+                    deleted["unsure_patterns"] = _execute_with_changes(
+                        conn,
+                        "DELETE FROM unsure_patterns WHERE timestamp < ?",
+                        (unsure_patterns_cutoff,),
+                    )
+
+                if self._table_exists(conn, "daily_stats"):
+                    deleted["daily_stats"] = _execute_with_changes(
+                        conn,
+                        "DELETE FROM daily_stats WHERE date < ?",
+                        (daily_stats_cutoff,),
+                    )
+
+                if self._table_exists(conn, "exact_ip_overrides"):
+                    deleted["exact_ip_overrides"] = _execute_with_changes(
+                        conn,
+                        "DELETE FROM exact_ip_overrides WHERE expires_at IS NOT NULL AND expires_at < ?",
+                        (exact_override_cutoff,),
+                    )
+
+                if self._table_exists(conn, "admin_sessions"):
+                    deleted["admin_sessions"] = _execute_with_changes(
+                        conn,
+                        "DELETE FROM admin_sessions WHERE expires_at < ?",
+                        (exact_override_cutoff,),
+                    )
+                if self._table_exists(conn, "admin_totp_challenges"):
+                    deleted["admin_totp_challenges"] = _execute_with_changes(
+                        conn,
+                        "DELETE FROM admin_totp_challenges WHERE expires_at < ?",
+                        (exact_override_cutoff,),
+                    )
+
+                if self._table_exists(conn, "module_heartbeats"):
+                    deleted["module_heartbeats"] = _execute_with_changes(
+                        conn,
+                        "DELETE FROM module_heartbeats WHERE created_at < ?",
+                        (module_heartbeats_cutoff,),
+                    )
+
+                if self._table_exists(conn, "ingested_raw_events"):
+                    deleted["ingested_raw_events"] = _execute_with_changes(
+                        conn,
+                        """
+                        DELETE FROM ingested_raw_events
+                        WHERE COALESCE(processed_at, occurred_at) < ?
+                        """,
+                        (ingested_raw_events_cutoff,),
+                    )
+
+                if self._table_exists(conn, "ip_history"):
+                    deleted["ip_history"] = _execute_with_changes(
+                        conn,
+                        "DELETE FROM ip_history WHERE timestamp < ?",
+                        (ip_history_cutoff,),
+                    )
+
+                if self._table_exists(conn, "subnet_evidence"):
+                    deleted["subnet_evidence"] = _execute_with_changes(
+                        conn,
+                        "DELETE FROM subnet_evidence WHERE last_updated < ?",
+                        (subnet_evidence_cutoff,),
+                    )
+
+                if self._table_exists(conn, "violation_history"):
+                    deleted["violation_history"] = _execute_with_changes(
+                        conn,
+                        "DELETE FROM violation_history WHERE timestamp < ?",
+                        (violation_history_cutoff,),
+                    )
+
+                deleted.setdefault("review_resolutions", 0)
+                deleted.setdefault("review_labels", 0)
+                deleted.setdefault("review_cases", 0)
+                deleted.setdefault("analysis_events_from_cases", 0)
+                if self._table_exists(conn, "review_cases"):
+                    stale_case_rows = conn.execute(
+                        """
+                        SELECT id, latest_event_id
+                        FROM review_cases
+                        WHERE status IN ('RESOLVED', 'SKIPPED') AND updated_at < ?
+                        """,
+                        (resolved_review_cutoff,),
+                    ).fetchall()
+                    stale_case_ids = [int(row["id"]) for row in stale_case_rows]
+                    stale_event_ids = sorted(
+                        {
+                            int(row["latest_event_id"])
+                            for row in stale_case_rows
+                            if row["latest_event_id"] is not None
+                        }
+                    )
+                    if stale_case_ids:
+                        case_placeholders = ", ".join("?" for _ in stale_case_ids)
+                        if self._table_exists(conn, "review_resolutions"):
+                            deleted["review_resolutions"] = _execute_with_changes(
+                                conn,
+                                f"DELETE FROM review_resolutions WHERE case_id IN ({case_placeholders})",
+                                tuple(stale_case_ids),
+                            )
+                        if self._table_exists(conn, "review_labels"):
+                            deleted["review_labels"] = _execute_with_changes(
+                                conn,
+                                f"DELETE FROM review_labels WHERE case_id IN ({case_placeholders})",
+                                tuple(stale_case_ids),
+                            )
+                        deleted["review_cases"] = _execute_with_changes(
+                            conn,
+                            f"DELETE FROM review_cases WHERE id IN ({case_placeholders})",
+                            tuple(stale_case_ids),
+                        )
+                        if stale_event_ids and self._table_exists(conn, "analysis_events"):
+                            event_placeholders = ", ".join("?" for _ in stale_event_ids)
+                            deleted["analysis_events_from_cases"] = _execute_with_changes(
+                                conn,
+                                f"""
+                                DELETE FROM analysis_events
+                                WHERE id IN ({event_placeholders})
+                                  AND NOT EXISTS (
+                                      SELECT 1
+                                      FROM review_cases rc
+                                      WHERE rc.latest_event_id = analysis_events.id
+                                  )
+                                """,
+                                tuple(stale_event_ids),
+                            )
+
+                deleted.setdefault("orphan_analysis_events", 0)
+                if self._table_exists(conn, "analysis_events"):
+                    deleted["orphan_analysis_events"] = _execute_with_changes(
+                        conn,
+                        """
+                        DELETE FROM analysis_events
+                        WHERE created_at < ?
+                          AND NOT EXISTS (
+                              SELECT 1
+                              FROM review_cases rc
+                              WHERE rc.latest_event_id = analysis_events.id
+                          )
+                        """,
+                        (orphan_analysis_events_cutoff,),
+                    )
+
+                conn.commit()
+                checkpoint_mode = "TRUNCATE" if normalized_mode == "emergency" else "PASSIVE"
+                checkpoint_row = conn.execute(f"PRAGMA wal_checkpoint({checkpoint_mode})").fetchone()
+                conn.commit()
+        except sqlite3.OperationalError as exc:
+            if not is_sqlite_busy_error(exc):
+                raise
+            logger.info("DB maintenance skipped: mode=%s reason=database_locked", normalized_mode)
+            report["skipped"] = True
+            report["skip_reason"] = "database_locked"
+            report["deleted"] = {}
+            return report
+
+        report["wal_checkpoint"] = list(checkpoint_row) if checkpoint_row else []
+        if normalized_mode == "emergency":
+            try:
+                with self._maintenance_connect() as conn:
+                    conn.execute("VACUUM")
+                    report["vacuumed"] = True
+            except sqlite3.OperationalError as exc:
+                if not is_sqlite_busy_error(exc):
+                    raise
+                logger.info("DB maintenance skipped: mode=%s reason=database_locked", normalized_mode)
+                report["skipped"] = True
+                report["skip_reason"] = "database_locked"
+        return report
 
     def create_admin_session(self, payload: dict[str, Any], session_ttl_hours: int = 24) -> dict[str, Any]:
         return self.sessions.create(payload, session_ttl_hours=session_ttl_hours)

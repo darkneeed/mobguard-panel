@@ -29,6 +29,13 @@ async def run_db_maintenance_once(
     mode: str = "periodic",
 ) -> dict[str, Any]:
     report = await container.store.async_run_db_maintenance(mode=mode)
+    if report.get("skipped"):
+        logger.info(
+            "DB maintenance skipped: mode=%s reason=%s",
+            report.get("mode"),
+            report.get("skip_reason"),
+        )
+        return report
     total = _deleted_total(report)
     if total > 0:
         logger.info(
@@ -45,15 +52,14 @@ async def run_db_maintenance_once(
 async def db_maintenance_loop(container: APIContainer) -> None:
     while True:
         try:
-            await run_db_maintenance_once(container, mode="periodic")
-        except asyncio.CancelledError:
-            raise
-        except Exception:
-            logger.exception("DB maintenance pass failed")
-
-        try:
             interval = container.store.get_db_maintenance_settings()["db_cleanup_interval_minutes"]
         except Exception:
             logger.exception("Failed to read db cleanup interval, falling back to 30 minutes")
             interval = 30
         await asyncio.sleep(max(int(interval), 1) * 60)
+        try:
+            await run_db_maintenance_once(container, mode="periodic")
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("DB maintenance pass failed")
