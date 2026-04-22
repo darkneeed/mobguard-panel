@@ -1538,6 +1538,9 @@ class PlatformStore:
     def list_review_cases(self, filters: Optional[dict[str, Any]] = None) -> dict[str, Any]:
         return self.review_admin.list_review_cases(filters)
 
+    def list_review_case_teasers(self, *, status: str = "OPEN", limit: int = 6) -> list[dict[str, Any]]:
+        return self.review_admin.list_review_case_teasers(status=status, limit=limit)
+
     def get_review_case(self, case_id: int) -> dict[str, Any]:
         return self.review_admin.get_review_case(case_id)
 
@@ -1812,17 +1815,101 @@ class PlatformStore:
             lambda: self._build_quality_metrics(module_filter),
         )
 
+    def _build_overview_metrics(self) -> dict[str, Any]:
+        health = self.get_health_snapshot()
+        live_rules_state = self.get_live_rules_state(skip_db_mirror=True)
+        with self._connect() as conn:
+            queue_open_cases = int(
+                conn.execute(
+                    "SELECT COUNT(*) AS cnt FROM review_cases WHERE status = 'OPEN'"
+                ).fetchone()["cnt"]
+            )
+            noisy_asns = [
+                dict(row)
+                for row in conn.execute(
+                    """
+                    SELECT COALESCE(CAST(asn AS TEXT), 'unknown') AS asn_key, COUNT(*) AS cnt
+                    FROM review_cases
+                    GROUP BY asn_key
+                    ORDER BY cnt DESC
+                    LIMIT 6
+                    """
+                ).fetchall()
+            ]
+            promoted_patterns = int(
+                conn.execute(
+                    "SELECT COUNT(*) AS cnt FROM learning_patterns_active"
+                ).fetchone()["cnt"]
+            )
+            mixed_rows = conn.execute(
+                """
+                SELECT provider_key, provider_conflict, review_reason, verdict
+                FROM review_cases
+                WHERE status = 'OPEN' AND provider_classification = 'mixed' AND provider_key IS NOT NULL AND provider_key != ''
+                """
+            ).fetchall()
+        mixed_provider_open_cases = 0
+        mixed_provider_conflict_cases = 0
+        mixed_provider_stats: dict[str, dict[str, Any]] = {}
+        for row in mixed_rows:
+            provider_key = str(row["provider_key"] or "").strip().lower()
+            if not provider_key:
+                continue
+            mixed_provider_open_cases += 1
+            conflict_case = bool(row["provider_conflict"]) or str(row["review_reason"] or "") == "provider_conflict"
+            if conflict_case:
+                mixed_provider_conflict_cases += 1
+            bucket = mixed_provider_stats.setdefault(
+                provider_key,
+                {
+                    "provider_key": provider_key,
+                    "open_cases": 0,
+                    "conflict_cases": 0,
+                    "home_cases": 0,
+                    "mobile_cases": 0,
+                    "unsure_cases": 0,
+                },
+            )
+            bucket["open_cases"] += 1
+            if conflict_case:
+                bucket["conflict_cases"] += 1
+            verdict = str(row["verdict"] or "").upper()
+            if verdict == "HOME":
+                bucket["home_cases"] += 1
+            elif verdict == "MOBILE":
+                bucket["mobile_cases"] += 1
+            else:
+                bucket["unsure_cases"] += 1
+        top_mixed_providers = sorted(
+            mixed_provider_stats.values(),
+            key=lambda item: (-int(item["open_cases"]), -int(item["conflict_cases"]), item["provider_key"]),
+        )[:5]
+        return {
+            "health": health,
+            "queue": {
+                "open_cases": queue_open_cases,
+            },
+            "rules": {
+                "revision": int(live_rules_state["revision"] or 1),
+                "updated_at": live_rules_state["updated_at"],
+                "updated_by": live_rules_state["updated_by"],
+            },
+            "mixed_providers": {
+                "conflict_cases": mixed_provider_conflict_cases,
+                "top_open_cases": top_mixed_providers,
+            },
+            "noisy_asns": noisy_asns,
+            "learning": {
+                "promoted_patterns": promoted_patterns,
+            },
+            "latest_cases": self.list_review_case_teasers(status="OPEN", limit=6),
+        }
+
     def get_overview_metrics(self) -> dict[str, Any]:
         return self._ttl_cache_get(
             "overview",
-            10.0,
-            lambda: {
-                "health": self.get_health_snapshot(),
-                "quality": self.get_quality_metrics(),
-                "latest_cases": self.list_review_cases(
-                    {"status": "OPEN", "page": 1, "page_size": 6, "sort": "updated_desc"}
-                ),
-            },
+            30.0,
+            self._build_overview_metrics,
         )
 
     def get_db_maintenance_settings(self) -> dict[str, int]:

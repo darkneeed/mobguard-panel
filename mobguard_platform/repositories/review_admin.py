@@ -895,6 +895,44 @@ class ReviewAdminRepository(SQLiteRepository):
             "page_size": page_size,
         }
 
+    def list_review_case_teasers(
+        self,
+        *,
+        status: str = "OPEN",
+        limit: int = 6,
+    ) -> list[dict[str, Any]]:
+        with self.connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT id, review_reason, username, uuid, system_id, telegram_id, ip, updated_at
+                FROM review_cases
+                WHERE status = ?
+                ORDER BY updated_at DESC
+                LIMIT ?
+                """,
+                (status, max(int(limit), 1)),
+            ).fetchall()
+        items: list[dict[str, Any]] = []
+        for row in rows:
+            payload = normalize_review_identity_payload(dict(row))
+            display_name = (
+                clean_text(payload.get("username"))
+                or clean_text(payload.get("uuid"))
+                or (str(payload.get("system_id")) if payload.get("system_id") not in (None, "") else "")
+                or clean_text(payload.get("telegram_id"))
+                or clean_text(payload.get("ip"))
+            )
+            items.append(
+                {
+                    "id": int(payload["id"]),
+                    "display_name": display_name or clean_text(payload.get("ip")),
+                    "review_reason": clean_text(payload.get("review_reason")),
+                    "ip": clean_text(payload.get("ip")),
+                    "updated_at": clean_text(payload.get("updated_at")),
+                }
+            )
+        return items
+
     def get_review_case(self, case_id: int) -> dict[str, Any]:
         with self.connect() as conn:
             case_row = conn.execute(
