@@ -1298,8 +1298,6 @@ class PlatformStore:
                     str(seed_meta["updated_at"]),
                     str(seed_meta["updated_by"]),
                 )
-            self.review_admin.backfill_review_subjects_and_contexts(conn)
-            self.review_admin.collapse_open_subject_duplicates(conn)
             conn.commit()
 
     def get_module(self, module_id: str) -> Optional[dict[str, Any]]:
