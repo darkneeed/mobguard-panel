@@ -29,6 +29,7 @@ describe("DecisionsPage", () => {
           device_display: "Pixel 8",
           verdict: "HOME",
           confidence_band: "HIGH_HOME",
+          score: 0.98,
           module_id: "node-a",
           module_name: "Node A",
           isp: "ISP A",
