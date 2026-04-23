@@ -135,6 +135,9 @@ LOW_PRIORITY_SQLITE_BUSY_TIMEOUT_MS = 1000
 FAST_READ_SQLITE_TIMEOUT_SECONDS = 0.5
 FAST_READ_SQLITE_BUSY_TIMEOUT_MS = 500
 FAST_READ_SQLITE_QUERY_LIMIT_MS = 250
+READ_MODEL_OVERVIEW = "overview"
+READ_MODEL_INGEST_PIPELINE = "ingest_pipeline"
+READ_MODEL_REVIEW_USAGE_PROFILE = "review_usage_profile"
 
 
 class ReadSnapshotUnavailableError(RuntimeError):
@@ -482,6 +485,8 @@ class PlatformStore:
             self.storage,
             base_config=self.base_config,
             live_rules_loader=self.get_live_rules_state,
+            read_model_writer=self._write_read_model_snapshot_conn,
+            read_model_loader=self._read_read_model_snapshot_conn,
         )
 
     def _connect(self) -> sqlite3.Connection:
@@ -506,6 +511,57 @@ class PlatformStore:
             (table_name,),
         ).fetchone()
         return row is not None
+
+    def _write_read_model_snapshot_conn(
+        self,
+        conn: sqlite3.Connection,
+        snapshot_type: str,
+        scope_key: str,
+        payload: dict[str, Any],
+        updated_at: str | None = None,
+    ) -> None:
+        now = str(updated_at or _utcnow())
+        conn.execute(
+            """
+            INSERT INTO read_model_snapshots (
+                snapshot_type, scope_key, payload_json, updated_at
+            ) VALUES (?, ?, ?, ?)
+            ON CONFLICT(snapshot_type, scope_key) DO UPDATE SET
+                payload_json = excluded.payload_json,
+                updated_at = excluded.updated_at
+            """,
+            (
+                str(snapshot_type or "").strip(),
+                str(scope_key or "").strip(),
+                json.dumps(payload, ensure_ascii=False),
+                now,
+            ),
+        )
+
+    def _read_read_model_snapshot_conn(
+        self,
+        conn: sqlite3.Connection,
+        snapshot_type: str,
+        scope_key: str,
+    ) -> Optional[dict[str, Any]]:
+        row = conn.execute(
+            """
+            SELECT payload_json, updated_at
+            FROM read_model_snapshots
+            WHERE snapshot_type = ? AND scope_key = ?
+            """,
+            (
+                str(snapshot_type or "").strip(),
+                str(scope_key or "").strip(),
+            ),
+        ).fetchone()
+        if not row:
+            return None
+        payload = json.loads(str(row["payload_json"] or "{}"))
+        if isinstance(payload, dict):
+            payload.setdefault("_snapshot_updated_at", str(row["updated_at"] or ""))
+            return payload
+        return None
 
     def _ttl_cache_get(
         self,
@@ -710,6 +766,7 @@ class PlatformStore:
                     event_uid TEXT NOT NULL UNIQUE,
                     module_id TEXT NOT NULL,
                     module_name TEXT NOT NULL,
+                    received_at TEXT NOT NULL DEFAULT '',
                     occurred_at TEXT NOT NULL,
                     log_offset INTEGER,
                     subject_uuid TEXT,
@@ -719,6 +776,13 @@ class PlatformStore:
                     ip TEXT NOT NULL,
                     tag TEXT,
                     raw_payload_json TEXT NOT NULL,
+                    processing_state TEXT NOT NULL DEFAULT 'queued',
+                    processing_owner TEXT NOT NULL DEFAULT '',
+                    processing_started_at TEXT NOT NULL DEFAULT '',
+                    attempt_count INTEGER NOT NULL DEFAULT 0,
+                    next_attempt_at TEXT NOT NULL DEFAULT '',
+                    last_error TEXT NOT NULL DEFAULT '',
+                    last_error_at TEXT NOT NULL DEFAULT '',
                     processed_at TEXT,
                     analysis_event_id INTEGER,
                     review_case_id INTEGER
@@ -732,6 +796,7 @@ class PlatformStore:
                     created_at TEXT NOT NULL,
                     module_id TEXT,
                     module_name TEXT,
+                    source_event_uid TEXT,
                     case_scope_key TEXT NOT NULL DEFAULT '',
                     device_scope_key TEXT NOT NULL DEFAULT '',
                     scope_type TEXT NOT NULL DEFAULT 'ip_only',
@@ -1020,12 +1085,81 @@ class PlatformStore:
                 )
                 """
             )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS enforcement_jobs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    job_key TEXT NOT NULL UNIQUE,
+                    event_uid TEXT NOT NULL,
+                    analysis_event_id INTEGER,
+                    review_case_id INTEGER,
+                    module_id TEXT,
+                    subject_uuid TEXT,
+                    job_type TEXT NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'pending',
+                    processing_owner TEXT NOT NULL DEFAULT '',
+                    processing_started_at TEXT NOT NULL DEFAULT '',
+                    attempt_count INTEGER NOT NULL DEFAULT 0,
+                    next_attempt_at TEXT NOT NULL DEFAULT '',
+                    last_error TEXT NOT NULL DEFAULT '',
+                    last_error_at TEXT NOT NULL DEFAULT '',
+                    applied_at TEXT NOT NULL DEFAULT '',
+                    payload_json TEXT NOT NULL DEFAULT '{}',
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS read_model_snapshots (
+                    snapshot_type TEXT NOT NULL,
+                    scope_key TEXT NOT NULL DEFAULT '',
+                    payload_json TEXT NOT NULL DEFAULT '{}',
+                    updated_at TEXT NOT NULL,
+                    PRIMARY KEY (snapshot_type, scope_key)
+                )
+                """
+            )
 
             columns = {
                 row["name"] for row in conn.execute("PRAGMA table_info(ip_decisions)").fetchall()
             }
             if columns and "bundle_json" not in columns:
                 conn.execute("ALTER TABLE ip_decisions ADD COLUMN bundle_json TEXT")
+            raw_event_columns = {
+                row["name"] for row in conn.execute("PRAGMA table_info(ingested_raw_events)").fetchall()
+            }
+            if raw_event_columns and "received_at" not in raw_event_columns:
+                conn.execute("ALTER TABLE ingested_raw_events ADD COLUMN received_at TEXT NOT NULL DEFAULT ''")
+            if raw_event_columns and "processing_state" not in raw_event_columns:
+                conn.execute(
+                    "ALTER TABLE ingested_raw_events ADD COLUMN processing_state TEXT NOT NULL DEFAULT 'queued'"
+                )
+            if raw_event_columns and "processing_owner" not in raw_event_columns:
+                conn.execute(
+                    "ALTER TABLE ingested_raw_events ADD COLUMN processing_owner TEXT NOT NULL DEFAULT ''"
+                )
+            if raw_event_columns and "processing_started_at" not in raw_event_columns:
+                conn.execute(
+                    "ALTER TABLE ingested_raw_events ADD COLUMN processing_started_at TEXT NOT NULL DEFAULT ''"
+                )
+            if raw_event_columns and "attempt_count" not in raw_event_columns:
+                conn.execute(
+                    "ALTER TABLE ingested_raw_events ADD COLUMN attempt_count INTEGER NOT NULL DEFAULT 0"
+                )
+            if raw_event_columns and "next_attempt_at" not in raw_event_columns:
+                conn.execute(
+                    "ALTER TABLE ingested_raw_events ADD COLUMN next_attempt_at TEXT NOT NULL DEFAULT ''"
+                )
+            if raw_event_columns and "last_error" not in raw_event_columns:
+                conn.execute(
+                    "ALTER TABLE ingested_raw_events ADD COLUMN last_error TEXT NOT NULL DEFAULT ''"
+                )
+            if raw_event_columns and "last_error_at" not in raw_event_columns:
+                conn.execute(
+                    "ALTER TABLE ingested_raw_events ADD COLUMN last_error_at TEXT NOT NULL DEFAULT ''"
+                )
             analysis_event_columns = {
                 row["name"] for row in conn.execute("PRAGMA table_info(analysis_events)").fetchall()
             }
@@ -1033,6 +1167,8 @@ class PlatformStore:
                 conn.execute("ALTER TABLE analysis_events ADD COLUMN module_id TEXT")
             if analysis_event_columns and "module_name" not in analysis_event_columns:
                 conn.execute("ALTER TABLE analysis_events ADD COLUMN module_name TEXT")
+            if analysis_event_columns and "source_event_uid" not in analysis_event_columns:
+                conn.execute("ALTER TABLE analysis_events ADD COLUMN source_event_uid TEXT")
             if analysis_event_columns and "case_scope_key" not in analysis_event_columns:
                 conn.execute("ALTER TABLE analysis_events ADD COLUMN case_scope_key TEXT NOT NULL DEFAULT ''")
             if analysis_event_columns and "device_scope_key" not in analysis_event_columns:
@@ -1177,6 +1313,50 @@ class PlatformStore:
             if module_columns and "access_log_exists" not in module_columns:
                 conn.execute("ALTER TABLE modules ADD COLUMN access_log_exists INTEGER NOT NULL DEFAULT 0")
 
+            now = _utcnow()
+            conn.execute(
+                """
+                INSERT OR IGNORE INTO read_model_snapshots (snapshot_type, scope_key, payload_json, updated_at)
+                VALUES (?, '', ?, ?)
+                """,
+                (
+                    READ_MODEL_OVERVIEW,
+                    json.dumps(
+                        {
+                            "health": {},
+                            "quality": {},
+                            "latest_cases": {"items": [], "count": 0, "page": 1, "page_size": 6},
+                        },
+                        ensure_ascii=False,
+                    ),
+                    now,
+                ),
+            )
+            conn.execute(
+                """
+                INSERT OR IGNORE INTO read_model_snapshots (snapshot_type, scope_key, payload_json, updated_at)
+                VALUES (?, '', ?, ?)
+                """,
+                (
+                    READ_MODEL_INGEST_PIPELINE,
+                    json.dumps(
+                        {
+                            "queue_depth": 0,
+                            "queued_count": 0,
+                            "processing_count": 0,
+                            "failed_count": 0,
+                            "enforcement_pending_count": 0,
+                            "worker_status": "idle",
+                            "last_successful_drain_at": "",
+                            "current_lag_seconds": 0,
+                            "oldest_queued_age_seconds": 0,
+                        },
+                        ensure_ascii=False,
+                    ),
+                    now,
+                ),
+            )
+
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_modules_last_seen ON modules(last_seen_at)"
             )
@@ -1188,6 +1368,12 @@ class PlatformStore:
             )
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_ingested_raw_events_module_id ON ingested_raw_events(module_id, occurred_at DESC)"
+            )
+            conn.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_ingested_raw_events_processing
+                ON ingested_raw_events(processing_state, next_attempt_at, received_at, id)
+                """
             )
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_review_cases_status ON review_cases(status, updated_at)"
@@ -1235,6 +1421,9 @@ class PlatformStore:
                 "CREATE INDEX IF NOT EXISTS idx_analysis_events_created_at ON analysis_events(created_at DESC)"
             )
             conn.execute(
+                "CREATE UNIQUE INDEX IF NOT EXISTS idx_analysis_events_source_event_uid ON analysis_events(source_event_uid)"
+            )
+            conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_analysis_events_subject_created ON analysis_events(subject_key, created_at DESC)"
             )
             conn.execute(
@@ -1266,6 +1455,24 @@ class PlatformStore:
             )
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_review_case_modules_last_seen ON review_case_modules(case_id, last_seen_at DESC)"
+            )
+            conn.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_enforcement_jobs_status
+                ON enforcement_jobs(status, next_attempt_at, created_at, id)
+                """
+            )
+            conn.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_enforcement_jobs_case
+                ON enforcement_jobs(review_case_id, created_at DESC)
+                """
+            )
+            conn.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_read_model_snapshots_updated
+                ON read_model_snapshots(snapshot_type, updated_at DESC)
+                """
             )
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_review_labels_pattern ON review_labels(pattern_type, pattern_value)"
@@ -1418,6 +1625,120 @@ class PlatformStore:
     ) -> bool:
         return self.modules_admin.ingest_raw_event(module_id, module_name, event_uid, occurred_at, payload)
 
+    def enqueue_raw_events(
+        self,
+        module_id: str,
+        module_name: str,
+        items: list[dict[str, Any]],
+    ) -> dict[str, int]:
+        accepted = 0
+        duplicates = 0
+        now = _utcnow()
+        with self._connect() as conn:
+            for item in items:
+                cursor = conn.execute(
+                    """
+                    INSERT OR IGNORE INTO ingested_raw_events (
+                        event_uid, module_id, module_name, received_at, occurred_at, log_offset,
+                        subject_uuid, username, system_id, telegram_id, ip, tag, raw_payload_json,
+                        processing_state, processing_owner, processing_started_at, attempt_count,
+                        next_attempt_at, last_error, last_error_at, processed_at, analysis_event_id, review_case_id
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'queued', '', '', 0, ?, '', '', NULL, NULL, NULL)
+                    """,
+                    (
+                        str(item.get("event_uid") or "").strip(),
+                        module_id,
+                        module_name,
+                        now,
+                        str(item.get("occurred_at") or "").strip(),
+                        item.get("log_offset"),
+                        item.get("uuid"),
+                        item.get("username"),
+                        item.get("system_id"),
+                        item.get("telegram_id"),
+                        item.get("ip"),
+                        item.get("tag"),
+                        json.dumps(item, ensure_ascii=False),
+                        now,
+                    ),
+                )
+                inserted = int(cursor.rowcount or 0) > 0
+                if not inserted:
+                    changes_row = conn.execute("SELECT changes() AS cnt").fetchone()
+                    inserted = bool(changes_row and int(changes_row["cnt"] or 0) > 0)
+                if inserted:
+                    accepted += 1
+                else:
+                    duplicates += 1
+            conn.commit()
+        self.refresh_ingest_pipeline_snapshot()
+        return {
+            "accepted": accepted,
+            "duplicates": duplicates,
+            "queued": accepted,
+        }
+
+    def claim_raw_events(
+        self,
+        owner: str,
+        *,
+        limit: int = 25,
+        claim_timeout_seconds: int = 120,
+    ) -> list[dict[str, Any]]:
+        now = _utcnow()
+        reclaim_before = (
+            datetime.utcnow().replace(microsecond=0) - timedelta(seconds=max(int(claim_timeout_seconds), 1))
+        ).isoformat()
+        with self._connect() as conn:
+            conn.execute(
+                """
+                UPDATE ingested_raw_events
+                SET processing_state = 'queued',
+                    processing_owner = '',
+                    processing_started_at = ''
+                WHERE processing_state = 'processing'
+                  AND processing_started_at != ''
+                  AND processing_started_at < ?
+                """,
+                (reclaim_before,),
+            )
+            rows = conn.execute(
+                """
+                SELECT *
+                FROM ingested_raw_events
+                WHERE processing_state = 'queued'
+                  AND (next_attempt_at = '' OR next_attempt_at <= ?)
+                ORDER BY received_at ASC, id ASC
+                LIMIT ?
+                """,
+                (now, max(int(limit), 1)),
+            ).fetchall()
+            row_ids = [int(row["id"]) for row in rows]
+            if row_ids:
+                placeholders = ", ".join("?" for _ in row_ids)
+                conn.execute(
+                    f"""
+                    UPDATE ingested_raw_events
+                    SET processing_state = 'processing',
+                        processing_owner = ?,
+                        processing_started_at = ?,
+                        attempt_count = attempt_count + 1
+                    WHERE id IN ({placeholders})
+                    """,
+                    (owner, now, *row_ids),
+                )
+                rows = conn.execute(
+                    f"""
+                    SELECT *
+                    FROM ingested_raw_events
+                    WHERE id IN ({placeholders})
+                    ORDER BY received_at ASC, id ASC
+                    """,
+                    tuple(row_ids),
+                ).fetchall()
+            conn.commit()
+        return [dict(row) for row in rows]
+
     def mark_raw_event_processed(
         self,
         event_uid: str,
@@ -1425,11 +1746,305 @@ class PlatformStore:
         analysis_event_id: Optional[int] = None,
         review_case_id: Optional[int] = None,
     ) -> None:
-        self.modules_admin.mark_raw_event_processed(
-            event_uid,
-            analysis_event_id=analysis_event_id,
-            review_case_id=review_case_id,
-        )
+        with self._connect() as conn:
+            conn.execute(
+                """
+                UPDATE ingested_raw_events
+                SET processing_state = 'processed',
+                    processing_owner = '',
+                    processing_started_at = '',
+                    processed_at = ?,
+                    analysis_event_id = ?,
+                    review_case_id = ?
+                WHERE event_uid = ?
+                """,
+                (_utcnow(), analysis_event_id, review_case_id, event_uid),
+            )
+            conn.commit()
+        self.refresh_ingest_pipeline_snapshot()
+
+    def mark_raw_event_retry(
+        self,
+        event_uid: str,
+        *,
+        next_attempt_at: str,
+        error_text: str,
+        dead_letter: bool = False,
+    ) -> None:
+        next_state = "failed" if dead_letter else "queued"
+        with self._connect() as conn:
+            conn.execute(
+                """
+                UPDATE ingested_raw_events
+                SET processing_state = ?,
+                    processing_owner = '',
+                    processing_started_at = '',
+                    next_attempt_at = ?,
+                    last_error = ?,
+                    last_error_at = ?
+                WHERE event_uid = ?
+                """,
+                (
+                    next_state,
+                    str(next_attempt_at or _utcnow()),
+                    str(error_text or "").strip(),
+                    _utcnow(),
+                    event_uid,
+                ),
+            )
+            conn.commit()
+        self.refresh_ingest_pipeline_snapshot()
+
+    def create_enforcement_job(
+        self,
+        *,
+        job_key: str,
+        event_uid: str,
+        analysis_event_id: int | None,
+        review_case_id: int | None,
+        module_id: str | None,
+        subject_uuid: str | None,
+        job_type: str,
+        payload: dict[str, Any],
+        status: str = "pending",
+    ) -> dict[str, Any]:
+        now = _utcnow()
+        applied_at = now if status == "applied" else ""
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO enforcement_jobs (
+                    job_key, event_uid, analysis_event_id, review_case_id, module_id, subject_uuid,
+                    job_type, status, processing_owner, processing_started_at, attempt_count,
+                    next_attempt_at, last_error, last_error_at, applied_at, payload_json,
+                    created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, '', '', 0, ?, '', '', ?, ?, ?, ?)
+                ON CONFLICT(job_key) DO UPDATE SET
+                    payload_json = excluded.payload_json,
+                    updated_at = excluded.updated_at
+                """,
+                (
+                    str(job_key or "").strip(),
+                    str(event_uid or "").strip(),
+                    analysis_event_id,
+                    review_case_id,
+                    clean_text(module_id) or None,
+                    clean_text(subject_uuid) or None,
+                    str(job_type or "").strip(),
+                    str(status or "pending").strip() or "pending",
+                    now,
+                    applied_at,
+                    json.dumps(payload, ensure_ascii=False),
+                    now,
+                    now,
+                ),
+            )
+            row = conn.execute(
+                "SELECT * FROM enforcement_jobs WHERE job_key = ?",
+                (str(job_key or "").strip(),),
+            ).fetchone()
+            conn.commit()
+        self.refresh_ingest_pipeline_snapshot()
+        return dict(row) if row else {}
+
+    def claim_enforcement_jobs(
+        self,
+        owner: str,
+        *,
+        limit: int = 25,
+        claim_timeout_seconds: int = 120,
+    ) -> list[dict[str, Any]]:
+        now = _utcnow()
+        reclaim_before = (
+            datetime.utcnow().replace(microsecond=0) - timedelta(seconds=max(int(claim_timeout_seconds), 1))
+        ).isoformat()
+        with self._connect() as conn:
+            conn.execute(
+                """
+                UPDATE enforcement_jobs
+                SET processing_owner = '',
+                    processing_started_at = ''
+                WHERE status = 'pending'
+                  AND processing_started_at != ''
+                  AND processing_started_at < ?
+                """,
+                (reclaim_before,),
+            )
+            rows = conn.execute(
+                """
+                SELECT *
+                FROM enforcement_jobs
+                WHERE status = 'pending'
+                  AND processing_started_at = ''
+                  AND (next_attempt_at = '' OR next_attempt_at <= ?)
+                ORDER BY created_at ASC, id ASC
+                LIMIT ?
+                """,
+                (now, max(int(limit), 1)),
+            ).fetchall()
+            row_ids = [int(row["id"]) for row in rows]
+            if row_ids:
+                placeholders = ", ".join("?" for _ in row_ids)
+                conn.execute(
+                    f"""
+                    UPDATE enforcement_jobs
+                    SET processing_owner = ?,
+                        processing_started_at = ?,
+                        attempt_count = attempt_count + 1
+                    WHERE id IN ({placeholders})
+                    """,
+                    (owner, now, *row_ids),
+                )
+                rows = conn.execute(
+                    f"""
+                    SELECT *
+                    FROM enforcement_jobs
+                    WHERE id IN ({placeholders})
+                    ORDER BY created_at ASC, id ASC
+                    """,
+                    tuple(row_ids),
+                ).fetchall()
+            conn.commit()
+        return [dict(row) for row in rows]
+
+    def mark_enforcement_job_applied(self, job_id: int) -> None:
+        with self._connect() as conn:
+            now = _utcnow()
+            conn.execute(
+                """
+                UPDATE enforcement_jobs
+                SET status = 'applied',
+                    processing_owner = '',
+                    processing_started_at = '',
+                    applied_at = ?,
+                    updated_at = ?
+                WHERE id = ?
+                """,
+                (now, now, int(job_id)),
+            )
+            conn.commit()
+        self.refresh_ingest_pipeline_snapshot()
+
+    def mark_enforcement_job_retry(
+        self,
+        job_id: int,
+        *,
+        next_attempt_at: str,
+        error_text: str,
+        dead_letter: bool = False,
+    ) -> None:
+        next_status = "failed" if dead_letter else "pending"
+        with self._connect() as conn:
+            conn.execute(
+                """
+                UPDATE enforcement_jobs
+                SET status = ?,
+                    processing_owner = '',
+                    processing_started_at = '',
+                    next_attempt_at = ?,
+                    last_error = ?,
+                    last_error_at = ?,
+                    updated_at = ?
+                WHERE id = ?
+                """,
+                (
+                    next_status,
+                    str(next_attempt_at or _utcnow()),
+                    str(error_text or "").strip(),
+                    _utcnow(),
+                    _utcnow(),
+                    int(job_id),
+                ),
+            )
+            conn.commit()
+        self.refresh_ingest_pipeline_snapshot()
+
+    def refresh_ingest_pipeline_snapshot(self) -> dict[str, Any]:
+        now_dt = datetime.utcnow().replace(microsecond=0)
+        now = now_dt.isoformat()
+        with self._connect() as conn:
+            previous = self._read_read_model_snapshot_conn(conn, READ_MODEL_INGEST_PIPELINE, "") or {}
+            queue_row = conn.execute(
+                """
+                SELECT
+                    COALESCE(SUM(CASE WHEN processing_state = 'queued' THEN 1 ELSE 0 END), 0) AS queued_count,
+                    COALESCE(SUM(CASE WHEN processing_state = 'processing' THEN 1 ELSE 0 END), 0) AS processing_count,
+                    COALESCE(SUM(CASE WHEN processing_state = 'failed' THEN 1 ELSE 0 END), 0) AS failed_count,
+                    MIN(CASE WHEN processing_state = 'queued' THEN received_at END) AS oldest_queued_at,
+                    MIN(CASE WHEN processing_state IN ('queued', 'processing') THEN received_at END) AS oldest_backlog_at
+                FROM ingested_raw_events
+                """
+            ).fetchone()
+            enforcement_row = conn.execute(
+                """
+                SELECT
+                    COALESCE(SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END), 0) AS pending_count,
+                    COALESCE(SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END), 0) AS failed_count
+                FROM enforcement_jobs
+                """
+            ).fetchone()
+            worker_row = conn.execute(
+                """
+                SELECT status, details_json, updated_at
+                FROM service_heartbeats
+                WHERE service_name = 'mobguard-ingest-worker'
+                """
+            ).fetchone()
+            queue_depth = int(queue_row["queued_count"] or 0) + int(queue_row["processing_count"] or 0)
+            enforcement_pending = int(enforcement_row["pending_count"] or 0) if enforcement_row else 0
+            oldest_queued_at = str(queue_row["oldest_queued_at"] or "")
+            oldest_backlog_at = str(queue_row["oldest_backlog_at"] or "")
+
+            def _age_seconds(raw_value: str) -> int:
+                if not raw_value:
+                    return 0
+                try:
+                    return max(int((now_dt - datetime.fromisoformat(raw_value)).total_seconds()), 0)
+                except ValueError:
+                    return 0
+
+            last_successful_drain_at = str(previous.get("last_successful_drain_at") or "")
+            if queue_depth == 0 and enforcement_pending == 0:
+                last_successful_drain_at = now
+
+            worker_details = {}
+            if worker_row and str(worker_row["details_json"] or "").strip():
+                try:
+                    worker_details = json.loads(str(worker_row["details_json"]))
+                except (TypeError, ValueError, json.JSONDecodeError):
+                    worker_details = {}
+
+            payload = {
+                "queue_depth": queue_depth,
+                "queued_count": int(queue_row["queued_count"] or 0),
+                "processing_count": int(queue_row["processing_count"] or 0),
+                "failed_count": int(queue_row["failed_count"] or 0),
+                "enforcement_pending_count": enforcement_pending,
+                "enforcement_failed_count": int(enforcement_row["failed_count"] or 0) if enforcement_row else 0,
+                "oldest_queued_at": oldest_queued_at or None,
+                "oldest_queued_age_seconds": _age_seconds(oldest_queued_at),
+                "current_lag_seconds": _age_seconds(oldest_backlog_at),
+                "last_successful_drain_at": last_successful_drain_at or None,
+                "worker_status": str(worker_row["status"] or "idle") if worker_row else "idle",
+                "worker_updated_at": str(worker_row["updated_at"] or "") if worker_row else "",
+                "worker_details": worker_details,
+            }
+            self._write_read_model_snapshot_conn(
+                conn,
+                READ_MODEL_INGEST_PIPELINE,
+                "",
+                payload,
+                now,
+            )
+            conn.commit()
+            return payload
+
+    def get_ingest_pipeline_status(self) -> dict[str, Any]:
+        with self._connect() as conn:
+            payload = self._read_read_model_snapshot_conn(conn, READ_MODEL_INGEST_PIPELINE, "")
+        if payload is None:
+            return self.refresh_ingest_pipeline_snapshot()
+        return payload
 
     def get_live_rules(self) -> dict[str, Any]:
         return self.get_live_rules_state()["rules"]
@@ -1575,8 +2190,16 @@ class PlatformStore:
         tag: str,
         bundle: DecisionBundle,
         observation: Optional[dict[str, Any]] = None,
+        source_event_uid: str | None = None,
     ) -> int:
-        return self.review_admin.record_analysis_event(user, ip, tag, bundle, observation=observation)
+        return self.review_admin.record_analysis_event(
+            user,
+            ip,
+            tag,
+            bundle,
+            observation=observation,
+            source_event_uid=source_event_uid,
+        )
 
     def build_review_url(self, case_id: int) -> str:
         return self.review_admin.build_review_url(case_id)
@@ -1918,99 +2541,69 @@ class PlatformStore:
         )
 
     def _build_overview_metrics(self, *, fast_read: bool = False) -> dict[str, Any]:
-        health = self.get_health_snapshot(fast_read=fast_read)
-        live_rules_state = self.get_live_rules_state(skip_db_mirror=True)
-        connect = self._fast_read_connect if fast_read else self._connect
-        with connect() as conn:
-            queue_open_cases = int(
-                conn.execute(
-                    "SELECT COUNT(*) AS cnt FROM review_cases WHERE status = 'OPEN'"
-                ).fetchone()["cnt"]
-            )
-            noisy_asns = [
-                dict(row)
-                for row in conn.execute(
-                    """
-                    SELECT COALESCE(CAST(asn AS TEXT), 'unknown') AS asn_key, COUNT(*) AS cnt
-                    FROM review_cases
-                    GROUP BY asn_key
-                    ORDER BY cnt DESC
-                    LIMIT 6
-                    """
-                ).fetchall()
-            ]
-            promoted_patterns = int(
-                conn.execute(
-                    "SELECT COUNT(*) AS cnt FROM learning_patterns_active"
-                ).fetchone()["cnt"]
-            )
-            mixed_provider_totals = conn.execute(
-                """
-                SELECT COUNT(*) AS open_cases,
-                       COALESCE(
-                           SUM(CASE WHEN provider_conflict = 1 OR review_reason = 'provider_conflict' THEN 1 ELSE 0 END),
-                           0
-                       ) AS conflict_cases
-                FROM review_cases
-                WHERE status = 'OPEN'
-                  AND provider_classification = 'mixed'
-                  AND provider_key IS NOT NULL
-                  AND provider_key != ''
-                """
-            ).fetchone()
-            top_mixed_providers = [
-                dict(row)
-                for row in conn.execute(
-                    """
-                    SELECT provider_key,
-                           COUNT(*) AS open_cases,
-                           COALESCE(
-                               SUM(CASE WHEN provider_conflict = 1 OR review_reason = 'provider_conflict' THEN 1 ELSE 0 END),
-                               0
-                           ) AS conflict_cases,
-                           COALESCE(SUM(CASE WHEN UPPER(verdict) = 'HOME' THEN 1 ELSE 0 END), 0) AS home_cases,
-                           COALESCE(SUM(CASE WHEN UPPER(verdict) = 'MOBILE' THEN 1 ELSE 0 END), 0) AS mobile_cases,
-                           COALESCE(SUM(CASE WHEN UPPER(verdict) NOT IN ('HOME', 'MOBILE') THEN 1 ELSE 0 END), 0) AS unsure_cases
-                    FROM review_cases
-                    WHERE status = 'OPEN'
-                      AND provider_classification = 'mixed'
-                      AND provider_key IS NOT NULL
-                      AND provider_key != ''
-                    GROUP BY provider_key
-                    ORDER BY open_cases DESC, conflict_cases DESC, provider_key ASC
-                    LIMIT 5
-                    """
-                ).fetchall()
-            ]
-            latest_cases = self.list_review_case_teasers(status="OPEN", limit=6, fast_read=fast_read)
+        quality = self._build_quality_metrics("")
+        latest_cases = self.review_admin.list_review_cases(
+            {
+                "status": "OPEN",
+                "page": 1,
+                "page_size": 6,
+                "sort": "updated_desc",
+            }
+        )
         return {
-            "health": health,
-            "queue": {
-                "open_cases": queue_open_cases,
-            },
-            "rules": {
-                "revision": int(live_rules_state["revision"] or 1),
-                "updated_at": live_rules_state["updated_at"],
-                "updated_by": live_rules_state["updated_by"],
-            },
-            "mixed_providers": {
-                "conflict_cases": int(mixed_provider_totals["conflict_cases"] or 0) if mixed_provider_totals else 0,
-                "top_open_cases": top_mixed_providers,
-            },
-            "noisy_asns": noisy_asns,
-            "learning": {
-                "promoted_patterns": promoted_patterns,
-            },
+            "health": self.get_health_snapshot(fast_read=fast_read),
+            "quality": quality,
             "latest_cases": latest_cases,
         }
 
+    def refresh_overview_snapshot(self) -> dict[str, Any]:
+        payload = self._build_overview_metrics(fast_read=False)
+        with self._connect() as conn:
+            self._write_read_model_snapshot_conn(
+                conn,
+                READ_MODEL_OVERVIEW,
+                "",
+                payload,
+                _utcnow(),
+            )
+            conn.commit()
+        self._read_cache.pop("overview", None)
+        return payload
+
     def get_overview_metrics(self) -> dict[str, Any]:
-        return self._ttl_cache_get(
-            "overview",
-            30.0,
-            lambda: self._build_overview_metrics(fast_read=True),
-            allow_stale_on_busy=True,
-        )
+        with self._connect() as conn:
+            payload = self._read_read_model_snapshot_conn(conn, READ_MODEL_OVERVIEW, "")
+            snapshot_updated_at = str((payload or {}).get("_snapshot_updated_at") or "")
+        if payload is None or not isinstance(payload.get("quality"), dict) or not payload.get("quality"):
+            try:
+                payload = self.refresh_overview_snapshot()
+                snapshot_updated_at = _utcnow()
+            except sqlite3.OperationalError:
+                if payload is None:
+                    raise
+
+        pipeline = self.get_ingest_pipeline_status()
+
+        def _age_seconds(raw_value: str) -> int:
+            if not raw_value:
+                return 0
+            try:
+                return max(
+                    int((datetime.utcnow().replace(microsecond=0) - datetime.fromisoformat(raw_value)).total_seconds()),
+                    0,
+                )
+            except ValueError:
+                return 0
+
+        response = copy.deepcopy(payload)
+        response["pipeline"] = pipeline
+        response["freshness"] = {
+            "overview_updated_at": snapshot_updated_at or None,
+            "overview_age_seconds": _age_seconds(snapshot_updated_at),
+            "pipeline_updated_at": pipeline.get("_snapshot_updated_at") or None,
+            "pipeline_age_seconds": _age_seconds(str(pipeline.get("_snapshot_updated_at") or "")),
+        }
+        return response
 
     def get_db_maintenance_settings(self) -> dict[str, int]:
         settings = self.get_live_rules_state(skip_db_mirror=True)["rules"].get("settings", {})
@@ -2274,6 +2867,8 @@ class PlatformStore:
             try:
                 with self._maintenance_connect() as conn:
                     conn.execute("VACUUM")
+                    conn.commit()
+                    conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
                     report["vacuumed"] = True
             except sqlite3.OperationalError as exc:
                 if not is_sqlite_busy_error(exc):
@@ -2460,9 +3055,19 @@ class PlatformStore:
         tag: str,
         bundle: DecisionBundle,
         observation: Optional[dict[str, Any]] = None,
+        source_event_uid: str | None = None,
     ) -> int:
         loop = asyncio.get_running_loop()
-        return await loop.run_in_executor(None, self.record_analysis_event, user, ip, tag, bundle, observation)
+        return await loop.run_in_executor(
+            None,
+            self.record_analysis_event,
+            user,
+            ip,
+            tag,
+            bundle,
+            observation,
+            source_event_uid,
+        )
 
     async def async_ensure_review_case(
         self,

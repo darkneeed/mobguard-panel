@@ -111,6 +111,8 @@ export const enDictionary: TranslationDictionary = {
     systemStatusDescription: "Core, queue, runtime rules, and export readiness in one glance.",
     healthTitle: "Health snapshot",
     healthDescription: "Back-end heartbeat and control-plane status.",
+    pipelineTitle: "Pipeline backlog",
+    pipelineDescription: "Durable ingest queue, worker lag, and pending remote enforcement state.",
     health: {
       core: "Scoring runtime",
       db: "Database",
@@ -154,7 +156,17 @@ export const enDictionary: TranslationDictionary = {
     emptyNoisyAsn: "No noisy ASN data yet.",
     latestCasesTitle: "Latest queue cases",
     latestCasesDescription: "Fresh disputed cases ready for operator action.",
-    emptyLatestCases: "No open queue items right now."
+    emptyLatestCases: "No open queue items right now.",
+    pipeline: {
+      queueDepth: "Queue depth",
+      queueMeta: "{queued} queued · {processing} processing",
+      failed: "Dead-letter / failed",
+      pendingRemote: "{count} pending remote jobs",
+      lag: "Current lag",
+      oldestQueued: "Oldest queued {value}",
+      lastDrain: "Last successful drain",
+      snapshotAge: "Snapshot age {value}"
+    }
   },
   login: {
     eyebrow: "Remnawave + MobGuard",
@@ -388,7 +400,17 @@ export const enDictionary: TranslationDictionary = {
       total: "Total modules",
       pending: "Pending install",
       error: "Error",
-      stale: "Stale"
+      stale: "Stale",
+      queueDepth: "Queue depth",
+      failedQueue: "Dead-letter"
+    },
+    pipelineTitle: "Ingest pipeline",
+    pipelineDescription: "Queue pressure and background worker status for the shared SQLite pipeline.",
+    pipeline: {
+      queueDepth: "Queue depth",
+      pendingRemote: "Pending remote jobs",
+      lag: "Current lag",
+      lastDrain: "Last successful drain"
     }
   },
   reviewDetail: {

@@ -661,54 +661,30 @@ async def ingest_module_events(container: APIContainer, payload: dict[str, Any],
             raise
         raise ModuleStorageBusyError(MODULE_INGEST_BUSY_DETAIL) from exc
     try:
-        async with MODULE_INGEST_LOCK:
-            runtime = _build_batch_context(container, module)
-            accepted = 0
-            duplicates = 0
-            processed = 0
-            review_cases = 0
-            results: list[dict[str, Any]] = []
-
-            for raw_item in list(payload.get("items") or []):
-                item = dict(raw_item)
-                uid = _event_uid(module["module_id"], item)
-                if not container.store.ingest_raw_event(
-                    module["module_id"],
-                    module["module_name"],
-                    uid,
-                    str(item.get("occurred_at") or ""),
-                    {**item, "event_uid": uid},
-                ):
-                    duplicates += 1
-                    results.append({"event_uid": uid, "status": "duplicate"})
-                    continue
-
-                accepted += 1
-                processed_result = await _process_module_event(runtime, module, {**item, "event_uid": uid})
-                await asyncio.to_thread(
-                    container.store.mark_raw_event_processed,
-                    uid,
-                    analysis_event_id=processed_result.get("event_id"),
-                    review_case_id=processed_result.get("review_case_id"),
-                )
-                processed += 1
-                if processed_result.get("review_case_id"):
-                    review_cases += 1
-                results.append({"event_uid": uid, **processed_result})
+        items = []
+        for raw_item in list(payload.get("items") or []):
+            item = dict(raw_item)
+            uid = _event_uid(module["module_id"], item)
+            items.append({**item, "event_uid": uid})
+        enqueue_result = await asyncio.to_thread(
+            container.store.enqueue_raw_events,
+            module["module_id"],
+            module["module_name"],
+            items,
+        )
     except sqlite3.OperationalError as exc:
         if not is_sqlite_busy_error(exc):
             raise
-        raise ModuleIngestionBusyError(MODULE_INGEST_BUSY_DETAIL) from exc
+        raise ModuleStorageBusyError(MODULE_INGEST_BUSY_DETAIL) from exc
 
     return {
         "protocol_version": protocol_version,
         "module_id": module["module_id"],
-        "accepted": accepted,
-        "duplicates": duplicates,
-        "processed": processed,
-        "review_cases": review_cases,
-        "config_revision": runtime.rules_state["revision"],
-        "results": results,
+        "accepted": int(enqueue_result.get("accepted") or 0),
+        "duplicates": int(enqueue_result.get("duplicates") or 0),
+        "queued": int(enqueue_result.get("queued") or 0),
+        "config_revision": int(container.store.get_live_rules_state()["revision"] or 0),
+        "status": "queued",
     }
 
 
@@ -718,6 +694,7 @@ def list_modules(container: APIContainer) -> dict[str, Any]:
         return {
             "items": modules,
             "count": len(modules),
+            "pipeline": container.store.get_ingest_pipeline_status(),
         }
     except ReadSnapshotUnavailableError as exc:
         raise ValueError(f"Module list is temporarily unavailable ({exc.reason})") from exc

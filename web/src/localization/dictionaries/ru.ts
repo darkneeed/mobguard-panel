@@ -111,6 +111,8 @@ export const ruDictionary: TranslationDictionary = {
     systemStatusDescription: "Core, очередь, live rules и готовность экспортов на одном экране.",
     healthTitle: "Снимок здоровья",
     healthDescription: "Heartbeat backend-сервисов и статус control-plane.",
+    pipelineTitle: "Состояние ingest-пайплайна",
+    pipelineDescription: "Долговечная очередь, лаг воркера и отложенные remote-enforcement задачи.",
     health: {
       core: "Scoring runtime",
       db: "База данных",
@@ -154,7 +156,17 @@ export const ruDictionary: TranslationDictionary = {
     emptyNoisyAsn: "Данных по шумным ASN пока нет.",
     latestCasesTitle: "Последние кейсы очереди",
     latestCasesDescription: "Свежие спорные кейсы, готовые к обработке оператором.",
-    emptyLatestCases: "Сейчас открытых кейсов нет."
+    emptyLatestCases: "Сейчас открытых кейсов нет.",
+    pipeline: {
+      queueDepth: "Глубина очереди",
+      queueMeta: "{queued} в очереди · {processing} обрабатывается",
+      failed: "Dead-letter / ошибки",
+      pendingRemote: "{count} remote-задач ждут отправки",
+      lag: "Текущий лаг",
+      oldestQueued: "Старейшая queued-запись {value}",
+      lastDrain: "Последний полный drain",
+      snapshotAge: "Возраст snapshot {value}"
+    }
   },
   login: {
     eyebrow: "Remnawave + MobGuard",
@@ -388,7 +400,17 @@ export const ruDictionary: TranslationDictionary = {
       total: "Всего модулей",
       pending: "Ожидают установку",
       error: "Ошибка",
-      stale: "Устарели"
+      stale: "Устарели",
+      queueDepth: "Глубина очереди",
+      failedQueue: "Dead-letter"
+    },
+    pipelineTitle: "Ingest-пайплайн",
+    pipelineDescription: "Нагрузка очереди и статус фоновых воркеров для общего SQLite-пайплайна.",
+    pipeline: {
+      queueDepth: "Глубина очереди",
+      pendingRemote: "Ожидают remote-задачи",
+      lag: "Текущий лаг",
+      lastDrain: "Последний полный drain"
     }
   },
   reviewDetail: {

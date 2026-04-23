@@ -8,7 +8,7 @@ import unittest
 from unittest.mock import patch
 
 from mobguard_platform.models import DecisionBundle
-from mobguard_platform.store import PlatformStore, ReadSnapshotUnavailableError
+from mobguard_platform.store import PlatformStore
 
 
 class StoreReviewFlowTests(unittest.TestCase):
@@ -714,29 +714,24 @@ class StoreReviewFlowTests(unittest.TestCase):
         lock_conn.rollback()
 
         self.assertLess(elapsed, 2.0)
-        self.assertEqual(overview_cached["queue"]["open_cases"], overview_before["queue"]["open_cases"])
+        self.assertEqual(
+            overview_cached["quality"].get("open_cases"),
+            overview_before["quality"].get("open_cases"),
+        )
         self.assertEqual(len(modules_cached), len(modules_before))
 
-    def test_overview_fast_read_raises_when_database_is_locked_and_no_cache_exists(self):
-        self.store._read_cache.clear()
+    def test_overview_reads_last_good_snapshot_without_live_rebuild(self):
+        snapshot = self.store.get_overview_metrics()
+
         with patch.object(
             self.store,
-            "_build_overview_metrics",
+            "refresh_overview_snapshot",
             side_effect=sqlite3.OperationalError("database is locked"),
         ):
-            with self.assertRaises(ReadSnapshotUnavailableError):
-                self.store.get_overview_metrics()
+            served = self.store.get_overview_metrics()
 
-    def test_overview_fast_read_raises_query_timeout_when_sqlite_interrupts_long_query(self):
-        self.store._read_cache.clear()
-        with patch.object(
-            self.store,
-            "_build_overview_metrics",
-            side_effect=sqlite3.OperationalError("interrupted"),
-        ):
-            with self.assertRaises(ReadSnapshotUnavailableError) as ctx:
-                self.store.get_overview_metrics()
-        self.assertEqual(ctx.exception.reason, "query_timeout")
+        self.assertEqual(served["quality"], snapshot["quality"])
+        self.assertIn("pipeline", served)
 
     def test_review_payload_normalizes_numeric_uuid_to_system_id_for_legacy_rows(self):
         with self.store._connect() as conn:

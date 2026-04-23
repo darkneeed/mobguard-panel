@@ -10,11 +10,8 @@ from fastapi import HTTPException
 
 from mobguard_platform import review_reason_for_bundle, validate_live_rules_patch
 from mobguard_platform.storage.sqlite import is_sqlite_busy_error
-from mobguard_platform.usage_profile import build_usage_profile_snapshot
 
 from .modules import _analyze_event, _build_batch_context
-from .review_backfill import backfill_review_case_identities
-from .runtime_state import enrich_panel_user_usage_context, panel_client
 
 
 logger = logging.getLogger(__name__)
@@ -47,36 +44,7 @@ def list_reviews(container: Any, filters: dict[str, Any]) -> dict[str, Any]:
 
 def get_review(container: Any, case_id: int) -> dict[str, Any]:
     try:
-        backfill_review_case_identities(container, [case_id], max_remote_lookups=1)
-        payload = container.store.get_review_case(case_id)
-        identity = {
-            "uuid": payload.get("uuid"),
-            "username": payload.get("username"),
-            "system_id": payload.get("system_id"),
-            "telegram_id": payload.get("telegram_id"),
-        }
-        remote_user = None
-        client = panel_client(container)
-        for candidate in (
-            identity.get("uuid"),
-            identity.get("system_id"),
-            identity.get("telegram_id"),
-            identity.get("username"),
-        ):
-            if candidate in (None, ""):
-                continue
-            remote_user = enrich_panel_user_usage_context(client, client.get_user_data(str(candidate)))
-            if remote_user:
-                break
-        payload["usage_profile"] = build_usage_profile_snapshot(
-            container.store,
-            identity,
-            panel_user=remote_user,
-            anchor_started_at=payload.get("opened_at"),
-            device_scope_key=str(payload.get("device_scope_key") or ""),
-            case_scope_key=str(payload.get("case_scope_key") or ""),
-        )
-        return payload
+        return container.store.get_review_case(case_id)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 

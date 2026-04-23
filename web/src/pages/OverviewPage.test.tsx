@@ -114,6 +114,23 @@ describe("OverviewPage", () => {
         count: 1,
         page: 1,
         page_size: 6
+      },
+      pipeline: {
+        queue_depth: 1,
+        queued_count: 0,
+        processing_count: 1,
+        failed_count: 0,
+        enforcement_pending_count: 0,
+        current_lag_seconds: 4,
+        oldest_queued_age_seconds: 0,
+        last_successful_drain_at: "2026-04-12T03:24:00Z",
+        worker_status: "ok"
+      },
+      freshness: {
+        overview_updated_at: "2026-04-12T03:25:00Z",
+        overview_age_seconds: 3,
+        pipeline_updated_at: "2026-04-12T03:25:01Z",
+        pipeline_age_seconds: 2
       }
     });
 

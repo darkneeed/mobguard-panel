@@ -4,7 +4,6 @@ import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import patch
 
 from api.services import reviews as review_service
 from mobguard_platform import AnalysisStore, PlatformStore
@@ -176,59 +175,18 @@ class ReviewBackfillTests(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
-    def test_detail_backfill_review_identity_from_panel_client_without_list_side_effects(self):
-        calls: list[str] = []
-
-        fake_client = SimpleNamespace(
-            get_user_data=lambda identifier: (
-                calls.append(str(identifier)) or {
-                    "uuid": "b0a99119-98e9-413b-8a78-fce4d0095c98",
-                    "id": 211,
-                    "username": "synthetic_user",
-                    "telegramId": 42424242,
-                }
-            )
-            if str(identifier) == "211"
-            else None
-            ,
-            get_user_hwid_devices=lambda _uuid: [],
-            get_user_traffic_stats=lambda _uuid: None,
-        )
-
-        with patch("api.services.review_backfill.panel_client", return_value=fake_client), patch(
-            "api.services.reviews.panel_client",
-            return_value=fake_client,
-        ):
-            listing = review_service.list_reviews(self.container, {"page": 1, "page_size": 25, "status": "OPEN"})
-            detail = review_service.get_review(self.container, 1)
+    def test_detail_uses_persisted_snapshot_without_remote_identity_backfill(self):
+        listing = review_service.list_reviews(self.container, {"page": 1, "page_size": 25, "status": "OPEN"})
+        detail = review_service.get_review(self.container, 1)
 
         self.assertIsNone(listing["items"][0]["username"])
         self.assertIsNone(listing["items"][0]["uuid"])
         self.assertIsNone(listing["items"][0]["telegram_id"])
-        self.assertIsNone(listing["items"][1]["username"])
-        self.assertEqual(detail["username"], "synthetic_user")
-        self.assertEqual(detail["uuid"], "b0a99119-98e9-413b-8a78-fce4d0095c98")
-        self.assertEqual(detail["telegram_id"], "42424242")
-        self.assertGreaterEqual(calls.count("211"), 1)
-
-        with self.store._connect() as conn:
-            case_row = conn.execute(
-                "SELECT uuid, username, system_id, telegram_id FROM review_cases WHERE id = 1"
-            ).fetchone()
-            event_row = conn.execute(
-                "SELECT uuid, username, system_id, telegram_id FROM analysis_events WHERE id = 1"
-            ).fetchone()
-            second_case_row = conn.execute(
-                "SELECT uuid, username, system_id, telegram_id FROM review_cases WHERE id = 2"
-            ).fetchone()
-
-        self.assertEqual(case_row["username"], "synthetic_user")
-        self.assertEqual(case_row["uuid"], "b0a99119-98e9-413b-8a78-fce4d0095c98")
-        self.assertEqual(case_row["telegram_id"], "42424242")
-        self.assertEqual(event_row["username"], "synthetic_user")
-        self.assertEqual(event_row["uuid"], "b0a99119-98e9-413b-8a78-fce4d0095c98")
-        self.assertEqual(event_row["telegram_id"], "42424242")
-        self.assertIsNone(second_case_row["username"])
+        self.assertIn("usage_profile", detail)
+        self.assertIsNotNone(detail["usage_profile"])
+        self.assertIsNone(detail["username"])
+        self.assertIsNone(detail["uuid"])
+        self.assertIsNone(detail["telegram_id"])
 
 
 if __name__ == "__main__":

@@ -12,6 +12,7 @@ from unittest.mock import patch
 from fastapi import HTTPException
 from api.routers import modules as modules_router
 from api.schemas.modules import EventBatchRequest
+from api.services import ingest_pipeline
 from api.services import modules as module_service
 from mobguard_platform import AnalysisStore, PlatformStore
 
@@ -123,47 +124,37 @@ class ModuleProtocolTests(unittest.TestCase):
             "token-a",
         )
 
-        async def fake_process(container, module, payload):
-            return {
-                "status": "processed",
-                "event_id": 101,
-                "review_case_id": 202,
-                "bundle": {"ip": payload["ip"]},
-                "review_reason": None,
-                "enforcement": None,
-            }
-
-        with patch.object(module_service, "_process_module_event", fake_process):
-            result = asyncio.run(
-                module_service.ingest_module_events(
-                    self.container,
-                    {
-                        "module_id": "node-a",
-                        "protocol_version": "v1",
-                        "items": [
-                            {
-                                "event_uid": "dup-1",
-                                "occurred_at": "2026-04-11T12:00:00",
-                                "ip": "1.2.3.4",
-                                "tag": "SELFSTEAL_RU-YANDEX_TCP",
-                                "uuid": "uuid-1",
-                            },
-                            {
-                                "event_uid": "dup-1",
-                                "occurred_at": "2026-04-11T12:00:01",
-                                "ip": "1.2.3.4",
-                                "tag": "SELFSTEAL_RU-YANDEX_TCP",
-                                "uuid": "uuid-1",
-                            },
-                        ],
-                    },
-                    "token-a",
-                )
+        result = asyncio.run(
+            module_service.ingest_module_events(
+                self.container,
+                {
+                    "module_id": "node-a",
+                    "protocol_version": "v1",
+                    "items": [
+                        {
+                            "event_uid": "dup-1",
+                            "occurred_at": "2026-04-11T12:00:00",
+                            "ip": "1.2.3.4",
+                            "tag": "SELFSTEAL_RU-YANDEX_TCP",
+                            "uuid": "uuid-1",
+                        },
+                        {
+                            "event_uid": "dup-1",
+                            "occurred_at": "2026-04-11T12:00:01",
+                            "ip": "1.2.3.4",
+                            "tag": "SELFSTEAL_RU-YANDEX_TCP",
+                            "uuid": "uuid-1",
+                        },
+                    ],
+                },
+                "token-a",
             )
+        )
 
         self.assertEqual(result["accepted"], 1)
         self.assertEqual(result["duplicates"], 1)
-        self.assertEqual(result["processed"], 1)
+        self.assertEqual(result["queued"], 1)
+        self.assertEqual(result["status"], "queued")
 
     def test_event_batch_returns_503_when_storage_is_temporarily_busy(self):
         self.store.create_managed_module(
@@ -200,7 +191,7 @@ class ModuleProtocolTests(unittest.TestCase):
             ],
         )
 
-        with patch.object(self.store, "ingest_raw_event", side_effect=sqlite3.OperationalError("database is locked")):
+        with patch.object(self.store, "enqueue_raw_events", side_effect=sqlite3.OperationalError("database is locked")):
             with self.assertRaises(HTTPException) as ctx:
                 asyncio.run(
                     modules_router.module_events_batch(
@@ -253,51 +244,45 @@ class ModuleProtocolTests(unittest.TestCase):
             "token-a",
         )
 
-        async def fake_process(_runtime, _module, payload):
-            return {
-                "status": "processed",
-                "event_id": 100 + int(str(payload["event_uid"]).split("-")[-1]),
-                "review_case_id": None,
-                "bundle": {"ip": payload["ip"]},
-                "review_reason": None,
-                "enforcement": None,
-            }
-
         original_builder = module_service._build_batch_context
-        with patch.object(module_service, "_process_module_event", fake_process), patch.object(
-            module_service,
+        asyncio.run(
+            module_service.ingest_module_events(
+                self.container,
+                {
+                    "module_id": "node-a",
+                    "protocol_version": "v1",
+                    "items": [
+                        {
+                            "event_uid": "batch-1",
+                            "occurred_at": "2026-04-11T12:00:00",
+                            "ip": "1.2.3.4",
+                            "tag": "SELFSTEAL_RU-YANDEX_TCP",
+                            "uuid": "uuid-1",
+                        },
+                        {
+                            "event_uid": "batch-2",
+                            "occurred_at": "2026-04-11T12:00:01",
+                            "ip": "1.2.3.5",
+                            "tag": "SELFSTEAL_RU-YANDEX_TCP",
+                            "uuid": "uuid-2",
+                        },
+                    ],
+                },
+                "token-a",
+            )
+        )
+
+        async def fake_process(_container, _runtime, _module, _row):
+            return {"status": "processed"}
+
+        with patch.object(ingest_pipeline, "_process_claimed_event", side_effect=fake_process), patch.object(
+            ingest_pipeline,
             "_build_batch_context",
             wraps=original_builder,
         ) as runtime_builder:
-            result = asyncio.run(
-                module_service.ingest_module_events(
-                    self.container,
-                    {
-                        "module_id": "node-a",
-                        "protocol_version": "v1",
-                        "items": [
-                            {
-                                "event_uid": "batch-1",
-                                "occurred_at": "2026-04-11T12:00:00",
-                                "ip": "1.2.3.4",
-                                "tag": "SELFSTEAL_RU-YANDEX_TCP",
-                                "uuid": "uuid-1",
-                            },
-                            {
-                                "event_uid": "batch-2",
-                                "occurred_at": "2026-04-11T12:00:01",
-                                "ip": "1.2.3.5",
-                                "tag": "SELFSTEAL_RU-YANDEX_TCP",
-                                "uuid": "uuid-2",
-                            },
-                        ],
-                    },
-                    "token-a",
-                )
-            )
+            result = asyncio.run(ingest_pipeline.process_ingest_batch_once(self.container))
 
         self.assertEqual(runtime_builder.call_count, 1)
-        self.assertEqual(result["accepted"], 2)
         self.assertEqual(result["processed"], 2)
 
     def test_event_batch_real_processing_does_not_crash_when_recording_behavioral_decision(self):
@@ -339,7 +324,7 @@ class ModuleProtocolTests(unittest.TestCase):
             "_remnawave_client",
             return_value=SimpleNamespace(enabled=False, get_user_data=lambda _identifier: None),
         ):
-            result = asyncio.run(
+            enqueue_result = asyncio.run(
                 module_service.ingest_module_events(
                     self.container,
                     {
@@ -358,10 +343,17 @@ class ModuleProtocolTests(unittest.TestCase):
                     "token-a",
                 )
             )
+            processed_result = asyncio.run(ingest_pipeline.process_ingest_batch_once(self.container))
 
-        self.assertEqual(result["accepted"], 1)
-        self.assertEqual(result["processed"], 1)
-        self.assertEqual(result["results"][0]["status"], "processed")
+        self.assertEqual(enqueue_result["accepted"], 1)
+        self.assertEqual(enqueue_result["queued"], 1)
+        self.assertEqual(processed_result["processed"], 1)
+        with self.store._connect() as conn:
+            row = conn.execute(
+                "SELECT COUNT(*) AS cnt FROM analysis_events WHERE source_event_uid = ?",
+                ("live-1",),
+            ).fetchone()
+        self.assertEqual(row["cnt"], 1)
 
     def test_event_batch_tolerates_none_runtime_settings_values(self):
         payload = json.loads(self.config_path.read_text(encoding="utf-8"))
@@ -389,18 +381,8 @@ class ModuleProtocolTests(unittest.TestCase):
             "token-b",
         )
 
-        async def fake_process(_runtime, _module, payload):
-            return {
-                "status": "processed",
-                "event_id": 201,
-                "review_case_id": None,
-                "bundle": {"ip": payload["ip"]},
-                "review_reason": None,
-                "enforcement": None,
-            }
-
-        with patch.object(module_service, "_process_module_event", fake_process):
-            result = asyncio.run(
+        with patch.object(ingest_pipeline, "_process_claimed_event", wraps=ingest_pipeline._process_claimed_event):
+            enqueue_result = asyncio.run(
                 module_service.ingest_module_events(
                     self.container,
                     {
@@ -419,9 +401,10 @@ class ModuleProtocolTests(unittest.TestCase):
                     "token-b",
                 )
             )
+            processed_result = asyncio.run(ingest_pipeline.process_ingest_batch_once(self.container))
 
-        self.assertEqual(result["accepted"], 1)
-        self.assertEqual(result["processed"], 1)
+        self.assertEqual(enqueue_result["accepted"], 1)
+        self.assertEqual(processed_result["processed"], 1)
 
     def test_event_batch_persists_optional_client_fields_and_geo_context(self):
         self.store.create_managed_module(
@@ -467,7 +450,7 @@ class ModuleProtocolTests(unittest.TestCase):
             "_remnawave_client",
             return_value=SimpleNamespace(enabled=False, get_user_data=lambda _identifier: None),
         ):
-            result = asyncio.run(
+            enqueue_result = asyncio.run(
                 module_service.ingest_module_events(
                     self.container,
                     {
@@ -492,8 +475,10 @@ class ModuleProtocolTests(unittest.TestCase):
                     "token-c",
                 )
             )
+            processed_result = asyncio.run(ingest_pipeline.process_ingest_batch_once(self.container))
 
-        self.assertEqual(result["accepted"], 1)
+        self.assertEqual(enqueue_result["accepted"], 1)
+        self.assertEqual(processed_result["processed"], 1)
         with self.store._connect() as conn:
             row = conn.execute(
                 """
@@ -501,9 +486,9 @@ class ModuleProtocolTests(unittest.TestCase):
                        client_device_id, client_device_label, client_os_family,
                        client_os_version, client_app_name, client_app_version
                 FROM analysis_events
-                WHERE id = ?
+                WHERE source_event_uid = ?
                 """,
-                (result["results"][0]["event_id"],),
+                ("usage-1",),
             ).fetchone()
 
         self.assertEqual(row["country"], "RU")

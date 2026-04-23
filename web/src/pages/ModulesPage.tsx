@@ -97,6 +97,7 @@ export function ModulesPage({ session }: { session?: Session }) {
   const modalOpen = modalMode !== null;
   const canManageModules = hasPermission(session, "modules.write");
   const canRevealModuleToken = hasPermission(session, "modules.token_reveal");
+  const pipeline = data?.pipeline;
   const canSubmit =
     modalMode === "create"
       ? draftDirty && Boolean(draft.module_name.trim())
@@ -225,6 +226,16 @@ export function ModulesPage({ session }: { session?: Session }) {
     }
   }
 
+  function formatAge(seconds?: number | null): string {
+    if (seconds === null || seconds === undefined || Number.isNaN(seconds)) {
+      return t("common.notAvailable");
+    }
+    const total = Math.max(Math.round(seconds), 0);
+    if (total < 60) return `${total}s`;
+    if (total < 3600) return `${Math.round(total / 60)}m`;
+    return `${Math.round(total / 3600)}h`;
+  }
+
   function renderModuleCard(item: ModuleRecord) {
     const isActive = modalMode === "detail" && selectedId === item.module_id;
 
@@ -302,6 +313,42 @@ export function ModulesPage({ session }: { session?: Session }) {
         <div className="stat-card">
           <span>{t("modules.cards.stale")}</span>
           <strong>{data ? data.items.filter((item) => item.install_state !== "pending_install" && !item.healthy).length : "—"}</strong>
+        </div>
+        <div className="stat-card">
+          <span>{t("modules.cards.queueDepth")}</span>
+          <strong>{pipeline?.queue_depth ?? "—"}</strong>
+        </div>
+        <div className="stat-card">
+          <span>{t("modules.cards.failedQueue")}</span>
+          <strong>{pipeline?.failed_count ?? "—"}</strong>
+        </div>
+      </div>
+
+      <div className="panel">
+        <div className="panel-heading panel-heading-row">
+          <div>
+            <h2>{t("modules.pipelineTitle")}</h2>
+            <p className="muted">{t("modules.pipelineDescription")}</p>
+          </div>
+          <span className="tag review-only">{pipeline?.worker_status || t("common.notAvailable")}</span>
+        </div>
+        <div className="detail-list">
+          <div>
+            <dt>{t("modules.pipeline.queueDepth")}</dt>
+            <dd>{pipeline?.queue_depth ?? "—"}</dd>
+          </div>
+          <div>
+            <dt>{t("modules.pipeline.pendingRemote")}</dt>
+            <dd>{pipeline?.enforcement_pending_count ?? "—"}</dd>
+          </div>
+          <div>
+            <dt>{t("modules.pipeline.lag")}</dt>
+            <dd>{formatAge(pipeline?.current_lag_seconds)}</dd>
+          </div>
+          <div>
+            <dt>{t("modules.pipeline.lastDrain")}</dt>
+            <dd>{formatDisplayDateTime(pipeline?.last_successful_drain_at || "", t("common.notAvailable"), language)}</dd>
+          </div>
         </div>
       </div>
 

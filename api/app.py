@@ -15,43 +15,30 @@ from .routers.modules import router as modules_router
 from .routers.reviews import router as reviews_router
 from .routers.settings import router as settings_router
 from .services.db_maintenance import db_maintenance_loop
-from .services import reviews as review_service
+from .services.ingest_pipeline import enforcement_dispatcher_loop, ingest_worker_loop
 
 
 container = build_container()
 logger = logging.getLogger(__name__)
 
 
-async def _provider_retune_recheck_task(app: FastAPI) -> None:
-    try:
-        payload = await review_service.recheck_provider_sensitive_reviews(
-            app.state.container,
-            "system:provider-retune",
-            0,
-            skip_on_busy=True,
-        )
-        if payload.get("skipped"):
-            logger.info(
-                "Provider-sensitive startup recheck skipped: reason=%s",
-                payload.get("skip_reason") or "unknown",
-            )
-    except Exception:  # pragma: no cover - best-effort startup maintenance
-        logger.exception("Provider-sensitive startup recheck failed")
-
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     maintenance_task = asyncio.create_task(db_maintenance_loop(app.state.container))
-    provider_retune_task = asyncio.create_task(_provider_retune_recheck_task(app))
+    ingest_worker_task = asyncio.create_task(ingest_worker_loop(app.state.container))
+    enforcement_dispatcher_task = asyncio.create_task(enforcement_dispatcher_loop(app.state.container))
     try:
         yield
     finally:
         maintenance_task.cancel()
-        provider_retune_task.cancel()
+        ingest_worker_task.cancel()
+        enforcement_dispatcher_task.cancel()
         with suppress(asyncio.CancelledError):
             await maintenance_task
         with suppress(asyncio.CancelledError):
-            await provider_retune_task
+            await ingest_worker_task
+        with suppress(asyncio.CancelledError):
+            await enforcement_dispatcher_task
 
 
 def create_app() -> FastAPI:

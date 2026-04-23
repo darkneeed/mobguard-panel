@@ -83,6 +83,8 @@ export function OverviewPage({ session }: { session?: Session }) {
   const health = data?.health || null;
   const quality = (data?.quality as QualityPayload | undefined) || null;
   const queue = data?.latest_cases || null;
+  const pipeline = data?.pipeline || null;
+  const freshness = data?.freshness || null;
 
   const systemStatusClass =
     health?.status === "ok" ? "status-resolved" : health?.status ? "severity-high" : "severity-low";
@@ -112,6 +114,16 @@ export function OverviewPage({ session }: { session?: Session }) {
           )
         });
 
+  function formatAge(seconds?: number | null): string {
+    if (seconds === null || seconds === undefined || Number.isNaN(seconds)) {
+      return t("common.notAvailable");
+    }
+    const total = Math.max(Math.round(seconds), 0);
+    if (total < 60) return `${total}s`;
+    if (total < 3600) return `${Math.round(total / 60)}m`;
+    return `${Math.round(total / 3600)}h`;
+  }
+
   return (
     <section className="page">
       <div className="page-header page-header-stack">
@@ -124,7 +136,11 @@ export function OverviewPage({ session }: { session?: Session }) {
           <span className={`status-badge ${systemStatusClass}`}>{health?.status || t("common.loading")}</span>
           <span className="muted">
             {t("overview.lastUpdated", {
-              value: formatDisplayDateTime(lastLoadedAt, t("common.notAvailable"), language)
+              value: formatDisplayDateTime(
+                freshness?.overview_updated_at || lastLoadedAt,
+                t("common.notAvailable"),
+                language
+              )
             })}
           </span>
         </div>
@@ -144,7 +160,7 @@ export function OverviewPage({ session }: { session?: Session }) {
           <div className="stats-grid">
             <div className="stat-card">
               <span>{t("overview.cards.openQueue")}</span>
-              <strong>{queue?.count ?? "—"}</strong>
+              <strong>{quality?.open_cases ?? queue?.count ?? "—"}</strong>
             </div>
             <div className="stat-card">
               <span>{t("overview.cards.core")}</span>
@@ -249,6 +265,69 @@ export function OverviewPage({ session }: { session?: Session }) {
               <div className="record-meta">
                 {t("overview.health.rulesBy", {
                   value: rulesOwner
+                })}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="panel">
+          <div className="panel-heading panel-heading-row">
+            <div>
+              <h2>{t("overview.pipelineTitle")}</h2>
+              <p className="muted">{t("overview.pipelineDescription")}</p>
+            </div>
+            <span className="tag review-only">{pipeline?.worker_status || t("common.notAvailable")}</span>
+          </div>
+          <div className="metric-list">
+            <div className="metric-row">
+              <div className="record-main">
+                <span className="record-title">{t("overview.pipeline.queueDepth")}</span>
+                <span>{pipeline?.queue_depth ?? "—"}</span>
+              </div>
+              <div className="record-meta">
+                {t("overview.pipeline.queueMeta", {
+                  queued: pipeline?.queued_count ?? 0,
+                  processing: pipeline?.processing_count ?? 0
+                })}
+              </div>
+            </div>
+            <div className="metric-row">
+              <div className="record-main">
+                <span className="record-title">{t("overview.pipeline.failed")}</span>
+                <span>{pipeline?.failed_count ?? "—"}</span>
+              </div>
+              <div className="record-meta">
+                {t("overview.pipeline.pendingRemote", {
+                  count: pipeline?.enforcement_pending_count ?? 0
+                })}
+              </div>
+            </div>
+            <div className="metric-row">
+              <div className="record-main">
+                <span className="record-title">{t("overview.pipeline.lag")}</span>
+                <span>{formatAge(pipeline?.current_lag_seconds)}</span>
+              </div>
+              <div className="record-meta">
+                {t("overview.pipeline.oldestQueued", {
+                  value: formatAge(pipeline?.oldest_queued_age_seconds)
+                })}
+              </div>
+            </div>
+            <div className="metric-row">
+              <div className="record-main">
+                <span className="record-title">{t("overview.pipeline.lastDrain")}</span>
+                <span>
+                  {formatDisplayDateTime(
+                    pipeline?.last_successful_drain_at || "",
+                    t("common.notAvailable"),
+                    language
+                  )}
+                </span>
+              </div>
+              <div className="record-meta">
+                {t("overview.pipeline.snapshotAge", {
+                  value: formatAge(freshness?.pipeline_age_seconds)
                 })}
               </div>
             </div>

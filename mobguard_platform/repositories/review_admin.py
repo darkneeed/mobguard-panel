@@ -81,6 +81,29 @@ def _provider_summary_payload(bundle: DecisionBundle) -> dict[str, Any]:
     return provider_summary_from_signal_flags(bundle.signal_flags)
 
 
+class _ConnectionContext:
+    def __init__(self, conn: sqlite3.Connection):
+        self.conn = conn
+
+    def __enter__(self) -> sqlite3.Connection:
+        return self.conn
+
+    def __exit__(self, exc_type, exc, tb) -> bool:
+        return False
+
+
+class _ConnectionBackedStore:
+    def __init__(self, repository: "ReviewAdminRepository", conn: sqlite3.Connection):
+        self.repository = repository
+        self.conn = conn
+
+    def _connect(self) -> _ConnectionContext:
+        return _ConnectionContext(self.conn)
+
+    def _table_exists(self, conn: sqlite3.Connection, table_name: str) -> bool:
+        return self.repository.table_exists(conn, table_name)
+
+
 class ReviewAdminRepository(SQLiteRepository):
     def __init__(
         self,
@@ -88,10 +111,14 @@ class ReviewAdminRepository(SQLiteRepository):
         *,
         base_config: dict[str, Any],
         live_rules_loader: Callable[[], dict[str, Any]],
+        read_model_writer: Optional[Callable[[sqlite3.Connection, str, str, dict[str, Any], Optional[str]], None]] = None,
+        read_model_loader: Optional[Callable[[sqlite3.Connection, str, str], Optional[dict[str, Any]]]] = None,
     ):
         super().__init__(storage)
         self.base_config = base_config
         self.live_rules_loader = live_rules_loader
+        self.read_model_writer = read_model_writer
+        self.read_model_loader = read_model_loader
 
     def _analysis_event_scope_context(
         self,
@@ -177,14 +204,16 @@ class ReviewAdminRepository(SQLiteRepository):
             history.append(payload)
         return history
 
-    def record_analysis_event(
+    def _record_analysis_event(
         self,
+        conn: sqlite3.Connection,
         user: Optional[dict[str, Any]],
         ip: str,
         tag: str,
         bundle: DecisionBundle,
         *,
         observation: Optional[dict[str, Any]] = None,
+        source_event_uid: str | None = None,
     ) -> int:
         now = _utcnow()
         payload = bundle.to_dict()
@@ -196,62 +225,87 @@ class ReviewAdminRepository(SQLiteRepository):
             signal_flags=bundle.signal_flags,
         )
         scope = build_review_scope({**usage_observation, "ip": ip}, ip=ip)
+        cursor = conn.execute(
+            """
+            INSERT INTO analysis_events (
+                created_at, module_id, module_name, source_event_uid, subject_key, uuid, username, system_id, telegram_id, ip, tag,
+                verdict, confidence_band, score, isp, asn,
+                country, region, city, loc, latitude, longitude,
+                client_device_id, client_device_label, client_os_family, client_os_version,
+                client_app_name, client_app_version,
+                case_scope_key, device_scope_key, scope_type,
+                punitive_eligible,
+                reasons_json, signal_flags_json, bundle_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                now,
+                module_id,
+                module_name,
+                clean_text(source_event_uid) or None,
+                subject_key,
+                (user or {}).get("uuid"),
+                (user or {}).get("username"),
+                coerce_optional_int((user or {}).get("id")),
+                str((user or {}).get("telegramId")) if (user or {}).get("telegramId") is not None else None,
+                ip,
+                tag,
+                bundle.verdict,
+                bundle.confidence_band,
+                bundle.score,
+                bundle.isp,
+                bundle.asn,
+                usage_observation.get("country"),
+                usage_observation.get("region"),
+                usage_observation.get("city"),
+                usage_observation.get("loc"),
+                usage_observation.get("latitude"),
+                usage_observation.get("longitude"),
+                usage_observation.get("client_device_id"),
+                usage_observation.get("client_device_label"),
+                usage_observation.get("client_os_family"),
+                usage_observation.get("client_os_version"),
+                usage_observation.get("client_app_name"),
+                usage_observation.get("client_app_version"),
+                scope["case_scope_key"],
+                scope["device_scope_key"],
+                scope["scope_type"],
+                int(bundle.punitive_eligible),
+                json.dumps([reason.to_dict() for reason in bundle.reasons], ensure_ascii=False),
+                json.dumps(bundle.signal_flags, ensure_ascii=False),
+                json.dumps(payload, ensure_ascii=False),
+            ),
+        )
+        return int(cursor.lastrowid)
+
+    def record_analysis_event(
+        self,
+        user: Optional[dict[str, Any]],
+        ip: str,
+        tag: str,
+        bundle: DecisionBundle,
+        *,
+        observation: Optional[dict[str, Any]] = None,
+        source_event_uid: str | None = None,
+    ) -> int:
         with self.connect() as conn:
-            cursor = conn.execute(
-                """
-                INSERT INTO analysis_events (
-                    created_at, module_id, module_name, subject_key, uuid, username, system_id, telegram_id, ip, tag,
-                    verdict, confidence_band, score, isp, asn,
-                    country, region, city, loc, latitude, longitude,
-                    client_device_id, client_device_label, client_os_family, client_os_version,
-                    client_app_name, client_app_version,
-                    case_scope_key, device_scope_key, scope_type,
-                    punitive_eligible,
-                    reasons_json, signal_flags_json, bundle_json
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    now,
-                    module_id,
-                    module_name,
-                    subject_key,
-                    (user or {}).get("uuid"),
-                    (user or {}).get("username"),
-                    coerce_optional_int((user or {}).get("id")),
-                    str((user or {}).get("telegramId")) if (user or {}).get("telegramId") is not None else None,
-                    ip,
-                    tag,
-                    bundle.verdict,
-                    bundle.confidence_band,
-                    bundle.score,
-                    bundle.isp,
-                    bundle.asn,
-                    usage_observation.get("country"),
-                    usage_observation.get("region"),
-                    usage_observation.get("city"),
-                    usage_observation.get("loc"),
-                    usage_observation.get("latitude"),
-                    usage_observation.get("longitude"),
-                    usage_observation.get("client_device_id"),
-                    usage_observation.get("client_device_label"),
-                    usage_observation.get("client_os_family"),
-                    usage_observation.get("client_os_version"),
-                    usage_observation.get("client_app_name"),
-                    usage_observation.get("client_app_version"),
-                    scope["case_scope_key"],
-                    scope["device_scope_key"],
-                    scope["scope_type"],
-                    int(bundle.punitive_eligible),
-                    json.dumps([reason.to_dict() for reason in bundle.reasons], ensure_ascii=False),
-                    json.dumps(bundle.signal_flags, ensure_ascii=False),
-                    json.dumps(payload, ensure_ascii=False),
-                ),
+            event_id = self._record_analysis_event(
+                conn,
+                user,
+                ip,
+                tag,
+                bundle,
+                observation=observation,
+                source_event_uid=source_event_uid,
             )
             conn.commit()
-            return int(cursor.lastrowid)
+            return event_id
 
     def build_review_url(self, case_id: int) -> str:
-        rules_state = self.live_rules_loader()
+        try:
+            rules_state = self.live_rules_loader(skip_db_mirror=True)
+        except TypeError:
+            rules_state = self.live_rules_loader()
         base_url = str(rules_state.get("rules", {}).get("settings", {}).get("review_ui_base_url", "")).rstrip("/")
         if not base_url:
             base_url = str(self.base_config.get("settings", {}).get("review_ui_base_url", "")).rstrip("/")
@@ -480,9 +534,11 @@ class ReviewAdminRepository(SQLiteRepository):
         anchor_started_at: str,
         device_scope_key: str,
         case_scope_key: str,
-    ) -> dict[str, Any]:
+        conn: sqlite3.Connection | None = None,
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
+        snapshot_store: Any = _ConnectionBackedStore(self, conn) if conn is not None else self
         snapshot = build_usage_profile_snapshot(
-            self,
+            snapshot_store,
             _review_identity(user),
             anchor_started_at=anchor_started_at,
             device_scope_key=device_scope_key,
@@ -494,7 +550,7 @@ class ReviewAdminRepository(SQLiteRepository):
             confidence_band=str(bundle.confidence_band or ""),
             repeat_count=repeat_count,
         )
-        return {
+        fields = {
             "usage_profile_summary": str(snapshot.get("usage_profile_summary") or ""),
             "usage_profile_signal_count": int(priority["signal_count"]),
             "usage_profile_priority": int(priority["priority"]),
@@ -502,9 +558,32 @@ class ReviewAdminRepository(SQLiteRepository):
             "usage_profile_ongoing_duration_seconds": snapshot.get("ongoing_duration_seconds"),
             "usage_profile_ongoing_duration_text": str(snapshot.get("ongoing_duration_text") or ""),
         }
+        return fields, snapshot
 
-    def ensure_review_case(
+    def _persist_usage_profile_snapshot(
         self,
+        conn: sqlite3.Connection,
+        *,
+        case_id: int,
+        snapshot: dict[str, Any],
+        updated_at: str,
+    ) -> None:
+        if not self.read_model_writer:
+            return
+        payload = dict(snapshot)
+        payload["case_id"] = int(case_id)
+        payload["updated_at"] = str(payload.get("updated_at") or updated_at)
+        self.read_model_writer(
+            conn,
+            "review_usage_profile",
+            str(case_id),
+            payload,
+            updated_at,
+        )
+
+    def _ensure_review_case(
+        self,
+        conn: sqlite3.Connection,
         user: Optional[dict[str, Any]],
         ip: str,
         tag: str,
@@ -516,251 +595,277 @@ class ReviewAdminRepository(SQLiteRepository):
         fallback_module_name = str((user or {}).get("module_name") or "").strip() or fallback_module_id
         reason_codes = json.dumps(bundle.reason_codes, ensure_ascii=False)
         provider_summary = _provider_summary_payload(bundle)
-        with self.connect() as conn:
-            event_context = self._analysis_event_scope_context(
-                conn,
-                event_id,
-                fallback_ip=ip,
-                fallback_tag=tag,
-                fallback_module_id=fallback_module_id,
-                fallback_module_name=fallback_module_name,
-            )
-            subject_key = subject_key_from_identity(user, ip=event_context["ip"])
-            unique_key = f"{event_context['case_scope_key']}:{event_id}"
-            existing = conn.execute(
-                """
-                SELECT id, repeat_count, opened_at, last_repeat_at
-                FROM review_cases
-                WHERE case_scope_key = ? AND status != 'MERGED'
-                ORDER BY updated_at DESC, id DESC
-                LIMIT 1
-                """,
-                (event_context["case_scope_key"],),
-            ).fetchone()
-            if existing:
-                current_repeat_count = max(int(existing["repeat_count"] or 1), 1)
-                repeat_anchor = clean_text(existing["last_repeat_at"] or existing["opened_at"])
-                repeat_anchor_dt = datetime.fromisoformat(repeat_anchor) if repeat_anchor else None
-                event_created_at = clean_text(event_context["created_at"]) or _utcnow()
-                event_created_dt = datetime.fromisoformat(event_created_at) if event_created_at else None
-                increment_repeat = True
-                if repeat_anchor_dt is not None and event_created_dt is not None:
-                    increment_repeat = event_created_dt - repeat_anchor_dt >= REPEAT_COUNT_MIN_GAP
-                next_repeat_count = current_repeat_count + (1 if increment_repeat else 0)
-                last_repeat_at = event_created_at if increment_repeat else repeat_anchor
-                usage_fields = self._usage_profile_fields(
-                    user,
-                    bundle=bundle,
-                    repeat_count=next_repeat_count,
-                    anchor_started_at=str(existing["opened_at"] or event_created_at),
-                    device_scope_key=event_context["device_scope_key"],
-                    case_scope_key=event_context["case_scope_key"],
-                )
-                conn.execute(
-                    """
-                    UPDATE review_cases
-                    SET status = 'OPEN',
-                        review_reason = ?,
-                        case_scope_key = ?,
-                        device_scope_key = ?,
-                        scope_type = ?,
-                        subject_key = ?,
-                        module_id = ?,
-                        module_name = ?,
-                        client_device_id = ?,
-                        client_device_label = ?,
-                        client_os_family = ?,
-                        client_app_name = ?,
-                        username = ?,
-                        system_id = ?,
-                        telegram_id = ?,
-                        ip = ?,
-                        tag = ?,
-                        verdict = ?,
-                        confidence_band = ?,
-                        score = ?,
-                        isp = ?,
-                        asn = ?,
-                        provider_key = ?,
-                        provider_classification = ?,
-                        provider_service_hint = ?,
-                        provider_conflict = ?,
-                        provider_review_recommended = ?,
-                        punitive_eligible = ?,
-                        latest_event_id = ?,
-                        repeat_count = ?,
-                        last_repeat_at = ?,
-                        reason_codes_json = ?,
-                        usage_profile_summary = ?,
-                        usage_profile_signal_count = ?,
-                        usage_profile_priority = ?,
-                        usage_profile_soft_reasons_json = ?,
-                        usage_profile_ongoing_duration_seconds = ?,
-                        usage_profile_ongoing_duration_text = ?,
-                        updated_at = ?
-                    WHERE id = ?
-                    """,
-                    (
-                        review_reason,
-                        event_context["case_scope_key"],
-                        event_context["device_scope_key"],
-                        event_context["scope_type"],
-                        subject_key,
-                        event_context["module_id"],
-                        event_context["module_name"],
-                        event_context["client_device_id"],
-                        event_context["client_device_label"],
-                        event_context["client_os_family"],
-                        event_context["client_app_name"],
-                        (user or {}).get("username"),
-                        coerce_optional_int((user or {}).get("id")),
-                        str((user or {}).get("telegramId")) if (user or {}).get("telegramId") is not None else None,
-                        event_context["ip"],
-                        event_context["tag"],
-                        bundle.verdict,
-                        bundle.confidence_band,
-                        bundle.score,
-                        bundle.isp,
-                        bundle.asn,
-                        provider_summary["provider_key"],
-                        provider_summary["provider_classification"],
-                        provider_summary["provider_service_hint"],
-                        int(provider_summary["provider_conflict"]),
-                        int(provider_summary["provider_review_recommended"]),
-                        int(bundle.punitive_eligible),
-                        event_id,
-                        next_repeat_count,
-                        last_repeat_at,
-                        reason_codes,
-                        usage_fields["usage_profile_summary"],
-                        usage_fields["usage_profile_signal_count"],
-                        usage_fields["usage_profile_priority"],
-                        usage_fields["usage_profile_soft_reasons_json"],
-                        usage_fields["usage_profile_ongoing_duration_seconds"],
-                        usage_fields["usage_profile_ongoing_duration_text"],
-                        event_created_at,
-                        existing["id"],
-                    ),
-                )
-                case_id = int(existing["id"])
-                self._attach_case_context(
-                    conn,
-                    case_id=case_id,
-                    ip=event_context["ip"],
-                    isp=bundle.isp,
-                    asn=bundle.asn,
-                    module_id=event_context["module_id"],
-                    module_name=event_context["module_name"],
-                    seen_at=event_created_at,
-                    hit_increment=1,
-                    first_seen_at=str(existing["opened_at"] or event_created_at),
-                )
-            else:
-                event_created_at = clean_text(event_context["created_at"]) or _utcnow()
-                usage_fields = self._usage_profile_fields(
-                    user,
-                    bundle=bundle,
-                    repeat_count=1,
-                    anchor_started_at=event_created_at,
-                    device_scope_key=event_context["device_scope_key"],
-                    case_scope_key=event_context["case_scope_key"],
-                )
-                cursor = conn.execute(
-                    """
-                    INSERT INTO review_cases (
-                        unique_key, status, review_reason, case_scope_key, device_scope_key, scope_type, subject_key,
-                        module_id, module_name, client_device_id, client_device_label, client_os_family, client_app_name,
-                        uuid, username, system_id, telegram_id, ip, tag,
-                        verdict, confidence_band, score, isp, asn, provider_key, provider_classification, provider_service_hint,
-                        provider_conflict, provider_review_recommended, punitive_eligible, latest_event_id, repeat_count,
-                        last_repeat_at,
-                        reason_codes_json, usage_profile_summary, usage_profile_signal_count, usage_profile_priority,
-                        usage_profile_soft_reasons_json, usage_profile_ongoing_duration_seconds, usage_profile_ongoing_duration_text,
-                        opened_at, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    (
-                        unique_key,
-                        "OPEN",
-                        review_reason,
-                        event_context["case_scope_key"],
-                        event_context["device_scope_key"],
-                        event_context["scope_type"],
-                        subject_key,
-                        event_context["module_id"],
-                        event_context["module_name"],
-                        event_context["client_device_id"],
-                        event_context["client_device_label"],
-                        event_context["client_os_family"],
-                        event_context["client_app_name"],
-                        (user or {}).get("uuid"),
-                        (user or {}).get("username"),
-                        coerce_optional_int((user or {}).get("id")),
-                        str((user or {}).get("telegramId")) if (user or {}).get("telegramId") is not None else None,
-                        event_context["ip"],
-                        event_context["tag"],
-                        bundle.verdict,
-                        bundle.confidence_band,
-                        bundle.score,
-                        bundle.isp,
-                        bundle.asn,
-                        provider_summary["provider_key"],
-                        provider_summary["provider_classification"],
-                        provider_summary["provider_service_hint"],
-                        int(provider_summary["provider_conflict"]),
-                        int(provider_summary["provider_review_recommended"]),
-                        int(bundle.punitive_eligible),
-                        event_id,
-                        1,
-                        event_created_at,
-                        reason_codes,
-                        usage_fields["usage_profile_summary"],
-                        usage_fields["usage_profile_signal_count"],
-                        usage_fields["usage_profile_priority"],
-                        usage_fields["usage_profile_soft_reasons_json"],
-                        usage_fields["usage_profile_ongoing_duration_seconds"],
-                        usage_fields["usage_profile_ongoing_duration_text"],
-                        event_created_at,
-                        event_created_at,
-                    ),
-                )
-                case_id = int(cursor.lastrowid)
-                self._attach_case_context(
-                    conn,
-                    case_id=case_id,
-                    ip=event_context["ip"],
-                    isp=bundle.isp,
-                    asn=bundle.asn,
-                    module_id=event_context["module_id"],
-                    module_name=event_context["module_name"],
-                    seen_at=event_created_at,
-                    hit_increment=1,
-                    first_seen_at=event_created_at,
-                )
-            conn.commit()
-        summary = self.get_review_case(case_id)
-        return ReviewCaseSummary(
-            id=summary["id"],
-            status=summary["status"],
-            review_reason=summary["review_reason"],
-            module_id=summary.get("module_id") or "",
-            module_name=summary.get("module_name") or "",
-            uuid=summary.get("uuid") or "",
-            username=summary.get("username") or "",
-            system_id=summary.get("system_id"),
-            telegram_id=summary.get("telegram_id"),
-            ip=summary["ip"],
-            tag=summary.get("tag") or "",
-            verdict=summary["verdict"],
-            confidence_band=summary["confidence_band"],
-            score=summary["score"],
-            isp=summary.get("isp") or "",
-            asn=summary.get("asn"),
-            repeat_count=summary["repeat_count"],
-            reason_codes=summary.get("reason_codes", []),
-            updated_at=summary.get("updated_at", ""),
-            review_url=summary.get("review_url", ""),
+        event_context = self._analysis_event_scope_context(
+            conn,
+            event_id,
+            fallback_ip=ip,
+            fallback_tag=tag,
+            fallback_module_id=fallback_module_id,
+            fallback_module_name=fallback_module_name,
         )
+        subject_key = subject_key_from_identity(user, ip=event_context["ip"])
+        unique_key = f"{event_context['case_scope_key']}:{event_id}"
+        event_created_at = clean_text(event_context["created_at"]) or _utcnow()
+        existing = conn.execute(
+            """
+            SELECT id, repeat_count, opened_at, last_repeat_at
+            FROM review_cases
+            WHERE case_scope_key = ? AND status != 'MERGED'
+            ORDER BY updated_at DESC, id DESC
+            LIMIT 1
+            """,
+            (event_context["case_scope_key"],),
+        ).fetchone()
+        if existing:
+            current_repeat_count = max(int(existing["repeat_count"] or 1), 1)
+            repeat_anchor = clean_text(existing["last_repeat_at"] or existing["opened_at"])
+            repeat_anchor_dt = datetime.fromisoformat(repeat_anchor) if repeat_anchor else None
+            event_created_dt = datetime.fromisoformat(event_created_at) if event_created_at else None
+            increment_repeat = True
+            if repeat_anchor_dt is not None and event_created_dt is not None:
+                increment_repeat = event_created_dt - repeat_anchor_dt >= REPEAT_COUNT_MIN_GAP
+            next_repeat_count = current_repeat_count + (1 if increment_repeat else 0)
+            last_repeat_at = event_created_at if increment_repeat else repeat_anchor
+            usage_fields, usage_snapshot = self._usage_profile_fields(
+                user,
+                bundle=bundle,
+                repeat_count=next_repeat_count,
+                anchor_started_at=str(existing["opened_at"] or event_created_at),
+                device_scope_key=event_context["device_scope_key"],
+                case_scope_key=event_context["case_scope_key"],
+                conn=conn,
+            )
+            conn.execute(
+                """
+                UPDATE review_cases
+                SET status = 'OPEN',
+                    review_reason = ?,
+                    case_scope_key = ?,
+                    device_scope_key = ?,
+                    scope_type = ?,
+                    subject_key = ?,
+                    module_id = ?,
+                    module_name = ?,
+                    client_device_id = ?,
+                    client_device_label = ?,
+                    client_os_family = ?,
+                    client_app_name = ?,
+                    uuid = ?,
+                    username = ?,
+                    system_id = ?,
+                    telegram_id = ?,
+                    ip = ?,
+                    tag = ?,
+                    verdict = ?,
+                    confidence_band = ?,
+                    score = ?,
+                    isp = ?,
+                    asn = ?,
+                    provider_key = ?,
+                    provider_classification = ?,
+                    provider_service_hint = ?,
+                    provider_conflict = ?,
+                    provider_review_recommended = ?,
+                    punitive_eligible = ?,
+                    latest_event_id = ?,
+                    repeat_count = ?,
+                    last_repeat_at = ?,
+                    reason_codes_json = ?,
+                    usage_profile_summary = ?,
+                    usage_profile_signal_count = ?,
+                    usage_profile_priority = ?,
+                    usage_profile_soft_reasons_json = ?,
+                    usage_profile_ongoing_duration_seconds = ?,
+                    usage_profile_ongoing_duration_text = ?,
+                    updated_at = ?
+                WHERE id = ?
+                """,
+                (
+                    review_reason,
+                    event_context["case_scope_key"],
+                    event_context["device_scope_key"],
+                    event_context["scope_type"],
+                    subject_key,
+                    event_context["module_id"],
+                    event_context["module_name"],
+                    event_context["client_device_id"],
+                    event_context["client_device_label"],
+                    event_context["client_os_family"],
+                    event_context["client_app_name"],
+                    (user or {}).get("uuid"),
+                    (user or {}).get("username"),
+                    coerce_optional_int((user or {}).get("id")),
+                    str((user or {}).get("telegramId")) if (user or {}).get("telegramId") is not None else None,
+                    event_context["ip"],
+                    event_context["tag"],
+                    bundle.verdict,
+                    bundle.confidence_band,
+                    bundle.score,
+                    bundle.isp,
+                    bundle.asn,
+                    provider_summary["provider_key"],
+                    provider_summary["provider_classification"],
+                    provider_summary["provider_service_hint"],
+                    int(provider_summary["provider_conflict"]),
+                    int(provider_summary["provider_review_recommended"]),
+                    int(bundle.punitive_eligible),
+                    event_id,
+                    next_repeat_count,
+                    last_repeat_at,
+                    reason_codes,
+                    usage_fields["usage_profile_summary"],
+                    usage_fields["usage_profile_signal_count"],
+                    usage_fields["usage_profile_priority"],
+                    usage_fields["usage_profile_soft_reasons_json"],
+                    usage_fields["usage_profile_ongoing_duration_seconds"],
+                    usage_fields["usage_profile_ongoing_duration_text"],
+                    event_created_at,
+                    existing["id"],
+                ),
+            )
+            case_id = int(existing["id"])
+            opened_at = str(existing["opened_at"] or event_created_at)
+            repeat_count = next_repeat_count
+            updated_at = event_created_at
+            self._attach_case_context(
+                conn,
+                case_id=case_id,
+                ip=event_context["ip"],
+                isp=bundle.isp,
+                asn=bundle.asn,
+                module_id=event_context["module_id"],
+                module_name=event_context["module_name"],
+                seen_at=event_created_at,
+                hit_increment=1,
+                first_seen_at=opened_at,
+            )
+        else:
+            usage_fields, usage_snapshot = self._usage_profile_fields(
+                user,
+                bundle=bundle,
+                repeat_count=1,
+                anchor_started_at=event_created_at,
+                device_scope_key=event_context["device_scope_key"],
+                case_scope_key=event_context["case_scope_key"],
+                conn=conn,
+            )
+            cursor = conn.execute(
+                """
+                INSERT INTO review_cases (
+                    unique_key, status, review_reason, case_scope_key, device_scope_key, scope_type, subject_key,
+                    module_id, module_name, client_device_id, client_device_label, client_os_family, client_app_name,
+                    uuid, username, system_id, telegram_id, ip, tag,
+                    verdict, confidence_band, score, isp, asn, provider_key, provider_classification, provider_service_hint,
+                    provider_conflict, provider_review_recommended, punitive_eligible, latest_event_id, repeat_count,
+                    last_repeat_at,
+                    reason_codes_json, usage_profile_summary, usage_profile_signal_count, usage_profile_priority,
+                    usage_profile_soft_reasons_json, usage_profile_ongoing_duration_seconds, usage_profile_ongoing_duration_text,
+                    opened_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    unique_key,
+                    "OPEN",
+                    review_reason,
+                    event_context["case_scope_key"],
+                    event_context["device_scope_key"],
+                    event_context["scope_type"],
+                    subject_key,
+                    event_context["module_id"],
+                    event_context["module_name"],
+                    event_context["client_device_id"],
+                    event_context["client_device_label"],
+                    event_context["client_os_family"],
+                    event_context["client_app_name"],
+                    (user or {}).get("uuid"),
+                    (user or {}).get("username"),
+                    coerce_optional_int((user or {}).get("id")),
+                    str((user or {}).get("telegramId")) if (user or {}).get("telegramId") is not None else None,
+                    event_context["ip"],
+                    event_context["tag"],
+                    bundle.verdict,
+                    bundle.confidence_band,
+                    bundle.score,
+                    bundle.isp,
+                    bundle.asn,
+                    provider_summary["provider_key"],
+                    provider_summary["provider_classification"],
+                    provider_summary["provider_service_hint"],
+                    int(provider_summary["provider_conflict"]),
+                    int(provider_summary["provider_review_recommended"]),
+                    int(bundle.punitive_eligible),
+                    event_id,
+                    1,
+                    event_created_at,
+                    reason_codes,
+                    usage_fields["usage_profile_summary"],
+                    usage_fields["usage_profile_signal_count"],
+                    usage_fields["usage_profile_priority"],
+                    usage_fields["usage_profile_soft_reasons_json"],
+                    usage_fields["usage_profile_ongoing_duration_seconds"],
+                    usage_fields["usage_profile_ongoing_duration_text"],
+                    event_created_at,
+                    event_created_at,
+                ),
+            )
+            case_id = int(cursor.lastrowid)
+            opened_at = event_created_at
+            repeat_count = 1
+            updated_at = event_created_at
+            self._attach_case_context(
+                conn,
+                case_id=case_id,
+                ip=event_context["ip"],
+                isp=bundle.isp,
+                asn=bundle.asn,
+                module_id=event_context["module_id"],
+                module_name=event_context["module_name"],
+                seen_at=event_created_at,
+                hit_increment=1,
+                first_seen_at=event_created_at,
+            )
+        self._persist_usage_profile_snapshot(
+            conn,
+            case_id=case_id,
+            snapshot=usage_snapshot,
+            updated_at=updated_at,
+        )
+        return ReviewCaseSummary(
+            id=case_id,
+            status="OPEN",
+            review_reason=review_reason,
+            module_id=event_context.get("module_id") or "",
+            module_name=event_context.get("module_name") or "",
+            uuid=(user or {}).get("uuid") or "",
+            username=(user or {}).get("username") or "",
+            system_id=coerce_optional_int((user or {}).get("id")),
+            telegram_id=str((user or {}).get("telegramId")) if (user or {}).get("telegramId") not in (None, "") else None,
+            ip=event_context["ip"],
+            tag=event_context.get("tag") or "",
+            verdict=bundle.verdict,
+            confidence_band=bundle.confidence_band,
+            score=bundle.score,
+            isp=bundle.isp or "",
+            asn=bundle.asn,
+            repeat_count=repeat_count,
+            reason_codes=list(bundle.reason_codes),
+            updated_at=updated_at,
+            review_url=self.build_review_url(case_id),
+        )
+
+    def ensure_review_case(
+        self,
+        user: Optional[dict[str, Any]],
+        ip: str,
+        tag: str,
+        bundle: DecisionBundle,
+        event_id: int,
+        review_reason: str,
+    ) -> ReviewCaseSummary:
+        with self.connect() as conn:
+            summary = self._ensure_review_case(conn, user, ip, tag, bundle, event_id, review_reason)
+            conn.commit()
+            return summary
 
     def recheck_review_case(
         self,
@@ -800,7 +905,7 @@ class ReviewAdminRepository(SQLiteRepository):
                 fallback_module_name=fallback_module_name,
             )
         event_created_at = clean_text(event_context["created_at"]) or _utcnow()
-        usage_fields = self._usage_profile_fields(
+        usage_fields, usage_snapshot = self._usage_profile_fields(
             user,
             bundle=bundle,
             repeat_count=max(int(case_row["repeat_count"] or 1), 1),
@@ -932,6 +1037,12 @@ class ReviewAdminRepository(SQLiteRepository):
                 seen_at=event_created_at,
                 hit_increment=1,
                 first_seen_at=str(case_row["opened_at"] or event_created_at),
+            )
+            self._persist_usage_profile_snapshot(
+                conn,
+                case_id=case_id,
+                snapshot=usage_snapshot,
+                updated_at=event_created_at,
             )
             conn.commit()
 
@@ -1174,6 +1285,18 @@ class ReviewAdminRepository(SQLiteRepository):
                 """,
                 (case_id, case_subject_key),
             ).fetchall()
+            enforcement_jobs = []
+            if self.table_exists(conn, "enforcement_jobs"):
+                enforcement_jobs = conn.execute(
+                    """
+                    SELECT id, event_uid, job_type, status, attempt_count, last_error, last_error_at,
+                           applied_at, created_at, updated_at, payload_json
+                    FROM enforcement_jobs
+                    WHERE review_case_id = ? OR analysis_event_id = ?
+                    ORDER BY created_at DESC, id DESC
+                    """,
+                    (case_id, case_row["latest_event_id"]),
+                ).fetchall()
             case = self._hydrate_review_list_item(conn, case_row)
             case = self._apply_inventory_payloads(
                 case,
@@ -1184,8 +1307,39 @@ class ReviewAdminRepository(SQLiteRepository):
                 conn,
                 device_scope_key=clean_text(case.get("device_scope_key")),
             )
+            usage_profile = (
+                self.read_model_loader(conn, "review_usage_profile", str(case_id))
+                if self.read_model_loader
+                else None
+            )
+            if usage_profile is None:
+                usage_profile = build_usage_profile_snapshot(
+                    _ConnectionBackedStore(self, conn),
+                    _review_identity(case),
+                    anchor_started_at=case.get("opened_at"),
+                    device_scope_key=clean_text(case.get("device_scope_key")),
+                    case_scope_key=clean_text(case.get("case_scope_key")),
+                )
+                self._persist_usage_profile_snapshot(
+                    conn,
+                    case_id=case_id,
+                    snapshot=usage_profile,
+                    updated_at=clean_text(case.get("updated_at")) or _utcnow(),
+                )
             case["latest_event"] = self._decode_analysis_event_payload(event_row)
             case["resolutions"] = [dict(row) for row in resolutions]
+            case["usage_profile"] = usage_profile
+            case["enforcement"] = [
+                {
+                    **{
+                        key: value
+                        for key, value in dict(row).items()
+                        if key != "payload_json"
+                    },
+                    "payload": json.loads(str(row["payload_json"] or "{}")),
+                }
+                for row in enforcement_jobs
+            ]
             related_items = [self._hydrate_review_list_item(conn, row) for row in related_cases]
             related_case_ids = [int(item["id"]) for item in related_items]
             related_ip_inventory = self._case_ip_inventory(conn, related_case_ids)
@@ -1198,6 +1352,7 @@ class ReviewAdminRepository(SQLiteRepository):
                 )
                 for item in related_items
             ]
+            conn.commit()
             return case
 
     def backfill_review_subjects_and_contexts(self, conn: sqlite3.Connection) -> None:

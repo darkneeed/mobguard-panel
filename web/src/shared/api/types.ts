@@ -169,6 +169,7 @@ export type ModuleRecord = {
 export type ModuleListResponse = {
   items: ModuleRecord[];
   count: number;
+  pipeline?: PipelineStatus;
 };
 
 export type ModuleInstallBundle = {
@@ -316,6 +317,7 @@ export type ReviewDetailResponse = Partial<ReviewItem> & {
   resolutions?: ReviewResolution[];
   related_cases?: Array<Record<string, unknown>>;
   usage_profile?: UsageProfile;
+  enforcement?: Array<Record<string, unknown>>;
 };
 
 export type AnalysisEventItem = {
@@ -360,10 +362,35 @@ export type AnalysisEventListResponse = {
   page_size: number;
 };
 
+export type PipelineStatus = {
+  queue_depth: number;
+  queued_count: number;
+  processing_count: number;
+  failed_count: number;
+  enforcement_pending_count: number;
+  enforcement_failed_count?: number;
+  oldest_queued_at?: string | null;
+  oldest_queued_age_seconds?: number;
+  current_lag_seconds?: number;
+  last_successful_drain_at?: string | null;
+  worker_status?: string;
+  worker_updated_at?: string;
+  worker_details?: Record<string, unknown>;
+};
+
+export type SnapshotFreshness = {
+  overview_updated_at?: string | null;
+  overview_age_seconds?: number;
+  pipeline_updated_at?: string | null;
+  pipeline_age_seconds?: number;
+};
+
 export type OverviewMetricsResponse = {
   health: HealthSnapshot;
   quality: Record<string, unknown>;
   latest_cases: ReviewListResponse;
+  pipeline: PipelineStatus;
+  freshness: SnapshotFreshness;
 };
 
 export type ViolationsResponse = {
