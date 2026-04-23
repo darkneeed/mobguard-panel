@@ -35,6 +35,7 @@ from .data_admin_user_cards import (
     search_users as _search_users_impl,
 )
 from .runtime_state import (
+    list_analysis_events as _list_analysis_events_impl,
     coerce_int_list,
     panel_client,
     resolve_user_identity,
@@ -55,6 +56,10 @@ def get_user_card_export(container: APIContainer, identifier: str) -> dict[str, 
 
 def list_admin_audit(container: APIContainer, limit: int = 100) -> dict[str, Any]:
     return {"items": container.store.list_admin_audit_events(limit=limit)}
+
+
+def list_analysis_events(container: APIContainer, filters: dict[str, Any]) -> dict[str, Any]:
+    return _list_analysis_events_impl(container.store, filters)
 
 
 def _runtime_settings(container: APIContainer) -> dict[str, Any]:

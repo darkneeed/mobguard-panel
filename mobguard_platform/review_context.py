@@ -52,6 +52,81 @@ def subject_key_from_identity(
     return "anonymous:unknown"
 
 
+def device_key_from_identity(identity: Mapping[str, Any] | None) -> str:
+    normalized = normalize_review_identity_payload(identity)
+    return clean_text(
+        normalized.get("client_device_id")
+        or normalized.get("device_id")
+        or normalized.get("deviceId")
+    )
+
+
+def device_display_from_identity(identity: Mapping[str, Any] | None) -> str:
+    normalized = normalize_review_identity_payload(identity)
+    label = clean_text(
+        normalized.get("client_device_label")
+        or normalized.get("device_label")
+        or normalized.get("deviceLabel")
+    )
+    if label:
+        return label
+    os_family = clean_text(
+        normalized.get("client_os_family")
+        or normalized.get("os_family")
+        or normalized.get("osFamily")
+    )
+    app_name = clean_text(
+        normalized.get("client_app_name")
+        or normalized.get("app_name")
+        or normalized.get("appName")
+    )
+    if os_family and app_name:
+        return f"{os_family} / {app_name}"
+    if os_family:
+        return os_family
+    if app_name:
+        return app_name
+    return device_key_from_identity(normalized)
+
+
+def build_review_scope(
+    identity: Mapping[str, Any] | None,
+    *,
+    ip: str | None = None,
+) -> dict[str, Any]:
+    normalized = normalize_review_identity_payload(identity)
+    primary_ip = clean_text(ip or normalized.get("ip"))
+    device_key = device_key_from_identity(normalized)
+    device_display = device_display_from_identity(normalized)
+    if device_key and primary_ip:
+        normalized_device_key = device_key.lower()
+        return {
+            "scope_type": "ip_device",
+            "case_scope_key": f"device:{normalized_device_key}|ip:{primary_ip}",
+            "device_scope_key": f"device:{normalized_device_key}",
+            "target_ip": primary_ip,
+            "client_device_id": device_key,
+            "client_device_label": device_display or None,
+        }
+    if primary_ip:
+        return {
+            "scope_type": "ip_only",
+            "case_scope_key": f"ip:{primary_ip}",
+            "device_scope_key": f"ip:{primary_ip}",
+            "target_ip": primary_ip,
+            "client_device_id": None,
+            "client_device_label": None,
+        }
+    return {
+        "scope_type": "ip_only",
+        "case_scope_key": "ip:unknown",
+        "device_scope_key": "ip:unknown",
+        "target_ip": "",
+        "client_device_id": None,
+        "client_device_label": None,
+    }
+
+
 def provider_summary_from_signal_flags(signal_flags: Mapping[str, Any] | None) -> dict[str, Any]:
     provider_evidence = {}
     if isinstance(signal_flags, Mapping):

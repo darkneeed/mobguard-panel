@@ -190,10 +190,10 @@ describe("ReviewQueuePage", () => {
     );
     expect(document.querySelector(".review-queue-grid")).not.toBeNull();
     expect(screen.getByText("priority 980")).toBeInTheDocument();
-    expect(screen.getByText("2 linked IPs")).toBeInTheDocument();
-    expect(screen.getByText("provider mts")).toBeInTheDocument();
+    expect(screen.getByText("2 IPs on this device")).toBeInTheDocument();
+    expect(screen.getAllByText("Decision for this IP only").length).toBeGreaterThan(0);
+    expect(screen.getByText("ISP A")).toBeInTheDocument();
     expect(screen.getByText("Provider conflict")).toBeInTheDocument();
-    expect(screen.getByText("2 modules")).toBeInTheDocument();
 
     const [pageSizeSelect] = screen.getAllByLabelText("Cards per page");
     await userEvent.selectOptions(pageSizeSelect, "48");

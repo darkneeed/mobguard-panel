@@ -95,6 +95,28 @@ describe("ReviewDetailPage", () => {
           asn: 16345
         }
       ],
+      same_device_ip_history: [
+        {
+          ip: "128.71.75.0",
+          hit_count: 2,
+          first_seen_at: "2026-04-12T01:25:00Z",
+          last_seen_at: "2026-04-12T03:25:00Z",
+          isp: "beelinemixed",
+          asn: 16345,
+          module_name: "Node A",
+          inbound_tag: "TAG-A"
+        },
+        {
+          ip: "128.70.186.177",
+          hit_count: 1,
+          first_seen_at: "2026-04-12T00:55:00Z",
+          last_seen_at: "2026-04-12T00:55:00Z",
+          isp: "beelinemixed",
+          asn: 16345,
+          module_name: "Node B",
+          inbound_tag: "TAG-B"
+        }
+      ],
       module_inventory: [
         {
           module_id: "node-a",
@@ -139,7 +161,7 @@ describe("ReviewDetailPage", () => {
       path: "/reviews/:caseId"
     });
 
-    const reasonTitle = await screen.findByText("provider_marker_missing");
+    const reasonTitle = await screen.findByText("Провайдер без маркера");
     const reasonItem = reasonTitle.closest("li");
 
     expect(document.querySelector(".review-detail-grid")).not.toBeNull();
@@ -148,14 +170,13 @@ describe("ReviewDetailPage", () => {
     expect(reasonItem?.querySelector(".review-detail-item-copy")?.textContent).toContain(
       "Provider beeline matched without service markers"
     );
-    expect(screen.getByText("beelinemixed")).toBeInTheDocument();
+    expect(screen.getAllByText("beelinemixed").length).toBeGreaterThan(0);
     expect(screen.getByText("vimpelcom, vimpel")).toBeInTheDocument();
     expect(screen.getByText("Usage profile")).toBeInTheDocument();
     expect(screen.getByText("IPs 2; providers 2; devices 2")).toBeInTheDocument();
-    expect(screen.getByText("Linked IP inventory")).toBeInTheDocument();
-    expect(screen.getByText("Touched modules")).toBeInTheDocument();
+    expect(screen.getByText("IP and device history")).toBeInTheDocument();
     expect(screen.getByText("128.70.186.177")).toBeInTheDocument();
-    expect(screen.getByText("Node B")).toBeInTheDocument();
+    expect(screen.getAllByText(/Node B/).length).toBeGreaterThan(0);
   });
 
   it("opens the next case from the current queue after resolve", async () => {

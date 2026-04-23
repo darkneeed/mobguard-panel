@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 
 import { hasPermission } from "../app/permissions";
 import {
+  AnalysisEventListResponse,
   api,
   AuditTrailResponse,
   CacheAdminResponse,
@@ -22,11 +23,12 @@ import { useI18n } from "../localization";
 import { downloadBlob } from "../shared/api/request";
 import { ExportsDataSection } from "./data/ExportsDataSection";
 import { AuditTrailSection } from "./data/AuditTrailSection";
+import { EventsDataSection } from "./data/EventsDataSection";
 import { LearningCasesSection } from "./data/LearningCasesSection";
 import { OperationsDataSection } from "./data/OperationsDataSection";
 import { UserDataSection } from "./data/UserDataSection";
 
-type DataTab = "users" | "violations" | "overrides" | "cache" | "learning" | "cases" | "exports" | "audit";
+type DataTab = "users" | "violations" | "overrides" | "cache" | "learning" | "cases" | "events" | "exports" | "audit";
 type PendingKey =
   | "userSearch"
   | "userLoad"
@@ -45,6 +47,7 @@ const DATA_TABS: DataTab[] = [
   "cache",
   "learning",
   "cases",
+  "events",
   "exports",
   "audit"
 ];
@@ -74,8 +77,21 @@ export function DataPage({ session }: { session?: Session }) {
   const [cache, setCache] = useState<CacheAdminResponse | null>(null);
   const [learning, setLearning] = useState<LearningAdminResponse | null>(null);
   const [cases, setCases] = useState<ReviewListResponse | null>(null);
+  const [events, setEvents] = useState<AnalysisEventListResponse | null>(null);
   const [audit, setAudit] = useState<AuditTrailResponse | null>(null);
   const canWriteData = hasPermission(session, "data.write");
+  const [eventFilters, setEventFilters] = useState({
+    q: "",
+    ip: "",
+    device_id: "",
+    module_id: "",
+    tag: "",
+    provider: "",
+    asn: "",
+    verdict: "",
+    confidence_band: "",
+    has_review_case: ""
+  });
 
   const [exactOverrideIp, setExactOverrideIp] = useState("");
   const [exactOverrideDecision, setExactOverrideDecision] = useState("HOME");
@@ -180,6 +196,9 @@ export function DataPage({ session }: { session?: Session }) {
         } else if (tab === "cases") {
           const payload = await api.listCases({ page: 1, page_size: 50 });
           if (!cancelled) setCases(payload);
+        } else if (tab === "events") {
+          const payload = await api.getAnalysisEvents({ ...eventFilters, page: 1, page_size: 50, sort: "created_desc" });
+          if (!cancelled) setEvents(payload);
         } else if (tab === "audit") {
           const payload = await api.getAuditTrail();
           if (!cancelled) setAudit(payload);
@@ -195,7 +214,7 @@ export function DataPage({ session }: { session?: Session }) {
     return () => {
       cancelled = true;
     };
-  }, [tab, t]);
+  }, [eventFilters, tab, t]);
 
   useEffect(() => {
     if (tab !== "exports") return undefined;
@@ -450,6 +469,15 @@ export function DataPage({ session }: { session?: Session }) {
           canWriteData={canWriteData}
           setLearning={setLearning}
           pushToast={pushToast}
+        />
+      ) : null}
+      {tab === "events" ? (
+        <EventsDataSection
+          t={t}
+          language={language}
+          events={events}
+          filters={eventFilters}
+          setFilters={(updater) => setEventFilters((prev) => updater(prev))}
         />
       ) : null}
       {tab === "exports" ? (

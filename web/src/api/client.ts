@@ -5,6 +5,8 @@ import { settingsApi } from "../features/settings/api/client";
 
 export type {
   AuditEvent,
+  AnalysisEventItem,
+  AnalysisEventListResponse,
   AuditTrailResponse,
   AuthResult,
   AuthCapabilities,
@@ -32,6 +34,7 @@ export type {
   ReviewListParams,
   ReviewListResponse,
   ReviewModuleInventoryItem,
+  ReviewSameDeviceIpItem,
   ReviewResolution,
   RulesState,
   Session,

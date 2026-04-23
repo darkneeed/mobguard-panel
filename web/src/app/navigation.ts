@@ -53,6 +53,7 @@ export const dataNavigation: NavigationItem[] = [
   { to: "/data/cache", labelKey: "layout.subnav.data.cache", permission: "data.read" },
   { to: "/data/learning", labelKey: "layout.subnav.data.learning", permission: "data.read" },
   { to: "/data/cases", labelKey: "layout.subnav.data.cases", permission: "data.read" },
+  { to: "/data/events", labelKey: "layout.subnav.data.events", permission: "data.read" },
   { to: "/data/exports", labelKey: "layout.subnav.data.exports", permission: "data.read" },
   { to: "/data/audit", labelKey: "layout.subnav.data.audit", permission: "audit.read" }
 ];

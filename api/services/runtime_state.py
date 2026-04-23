@@ -360,6 +360,16 @@ def _parse_optional_json(raw: Any, fallback: Any) -> Any:
         return fallback
 
 
+def _coerce_datetime_filter(value: Any, *, end_of_day: bool = False) -> str:
+    raw = str(value or "").strip()
+    if not raw:
+        return ""
+    if len(raw) == 10:
+        suffix = "T23:59:59" if end_of_day else "T00:00:00"
+        return f"{raw}{suffix}"
+    return raw
+
+
 def _analysis_event_select(conn: Any, store: Any) -> str:
     analysis_event_columns = {
         row["name"] for row in conn.execute("PRAGMA table_info(analysis_events)").fetchall()
@@ -375,7 +385,20 @@ def _analysis_event_select(conn: Any, store: Any) -> str:
         "isp",
         "asn",
     ]
-    for optional_column in ("module_id", "module_name"):
+    for optional_column in (
+        "module_id",
+        "module_name",
+        "case_scope_key",
+        "device_scope_key",
+        "scope_type",
+        "client_device_id",
+        "client_device_label",
+        "client_os_family",
+        "client_app_name",
+        "country",
+        "region",
+        "city",
+    ):
         if optional_column in analysis_event_columns:
             fields.append(optional_column)
         else:
@@ -449,6 +472,15 @@ def _enrich_analysis_event_row(row: dict[str, Any]) -> dict[str, Any]:
         payload["provider_evidence"] = provider_evidence
     else:
         payload["provider_evidence"] = {}
+    payload["inbound_tag"] = payload.get("tag")
+    payload["target_ip"] = payload.get("ip")
+    payload["target_scope_type"] = payload.get("scope_type") or "ip_only"
+    payload["device_display"] = (
+        payload.get("client_device_label")
+        or payload.get("client_os_family")
+        or payload.get("client_device_id")
+        or None
+    )
     return payload
 
 
@@ -551,6 +583,109 @@ def build_user_card(store: Any, identity: dict[str, Any]) -> dict[str, Any]:
             "active_ban": bool(active_ban_count),
             "active_warning": bool(violation and violation["warning_time"]),
         },
+    }
+
+
+def list_analysis_events(store: Any, filters: dict[str, Any]) -> dict[str, Any]:
+    page = max(int(filters.get("page", 1) or 1), 1)
+    page_size = min(max(int(filters.get("page_size", 50) or 50), 1), 200)
+    sort = str(filters.get("sort") or "created_desc").strip().lower()
+    order_by = "ae.created_at ASC" if sort == "created_asc" else "ae.created_at DESC"
+    clauses: list[str] = []
+    params: list[Any] = []
+
+    if filters.get("ip"):
+        clauses.append("ae.ip = ?")
+        params.append(str(filters["ip"]).strip())
+    if filters.get("device_id"):
+        clauses.append("ae.client_device_id = ?")
+        params.append(str(filters["device_id"]).strip())
+    if filters.get("module_id"):
+        clauses.append("ae.module_id = ?")
+        params.append(str(filters["module_id"]).strip())
+    if filters.get("tag"):
+        clauses.append("ae.tag = ?")
+        params.append(str(filters["tag"]).strip())
+    if filters.get("provider"):
+        clauses.append("ae.isp LIKE ?")
+        params.append(f"%{str(filters['provider']).strip()}%")
+    if filters.get("asn") not in (None, ""):
+        clauses.append("ae.asn = ?")
+        params.append(int(filters["asn"]))
+    if filters.get("verdict"):
+        clauses.append("ae.verdict = ?")
+        params.append(str(filters["verdict"]).strip())
+    if filters.get("confidence_band"):
+        clauses.append("ae.confidence_band = ?")
+        params.append(str(filters["confidence_band"]).strip())
+    if filters.get("created_from"):
+        clauses.append("ae.created_at >= ?")
+        params.append(_coerce_datetime_filter(filters["created_from"], end_of_day=False))
+    if filters.get("created_to"):
+        clauses.append("ae.created_at <= ?")
+        params.append(_coerce_datetime_filter(filters["created_to"], end_of_day=True))
+    if filters.get("q"):
+        search = f"%{str(filters['q']).strip()}%"
+        clauses.append(
+            "(ae.ip LIKE ? OR ae.isp LIKE ? OR ae.tag LIKE ? OR ae.module_name LIKE ? OR ae.client_device_id LIKE ? OR ae.client_device_label LIKE ?)"
+        )
+        params.extend([search] * 6)
+    if filters.get("has_review_case") is not None:
+        has_case = str(filters["has_review_case"]).lower() in {"1", "true", "yes"}
+        clauses.append(
+            (
+                "EXISTS (SELECT 1 FROM review_cases rc WHERE rc.case_scope_key = ae.case_scope_key AND rc.status != 'MERGED')"
+                if has_case
+                else "NOT EXISTS (SELECT 1 FROM review_cases rc WHERE rc.case_scope_key = ae.case_scope_key AND rc.status != 'MERGED')"
+            )
+        )
+
+    where_sql = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+    with store._connect() as conn:
+        select_sql = _analysis_event_select(conn, store)
+        count = conn.execute(
+            f"SELECT COUNT(*) AS cnt FROM analysis_events ae {where_sql}",
+            params,
+        ).fetchone()["cnt"]
+        rows = conn.execute(
+            f"""
+            SELECT {select_sql},
+                   EXISTS (
+                       SELECT 1
+                       FROM review_cases rc
+                       WHERE rc.case_scope_key = ae.case_scope_key AND rc.status != 'MERGED'
+                   ) AS has_review_case,
+                   (
+                       SELECT rc.id
+                       FROM review_cases rc
+                       WHERE rc.case_scope_key = ae.case_scope_key AND rc.status != 'MERGED'
+                       ORDER BY CASE rc.status WHEN 'OPEN' THEN 0 ELSE 1 END, rc.updated_at DESC, rc.id DESC
+                       LIMIT 1
+                   ) AS review_case_id,
+                   (
+                       SELECT rc.status
+                       FROM review_cases rc
+                       WHERE rc.case_scope_key = ae.case_scope_key AND rc.status != 'MERGED'
+                       ORDER BY CASE rc.status WHEN 'OPEN' THEN 0 ELSE 1 END, rc.updated_at DESC, rc.id DESC
+                       LIMIT 1
+                   ) AS review_case_status
+            FROM analysis_events ae
+            {where_sql}
+            ORDER BY {order_by}
+            LIMIT ? OFFSET ?
+            """,
+            [*params, page_size, (page - 1) * page_size],
+        ).fetchall()
+
+    items = [_enrich_analysis_event_row(dict(row)) for row in rows]
+    for item in items:
+        review_case_id = item.get("review_case_id")
+        item["review_url"] = store.build_review_url(int(review_case_id)) if review_case_id not in (None, "") else ""
+    return {
+        "items": items,
+        "count": int(count or 0),
+        "page": page,
+        "page_size": page_size,
     }
 
 

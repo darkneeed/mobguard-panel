@@ -7,6 +7,7 @@ import { DataPage } from "./DataPage";
 
 vi.mock("../api/client", () => ({
   api: {
+    getAnalysisEvents: vi.fn(),
     previewCalibration: vi.fn(),
     exportCalibration: vi.fn()
   }
@@ -82,5 +83,56 @@ describe("DataPage exports", () => {
     expect(await screen.findByText("Overall readiness")).toBeInTheDocument();
     expect(screen.getAllByText("80%").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Minimum provider support").length).toBeGreaterThan(0);
+  });
+});
+
+describe("DataPage events", () => {
+  it("loads normalized analysis events and exposes review links", async () => {
+    vi.mocked(api.getAnalysisEvents).mockResolvedValue({
+      items: [
+        {
+          id: 11,
+          created_at: "2026-04-12T08:00:00Z",
+          ip: "1.2.3.4",
+          target_ip: "1.2.3.4",
+          target_scope_type: "ip_device",
+          inbound_tag: "TAG-A",
+          module_name: "Node A",
+          isp: "ISP A",
+          asn: 12345,
+          device_display: "Pixel 8",
+          review_case_id: 77
+        }
+      ],
+      count: 1,
+      page: 1,
+      page_size: 50
+    });
+
+    renderWithProviders(<DataPage />, {
+      route: "/data/events",
+      path: "/data/:section"
+    });
+
+    await waitFor(() => {
+      expect(api.getAnalysisEvents).toHaveBeenCalledWith({
+        q: "",
+        ip: "",
+        device_id: "",
+        module_id: "",
+        tag: "",
+        provider: "",
+        asn: "",
+        verdict: "",
+        confidence_band: "",
+        has_review_case: "",
+        page: 1,
+        page_size: 50,
+        sort: "created_desc"
+      });
+    });
+
+    expect(await screen.findByText("1.2.3.4 · Pixel 8")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Case: #77" })).toHaveAttribute("href", "/reviews/77");
   });
 });

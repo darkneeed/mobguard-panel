@@ -6,7 +6,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from api.services import data_admin as data_admin_service
-from mobguard_platform import AnalysisStore, PlatformStore
+from mobguard_platform import AnalysisStore, DecisionBundle, PlatformStore
 
 
 class DataAdminDomainTests(unittest.TestCase):
@@ -96,6 +96,41 @@ class DataAdminDomainTests(unittest.TestCase):
         self.assertEqual(payload["legacy_provider"][0]["pattern_value"], "mts")
         self.assertEqual(payload["promoted_provider_service_active"][0]["pattern_value"], "mts:home")
         self.assertEqual(payload["promoted_provider_stats"][0]["pattern_value"], "mts")
+
+    def test_analysis_events_facade_filters_and_links_review_cases(self):
+        bundle = DecisionBundle(
+            ip="1.2.3.4",
+            verdict="HOME",
+            confidence_band="PROBABLE_HOME",
+            score=18,
+            asn=12345,
+            isp="ISP A",
+        )
+        event_id = self.store.record_analysis_event(
+            {"uuid": "uuid-1", "username": "alice", "telegramId": "1001", "id": 42, "module_id": "node-a", "module_name": "Node A"},
+            "1.2.3.4",
+            "TAG-A",
+            bundle,
+            observation={"client_device_id": "dev-1", "client_device_label": "Pixel 8"},
+        )
+        self.store.ensure_review_case(
+            {"uuid": "uuid-1", "username": "alice", "telegramId": "1001", "id": 42, "module_id": "node-a", "module_name": "Node A"},
+            "1.2.3.4",
+            "TAG-A",
+            bundle,
+            event_id,
+            "probable_home",
+        )
+
+        payload = data_admin_service.list_analysis_events(
+            self.container,
+            {"device_id": "dev-1", "has_review_case": True, "page": 1, "page_size": 50, "sort": "created_desc"},
+        )
+
+        self.assertEqual(payload["count"], 1)
+        self.assertEqual(payload["items"][0]["client_device_id"], "dev-1")
+        self.assertTrue(payload["items"][0]["has_review_case"])
+        self.assertEqual(payload["items"][0]["review_case_status"], "OPEN")
 
 
 if __name__ == "__main__":

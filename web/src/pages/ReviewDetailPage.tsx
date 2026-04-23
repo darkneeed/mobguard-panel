@@ -6,12 +6,12 @@ import {
   api,
   ReviewDetailResponse,
   ReviewIpInventoryItem,
-  ReviewModuleInventoryItem,
   ReviewResolution,
   Session,
   UsageProfile
 } from "../api/client";
 import { useToast } from "../components/ToastProvider";
+import { describeReasonCode, describeSoftReason } from "../features/reviews/lib/signalBadges";
 import { useI18n } from "../localization";
 import { formatDisplayDateTime } from "../utils/datetime";
 
@@ -199,20 +199,6 @@ export function ReviewDetailPage({ session }: { session?: Session }) {
           ]
         : []
   ) as ReviewIpInventoryItem[];
-  const moduleInventory = (
-    Array.isArray(data?.module_inventory) && data.module_inventory.length > 0
-      ? data.module_inventory
-      : data?.module_id || data?.module_name
-        ? [
-            {
-              module_id: data.module_id || null,
-              module_name: data.module_name || null,
-              first_seen_at: String(data.opened_at || data.updated_at || ""),
-              last_seen_at: String(data.updated_at || data.opened_at || "")
-            }
-          ]
-        : []
-  ) as ReviewModuleInventoryItem[];
   const usageProfile = (data?.usage_profile || undefined) as UsageProfile | undefined;
   const usageTravel = (usageProfile?.travel_flags || {}) as Record<string, unknown>;
   const usageGeo = (usageProfile?.geo_summary || {}) as Record<string, unknown>;
@@ -222,6 +208,14 @@ export function ReviewDetailPage({ session }: { session?: Session }) {
   const impossibleTravel = (Array.isArray(usageTravel.impossible_travel) ? usageTravel.impossible_travel : []) as Array<Record<string, unknown>>;
   const queueIndex = typeof queueState?.reviewQueueCurrentIndex === "number" ? queueState.reviewQueueCurrentIndex : -1;
   const queueCount = queueState?.reviewQueueItemIds?.length || 0;
+  const sameDeviceHistory = Array.isArray(data?.same_device_ip_history) && data.same_device_ip_history.length > 0
+    ? data.same_device_ip_history
+    : ipInventory;
+  const deviceDisplay = formatValue(data?.device_display as string | undefined);
+  const inboundTag = formatValue(((data?.inbound_tag || data?.tag || (sameDeviceHistory[0] as Record<string, unknown> | undefined)?.inbound_tag)) as string | undefined);
+  const providerDisplay = formatValue(((data?.isp || data?.provider_key || sameDeviceHistory[0]?.isp)) as string | undefined);
+  const primaryIp = formatValue((data?.target_ip || data?.ip) as string | undefined);
+  const summaryAsn = formatValue(((data?.asn ?? sameDeviceHistory[0]?.asn) as number | string | undefined));
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -320,18 +314,19 @@ export function ReviewDetailPage({ session }: { session?: Session }) {
                 </div>
               </div>
               <dl className="detail-list">
+                <div><dt>{t("reviewDetail.fields.ip")}</dt><dd>{primaryIp}</dd></div>
+                <div><dt>{t("reviewDetail.fields.device")}</dt><dd>{deviceDisplay}</dd></div>
+                <div><dt>{t("reviewDetail.fields.isp")}</dt><dd>{providerDisplay}</dd></div>
+                <div><dt>{t("reviewDetail.fields.asn")}</dt><dd>{summaryAsn}</dd></div>
+                <div><dt>{t("reviewDetail.fields.tag")}</dt><dd>{inboundTag}</dd></div>
+                <div><dt>{t("reviewDetail.fields.verdict")}</dt><dd>{formatValue(data.verdict as string | undefined)}</dd></div>
+                <div><dt>{t("reviewDetail.fields.confidence")}</dt><dd>{formatValue(data.confidence_band as string | undefined)}</dd></div>
+                <div><dt>{t("reviewDetail.fields.opened")}</dt><dd>{formatDisplayDateTime(data.opened_at as string | undefined, t("common.notAvailable"), language)}</dd></div>
+                <div><dt>{t("reviewDetail.fields.updated")}</dt><dd>{formatDisplayDateTime(data.updated_at as string | undefined, t("common.notAvailable"), language)}</dd></div>
                 <div><dt>{t("reviewDetail.fields.username")}</dt><dd>{formatValue(data.username as string | null | undefined)}</dd></div>
                 <div><dt>{t("reviewDetail.fields.systemId")}</dt><dd>{formatValue(data.system_id as number | null | undefined)}</dd></div>
                 <div><dt>{t("reviewDetail.fields.telegramId")}</dt><dd>{formatValue(data.telegram_id as string | null | undefined)}</dd></div>
                 <div><dt>{t("reviewDetail.fields.uuid")}</dt><dd>{formatValue(data.uuid as string | null | undefined)}</dd></div>
-                <div><dt>{t("reviewDetail.fields.ip")}</dt><dd>{formatValue(data.ip as string | undefined)}</dd></div>
-                <div><dt>{t("reviewDetail.fields.tag")}</dt><dd>{formatValue(data.tag as string | undefined)}</dd></div>
-                <div><dt>{t("reviewDetail.fields.verdict")}</dt><dd>{formatValue(data.verdict as string | undefined)}</dd></div>
-                <div><dt>{t("reviewDetail.fields.confidence")}</dt><dd>{formatValue(data.confidence_band as string | undefined)}</dd></div>
-                <div><dt>{t("reviewDetail.fields.punitive")}</dt><dd>{Number(data.punitive_eligible || 0) ? t("common.yes") : t("common.no")}</dd></div>
-                <div><dt>{t("reviewDetail.fields.opened")}</dt><dd>{formatDisplayDateTime(data.opened_at as string | undefined, t("common.notAvailable"), language)}</dd></div>
-                <div><dt>{t("reviewDetail.fields.updated")}</dt><dd>{formatDisplayDateTime(data.updated_at as string | undefined, t("common.notAvailable"), language)}</dd></div>
-                <div><dt>{t("reviewDetail.fields.isp")}</dt><dd>{formatValue(data.isp as string | undefined)}</dd></div>
                 <div><dt>{t("reviewDetail.fields.reviewUrl")}</dt><dd>{formatValue(data.review_url as string | undefined)}</dd></div>
               </dl>
             </div>
@@ -347,10 +342,15 @@ export function ReviewDetailPage({ session }: { session?: Session }) {
                   ) : null}
                   {reasons.map((reason, index) => (
                     <li className="review-detail-item" key={`${String(reason.code)}-${index}`}>
-                      <strong className="review-detail-item-title">{formatValue(reason.code)}</strong>
+                      <strong
+                        className="review-detail-item-title"
+                        title={describeReasonCode(String(reason.code || "")).description}
+                      >
+                        {describeReasonCode(String(reason.code || "")).label}
+                      </strong>
                       <span className="review-detail-item-copy">{formatValue(reason.message)}</span>
                       <span className="review-detail-item-meta">
-                        {formatValue(reason.source)} · {formatValue(reason.direction)} · {formatValue(reason.weight)}
+                        {formatValue(reason.code)} · {formatValue(reason.source)} · {formatValue(reason.direction)} · {formatValue(reason.weight)}
                       </span>
                     </li>
                   ))}
@@ -424,12 +424,12 @@ export function ReviewDetailPage({ session }: { session?: Session }) {
               <div className="panel">
                 <h2>{t("reviewDetail.sections.ipInventory")}</h2>
                 <ul className="reason-list review-detail-list">
-                  {ipInventory.length === 0 ? (
+                  {sameDeviceHistory.length === 0 ? (
                     <li className="review-detail-item review-detail-item-empty">
                       <span className="review-detail-item-meta">{t("common.notAvailable")}</span>
                     </li>
                   ) : null}
-                  {ipInventory.map((item) => (
+                  {sameDeviceHistory.map((item) => (
                     <li className="review-detail-item" key={`${item.ip}-${item.last_seen_at}`}>
                       <strong className="review-detail-item-title">{item.ip}</strong>
                       <span className="review-detail-item-copy">
@@ -440,45 +440,18 @@ export function ReviewDetailPage({ session }: { session?: Session }) {
                         })}
                       </span>
                       <span className="review-detail-item-meta">
+                        {formatValue(((item as Record<string, unknown>).module_name || (item as Record<string, unknown>).module_id) as string | number | null | undefined)} · {formatValue((item as Record<string, unknown>).inbound_tag as string | number | null | undefined)}
+                      </span>
+                      <span className="review-detail-item-meta">
+                        {formatValue((item as Record<string, unknown>).city as string | number | null | undefined)} · {formatValue((item as Record<string, unknown>).country as string | number | null | undefined)}
+                      </span>
+                      <span className="review-detail-item-meta">
                         {t("reviewDetail.ipInventory.firstSeen", {
                           value: formatDisplayDateTime(item.first_seen_at, t("common.notAvailable"), language)
                         })}
                       </span>
                       <span className="review-detail-item-meta">
                         {t("reviewDetail.ipInventory.lastSeen", {
-                          value: formatDisplayDateTime(item.last_seen_at, t("common.notAvailable"), language)
-                        })}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-
-              <div className="panel">
-                <h2>{t("reviewDetail.sections.moduleInventory")}</h2>
-                <ul className="reason-list review-detail-list">
-                  {moduleInventory.length === 0 ? (
-                    <li className="review-detail-item review-detail-item-empty">
-                      <span className="review-detail-item-meta">{t("common.notAvailable")}</span>
-                    </li>
-                  ) : null}
-                  {moduleInventory.map((item, index) => (
-                    <li className="review-detail-item" key={`${String(item.module_id || item.module_name || index)}-${item.last_seen_at}`}>
-                      <strong className="review-detail-item-title">
-                        {formatValue(item.module_name || item.module_id)}
-                      </strong>
-                      <span className="review-detail-item-copy">
-                        {t("reviewDetail.moduleInventory.moduleId", {
-                          value: formatValue(item.module_id)
-                        })}
-                      </span>
-                      <span className="review-detail-item-meta">
-                        {t("reviewDetail.moduleInventory.firstSeen", {
-                          value: formatDisplayDateTime(item.first_seen_at, t("common.notAvailable"), language)
-                        })}
-                      </span>
-                      <span className="review-detail-item-meta">
-                        {t("reviewDetail.moduleInventory.lastSeen", {
                           value: formatDisplayDateTime(item.last_seen_at, t("common.notAvailable"), language)
                         })}
                       </span>
@@ -515,7 +488,7 @@ export function ReviewDetailPage({ session }: { session?: Session }) {
                     <strong className="review-detail-item-title">{t("reviewDetail.usageProfile.nodes")}</strong>
                     <span className="review-detail-item-copy">{formatList(usageProfile?.nodes)}</span>
                     <span className="review-detail-item-meta">
-                      {t("reviewDetail.usageProfile.softReasons")} · {formatList(usageProfile?.soft_reasons)}
+                      {t("reviewDetail.usageProfile.softReasons")} · {(usageProfile?.soft_reasons || []).map((code) => describeSoftReason(String(code)).label).join(", ") || t("common.notAvailable")}
                     </span>
                   </li>
                   <li className="review-detail-item">
@@ -656,7 +629,7 @@ export function ReviewDetailPage({ session }: { session?: Session }) {
           <aside className="detail-sidebar">
             <div className="panel detail-sticky">
               <h2>{t("reviewDetail.sections.resolution")}</h2>
-              <p className="muted">{t("reviewDetail.resolutionHint")}</p>
+              <p className="muted">{t("reviewDetail.resolutionHint", { ip: primaryIp })}</p>
               <textarea
                 className="note-box"
                 placeholder={t("reviewDetail.resolution.placeholder")}

@@ -45,7 +45,7 @@ from .runtime import (
     normalize_runtime_bound_settings,
     resolve_runtime_dir,
 )
-from .store import PlatformStore, validate_live_rules_patch
+from .store import PlatformStore, ReadSnapshotUnavailableError, validate_live_rules_patch
 
 __all__ = [
     "apply_remote_access_state",
@@ -72,6 +72,7 @@ __all__ = [
     "ensure_runtime_layout",
     "normalize_runtime_bound_settings",
     "PlatformStore",
+    "ReadSnapshotUnavailableError",
     "ReviewCaseSummary",
     "RuntimeContext",
     "RuntimeRuleView",

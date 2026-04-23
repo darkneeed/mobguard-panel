@@ -95,7 +95,11 @@ def admin_list_modules(
     _: dict[str, Any] = Depends(require_permission(PERMISSION_MODULES_READ)),
     container=Depends(get_container),
 ) -> dict[str, Any]:
-    return module_service.list_modules(container)
+    try:
+        return module_service.list_modules(container)
+    except ValueError as exc:
+        status_code = 503 if "temporarily unavailable" in str(exc).lower() else 400
+        raise HTTPException(status_code=status_code, detail=str(exc)) from exc
 
 
 @router.post("/admin/modules")

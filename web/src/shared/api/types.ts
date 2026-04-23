@@ -55,14 +55,25 @@ export type ReviewItem = {
   status: string;
   review_reason: string;
   subject_key?: string;
+  case_scope_key?: string;
+  device_scope_key?: string;
+  scope_type?: "ip_device" | "ip_only";
   module_id: string | null;
   module_name: string | null;
+  client_device_id?: string | null;
+  client_device_label?: string | null;
+  client_os_family?: string | null;
+  client_app_name?: string | null;
   uuid: string | null;
   username: string | null;
   system_id: number | null;
   telegram_id: string | null;
   ip: string;
   tag: string | null;
+  inbound_tag?: string | null;
+  target_ip?: string | null;
+  target_scope_type?: "ip_device" | "ip_only";
+  device_display?: string | null;
   verdict: string;
   confidence_band: string;
   score: number;
@@ -73,6 +84,7 @@ export type ReviewItem = {
   repeat_count: number;
   reason_codes: string[];
   ip_inventory?: ReviewIpInventoryItem[];
+  same_device_ip_history?: ReviewSameDeviceIpItem[];
   distinct_ip_count?: number;
   module_inventory?: ReviewModuleInventoryItem[];
   module_count?: number;
@@ -87,6 +99,7 @@ export type ReviewItem = {
   usage_profile_soft_reasons?: string[];
   usage_profile_ongoing_duration_seconds?: number | null;
   usage_profile_ongoing_duration_text?: string;
+  last_repeat_at?: string | null;
   opened_at: string;
   updated_at: string;
   review_url: string;
@@ -106,6 +119,21 @@ export type ReviewIpInventoryItem = {
   last_seen_at: string;
   isp?: string | null;
   asn?: number | null;
+};
+
+export type ReviewSameDeviceIpItem = {
+  ip: string;
+  hit_count: number;
+  first_seen_at: string;
+  last_seen_at: string;
+  isp?: string | null;
+  asn?: number | null;
+  country?: string | null;
+  region?: string | null;
+  city?: string | null;
+  module_id?: string | null;
+  module_name?: string | null;
+  inbound_tag?: string | null;
 };
 
 export type ReviewModuleInventoryItem = {
@@ -288,6 +316,48 @@ export type ReviewDetailResponse = Partial<ReviewItem> & {
   resolutions?: ReviewResolution[];
   related_cases?: Array<Record<string, unknown>>;
   usage_profile?: UsageProfile;
+};
+
+export type AnalysisEventItem = {
+  id: number;
+  created_at: string;
+  ip: string;
+  tag?: string | null;
+  inbound_tag?: string | null;
+  target_ip?: string | null;
+  target_scope_type?: "ip_device" | "ip_only";
+  case_scope_key?: string | null;
+  device_scope_key?: string | null;
+  verdict: string;
+  confidence_band: string;
+  score: number;
+  isp?: string | null;
+  asn?: number | null;
+  module_id?: string | null;
+  module_name?: string | null;
+  client_device_id?: string | null;
+  client_device_label?: string | null;
+  client_os_family?: string | null;
+  client_app_name?: string | null;
+  device_display?: string | null;
+  country?: string | null;
+  region?: string | null;
+  city?: string | null;
+  provider_evidence?: Record<string, unknown>;
+  reasons?: Array<Record<string, unknown>>;
+  signal_flags?: Record<string, unknown>;
+  bundle?: Record<string, unknown> | null;
+  has_review_case?: boolean;
+  review_case_id?: number | null;
+  review_case_status?: string | null;
+  review_url?: string;
+};
+
+export type AnalysisEventListResponse = {
+  items: AnalysisEventItem[];
+  count: number;
+  page: number;
+  page_size: number;
 };
 
 export type OverviewMetricsResponse = {

@@ -268,6 +268,51 @@ class UsageProfileTests(unittest.TestCase):
         self.assertIn("traffic_burst", snapshot["soft_reasons"])
         self.assertIn("traffic", snapshot["usage_profile_summary"])
 
+    def test_snapshot_can_be_device_scoped_to_avoid_cross_device_travel_noise(self):
+        self._record_event(
+            "2026-04-11T10:00:00",
+            "1.1.1.1",
+            "Provider RU",
+            "node-a",
+            "Node A",
+            country="RU",
+            region="Moscow",
+            city="Moscow",
+            loc="55.7558,37.6176",
+            device_id="ios-1",
+            device_label="iPhone 15",
+            os_family="iOS",
+        )
+        self._record_event(
+            "2026-04-11T10:30:00",
+            "2.2.2.2",
+            "Provider DE",
+            "node-b",
+            "Node B",
+            country="DE",
+            region="Berlin",
+            city="Berlin",
+            loc="52.5200,13.4050",
+            device_id="and-1",
+            device_label="Pixel 8",
+            os_family="Android",
+        )
+
+        user_snapshot = build_usage_profile_snapshot(
+            self.store,
+            {"uuid": "uuid-1", "username": "alice", "system_id": 42, "telegram_id": "1001"},
+        )
+        device_snapshot = build_usage_profile_snapshot(
+            self.store,
+            {"uuid": "uuid-1", "username": "alice", "system_id": 42, "telegram_id": "1001"},
+            device_scope_key="device:ios-1",
+        )
+
+        self.assertTrue(user_snapshot["travel_flags"]["geo_country_jump"])
+        self.assertFalse(device_snapshot["travel_flags"]["geo_country_jump"])
+        self.assertEqual(device_snapshot["ip_count"], 1)
+        self.assertEqual(device_snapshot["device_count"], 1)
+
 
 if __name__ == "__main__":
     unittest.main()

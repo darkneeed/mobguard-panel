@@ -1,5 +1,6 @@
 import { buildSearchParams, request, requestBlob } from "../../../shared/api/request";
 import {
+  AnalysisEventListResponse,
   AuditTrailResponse,
   CacheAdminResponse,
   CalibrationExportPreview,
@@ -105,6 +106,8 @@ export const dataApi = {
     request<CalibrationExportPreview>(`/admin/data/exports/calibration/preview?${buildSearchParams(params)}`),
   listCases: (params: ReviewListParams) =>
     request<ReviewListResponse>(`/admin/data/cases?${buildSearchParams(params)}`),
+  getAnalysisEvents: (params: Record<string, string | number | boolean | undefined>) =>
+    request<AnalysisEventListResponse>(`/admin/data/events?${buildSearchParams(params)}`),
   getQuality: (params: Record<string, string | number | boolean | undefined> = {}) =>
     request<Record<string, unknown>>(`/admin/metrics/quality?${buildSearchParams(params)}`),
   getOverview: () => request<OverviewMetricsResponse>("/admin/metrics/overview"),

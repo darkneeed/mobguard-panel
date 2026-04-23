@@ -473,6 +473,48 @@ def list_cases(
     )
 
 
+@router.get("/events")
+def list_analysis_events(
+    ip: Optional[str] = None,
+    device_id: Optional[str] = None,
+    module_id: Optional[str] = None,
+    tag: Optional[str] = None,
+    provider: Optional[str] = None,
+    asn: Optional[int] = None,
+    verdict: Optional[str] = None,
+    confidence_band: Optional[str] = None,
+    created_from: Optional[str] = None,
+    created_to: Optional[str] = None,
+    has_review_case: Optional[bool] = None,
+    q: Optional[str] = None,
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=50, ge=1, le=200),
+    sort: str = Query(default="created_desc"),
+    _: dict[str, Any] = Depends(require_permission(PERMISSION_DATA_READ)),
+    container=Depends(get_container),
+) -> dict[str, Any]:
+    return data_service.list_analysis_events(
+        container,
+        {
+            "ip": ip,
+            "device_id": device_id,
+            "module_id": module_id,
+            "tag": tag,
+            "provider": provider,
+            "asn": asn,
+            "verdict": verdict,
+            "confidence_band": confidence_band,
+            "created_from": created_from,
+            "created_to": created_to,
+            "has_review_case": has_review_case,
+            "q": q,
+            "page": page,
+            "page_size": page_size,
+            "sort": sort,
+        },
+    )
+
+
 @router.get("/audit")
 def list_audit(
     limit: int = Query(default=100, ge=1, le=500),

@@ -48,6 +48,8 @@ def get_review(container: Any, case_id: int) -> dict[str, Any]:
             identity,
             panel_user=remote_user,
             anchor_started_at=payload.get("opened_at"),
+            device_scope_key=str(payload.get("device_scope_key") or ""),
+            case_scope_key=str(payload.get("case_scope_key") or ""),
         )
         return payload
     except KeyError as exc:

@@ -39,7 +39,7 @@ class ServiceHealthRepository(SQLiteRepository):
             conn.commit()
 
     def get_heartbeat(self, service_name: str, stale_after_seconds: int = 60) -> dict[str, Any]:
-        with self.connect() as conn:
+        with self.storage.connect() as conn:
             row = conn.execute(
                 "SELECT service_name, status, details_json, updated_at FROM service_heartbeats WHERE service_name = ?",
                 (service_name,),
@@ -62,25 +62,28 @@ class ServiceHealthRepository(SQLiteRepository):
         *,
         live_rules_state_loader: Callable[[], dict[str, Any]],
         core_service_name: str = "mobguard-core",
+        timeout: float | None = None,
+        busy_timeout_ms: int | None = None,
     ) -> dict[str, Any]:
         live_rules_state = live_rules_state_loader()
-        core_heartbeat = self.get_heartbeat(core_service_name)
-        if core_heartbeat["status"] == "missing":
-            core_snapshot = {
-                "service_name": core_service_name,
-                "healthy": True,
-                "status": "embedded",
-                "mode": "embedded",
-                "updated_at": utcnow(),
-                "age_seconds": 0,
-                "details": {
-                    "runtime": "mobguard-api",
-                    "note": "scoring runtime is embedded in the panel API process",
-                },
-            }
-        else:
-            core_snapshot = {**core_heartbeat, "mode": "heartbeat"}
-        with self.connect() as conn:
+        with self.storage.connect(timeout=timeout, busy_timeout_ms=busy_timeout_ms) as conn:
+            row = conn.execute(
+                "SELECT service_name, status, details_json, updated_at FROM service_heartbeats WHERE service_name = ?",
+                (core_service_name,),
+            ).fetchone()
+            if not row:
+                core_heartbeat = {"service_name": core_service_name, "healthy": False, "status": "missing", "updated_at": ""}
+            else:
+                updated_at = datetime.fromisoformat(row["updated_at"])
+                age = (datetime.utcnow() - updated_at).total_seconds()
+                core_heartbeat = {
+                    "service_name": row["service_name"],
+                    "healthy": age <= 60 and row["status"] == "ok",
+                    "status": row["status"],
+                    "updated_at": row["updated_at"],
+                    "age_seconds": int(age),
+                    "details": json.loads(row["details_json"]),
+                }
             conn.execute("SELECT 1").fetchone()
             admin_sessions = conn.execute(
                 "SELECT COUNT(*) AS cnt FROM admin_sessions WHERE expires_at > ?",
@@ -97,6 +100,21 @@ class ServiceHealthRepository(SQLiteRepository):
                 """,
                 ((datetime.utcnow() - timedelta(hours=24)).replace(microsecond=0).isoformat(),),
             ).fetchone()
+        if core_heartbeat["status"] == "missing":
+            core_snapshot = {
+                "service_name": core_service_name,
+                "healthy": True,
+                "status": "embedded",
+                "mode": "embedded",
+                "updated_at": utcnow(),
+                "age_seconds": 0,
+                "details": {
+                    "runtime": "mobguard-api",
+                    "note": "scoring runtime is embedded in the panel API process",
+                },
+            }
+        else:
+            core_snapshot = {**core_heartbeat, "mode": "heartbeat"}
         total = int(analysis_stats["total"] or 0)
         score_zero_count = int(analysis_stats["score_zero_count"] or 0)
         asn_missing_count = int(analysis_stats["asn_missing_count"] or 0)

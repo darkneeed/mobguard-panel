@@ -153,7 +153,16 @@ def normalize_usage_observation(
     return {key: value for key, value in normalized.items() if value not in (None, "")}
 
 
-def _identity_lookup(identity: Mapping[str, Any] | None) -> tuple[str, list[Any]]:
+def _identity_lookup(
+    identity: Mapping[str, Any] | None,
+    *,
+    device_scope_key: str | None = None,
+    case_scope_key: str | None = None,
+) -> tuple[str, list[Any]]:
+    if device_scope_key:
+        return "device_scope_key = ?", [str(device_scope_key)]
+    if case_scope_key:
+        return "case_scope_key = ?", [str(case_scope_key)]
     source = identity or {}
     clauses: list[str] = []
     params: list[Any] = []
@@ -600,8 +609,14 @@ def build_usage_profile_snapshot(
     anchor_started_at: str | None = None,
     event_limit: int = DEFAULT_EVENT_LIMIT,
     lookback_days: int = DEFAULT_LOOKBACK_DAYS,
+    device_scope_key: str | None = None,
+    case_scope_key: str | None = None,
 ) -> dict[str, Any]:
-    lookup_clause, lookup_params = _identity_lookup(identity)
+    lookup_clause, lookup_params = _identity_lookup(
+        identity,
+        device_scope_key=device_scope_key,
+        case_scope_key=case_scope_key,
+    )
     if not lookup_clause:
         return {
             "available": False,

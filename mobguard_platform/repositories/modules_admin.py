@@ -117,6 +117,31 @@ def _module_health_snapshot(
 
 
 class ModuleAdminRepository(SQLiteRepository):
+    def _backfill_module_name(self, conn, module_id: str, module_name: str) -> None:
+        normalized_id = str(module_id or "").strip()
+        normalized_name = str(module_name or "").strip()
+        if not normalized_id or not normalized_name:
+            return
+        conn.execute(
+            "UPDATE modules SET module_name = ? WHERE module_id = ?",
+            (normalized_name, normalized_id),
+        )
+        if self.storage.table_exists(conn, "analysis_events"):
+            conn.execute(
+                "UPDATE analysis_events SET module_name = ? WHERE module_id = ?",
+                (normalized_name, normalized_id),
+            )
+        if self.storage.table_exists(conn, "review_cases"):
+            conn.execute(
+                "UPDATE review_cases SET module_name = ? WHERE module_id = ?",
+                (normalized_name, normalized_id),
+            )
+        if self.storage.table_exists(conn, "review_case_modules"):
+            conn.execute(
+                "UPDATE review_case_modules SET module_name = ? WHERE module_id = ?",
+                (normalized_name, normalized_id),
+            )
+
     def get_module(self, module_id: str) -> Optional[dict[str, Any]]:
         with self.connect() as conn:
             row = conn.execute(
@@ -179,6 +204,7 @@ class ModuleAdminRepository(SQLiteRepository):
                     metadata_json,
                 ),
             )
+            self._backfill_module_name(conn, normalized_id, normalized_name)
             conn.commit()
         module = self.get_module(normalized_id)
         if not module:
@@ -212,6 +238,7 @@ class ModuleAdminRepository(SQLiteRepository):
                 """,
                 (normalized_name, metadata_json, normalized_id),
             )
+            self._backfill_module_name(conn, normalized_id, normalized_name)
             conn.commit()
         module = self.get_module(normalized_id)
         if not module:
@@ -279,6 +306,11 @@ class ModuleAdminRepository(SQLiteRepository):
                         normalized_id,
                     ),
                 )
+                self._backfill_module_name(
+                    conn,
+                    normalized_id,
+                    normalized_name or str(existing["module_name"] or normalized_id).strip() or normalized_id,
+                )
             else:
                 if not auto_create:
                     raise ValueError("Module is not registered")
@@ -302,6 +334,7 @@ class ModuleAdminRepository(SQLiteRepository):
                         metadata_json,
                     ),
                 )
+                self._backfill_module_name(conn, normalized_id, normalized_name or normalized_id)
             conn.commit()
         module = self.get_module(normalized_id)
         if not module:
@@ -381,6 +414,7 @@ class ModuleAdminRepository(SQLiteRepository):
                     normalized_id,
                 ),
             )
+            self._backfill_module_name(conn, normalized_id, str(row["module_name"] or "").strip())
             conn.execute(
                 """
                 INSERT INTO module_heartbeats (
@@ -403,35 +437,54 @@ class ModuleAdminRepository(SQLiteRepository):
             raise ValueError("Module is not registered")
         return module
 
-    def list_modules(self, stale_after_seconds: int = 180) -> list[dict[str, Any]]:
+    def list_modules(
+        self,
+        stale_after_seconds: int = 180,
+        *,
+        include_counters: bool = True,
+        timeout: float | None = None,
+        busy_timeout_ms: int | None = None,
+    ) -> list[dict[str, Any]]:
         now = datetime.utcnow().replace(microsecond=0)
-        with self.connect() as conn:
-            rows = conn.execute(
-                """
-                WITH open_case_counts AS (
-                    SELECT rcm.module_id, COUNT(DISTINCT rcm.case_id) AS open_review_cases
-                    FROM review_case_modules rcm
-                    JOIN review_cases rc ON rc.id = rcm.case_id
-                    WHERE rc.status = 'OPEN'
-                    GROUP BY rcm.module_id
-                ),
-                analysis_counts AS (
-                    SELECT ae.module_id, COUNT(*) AS analysis_events_count
-                    FROM analysis_events ae
-                    GROUP BY ae.module_id
-                )
-                SELECT m.module_id, m.module_name, m.status, m.version, m.protocol_version,
-                       m.config_revision_applied, m.first_seen_at, m.last_seen_at, m.install_state,
-                       m.managed, m.health_status, m.error_text, m.last_validation_at,
-                       m.spool_depth, m.access_log_exists, m.metadata_json,
-                       COALESCE(occ.open_review_cases, 0) AS open_review_cases,
-                       COALESCE(ac.analysis_events_count, 0) AS analysis_events_count
-                FROM modules m
-                LEFT JOIN open_case_counts occ ON occ.module_id = m.module_id
-                LEFT JOIN analysis_counts ac ON ac.module_id = m.module_id
-                ORDER BY m.last_seen_at DESC, m.module_id ASC
-                """
-            ).fetchall()
+        with self.storage.connect(timeout=timeout, busy_timeout_ms=busy_timeout_ms) as conn:
+            if include_counters:
+                rows = conn.execute(
+                    """
+                    WITH open_case_counts AS (
+                        SELECT rcm.module_id, COUNT(DISTINCT rcm.case_id) AS open_review_cases
+                        FROM review_case_modules rcm
+                        JOIN review_cases rc ON rc.id = rcm.case_id
+                        WHERE rc.status = 'OPEN'
+                        GROUP BY rcm.module_id
+                    ),
+                    analysis_counts AS (
+                        SELECT ae.module_id, COUNT(*) AS analysis_events_count
+                        FROM analysis_events ae
+                        GROUP BY ae.module_id
+                    )
+                    SELECT m.module_id, m.module_name, m.status, m.version, m.protocol_version,
+                           m.config_revision_applied, m.first_seen_at, m.last_seen_at, m.install_state,
+                           m.managed, m.health_status, m.error_text, m.last_validation_at,
+                           m.spool_depth, m.access_log_exists, m.metadata_json,
+                           COALESCE(occ.open_review_cases, 0) AS open_review_cases,
+                           COALESCE(ac.analysis_events_count, 0) AS analysis_events_count
+                    FROM modules m
+                    LEFT JOIN open_case_counts occ ON occ.module_id = m.module_id
+                    LEFT JOIN analysis_counts ac ON ac.module_id = m.module_id
+                    ORDER BY m.last_seen_at DESC, m.module_id ASC
+                    """
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    """
+                    SELECT m.module_id, m.module_name, m.status, m.version, m.protocol_version,
+                           m.config_revision_applied, m.first_seen_at, m.last_seen_at, m.install_state,
+                           m.managed, m.health_status, m.error_text, m.last_validation_at,
+                           m.spool_depth, m.access_log_exists, m.metadata_json
+                    FROM modules m
+                    ORDER BY m.last_seen_at DESC, m.module_id ASC
+                    """
+                ).fetchall()
         items: list[dict[str, Any]] = []
         stale_delta = timedelta(seconds=stale_after_seconds)
         for row in rows:
@@ -440,6 +493,9 @@ class ModuleAdminRepository(SQLiteRepository):
             last_seen = datetime.fromisoformat(last_seen_raw) if last_seen_raw else None
             payload = _apply_module_metadata(payload, row["metadata_json"])
             payload["healthy"] = bool(last_seen and now - last_seen <= stale_delta)
+            if not include_counters:
+                payload.setdefault("open_review_cases", 0)
+                payload.setdefault("analysis_events_count", 0)
             items.append(payload)
         return items
 

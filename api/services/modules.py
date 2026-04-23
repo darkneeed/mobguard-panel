@@ -16,6 +16,7 @@ from behavioral_analyzers import BehavioralEngine
 from mobguard_core.scoring import ScoringContext, ScoringDependencies, evaluate_mobile_network
 from mobguard_platform import (
     DecisionBundle,
+    ReadSnapshotUnavailableError,
     apply_remote_access_state,
     apply_remote_traffic_cap,
     build_auto_restriction_state,
@@ -693,11 +694,14 @@ async def ingest_module_events(container: APIContainer, payload: dict[str, Any],
 
 
 def list_modules(container: APIContainer) -> dict[str, Any]:
-    modules = container.store.list_modules()
-    return {
-        "items": modules,
-        "count": len(modules),
-    }
+    try:
+        modules = container.store.list_modules(include_counters=False, fast_read=True)
+        return {
+            "items": modules,
+            "count": len(modules),
+        }
+    except ReadSnapshotUnavailableError as exc:
+        raise ValueError(f"Module list is temporarily unavailable ({exc.reason})") from exc
 
 
 def create_managed_module(container: APIContainer, payload: dict[str, Any]) -> dict[str, Any]:

@@ -3,12 +3,14 @@ from __future__ import annotations
 import json
 import sqlite3
 from datetime import datetime, timedelta
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Mapping, Optional
 
 from ..models import DecisionBundle, ReviewCaseSummary
 from ..review_context import (
+    build_review_scope,
     clean_text,
     coerce_optional_int,
+    device_display_from_identity,
     normalize_review_identity_payload,
     provider_summary_from_signal_flags,
     subject_key_from_identity,
@@ -19,6 +21,9 @@ from ..usage_profile import (
     normalize_usage_observation,
 )
 from .base import SQLiteRepository
+
+
+REPEAT_COUNT_MIN_GAP = timedelta(minutes=5)
 
 
 def _utcnow() -> str:
@@ -56,6 +61,18 @@ def _review_identity(user: Optional[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def _device_fields_from_row(row: Mapping[str, Any] | None) -> dict[str, Any]:
+    payload = dict(row or {})
+    device_display = device_display_from_identity(payload)
+    return {
+        "client_device_id": clean_text(payload.get("client_device_id")) or None,
+        "client_device_label": clean_text(payload.get("client_device_label")) or None,
+        "client_os_family": clean_text(payload.get("client_os_family")) or None,
+        "client_app_name": clean_text(payload.get("client_app_name")) or None,
+        "device_display": device_display or None,
+    }
+
+
 def _normalized_module_id(value: Any) -> str:
     return clean_text(value)
 
@@ -76,6 +93,90 @@ class ReviewAdminRepository(SQLiteRepository):
         self.base_config = base_config
         self.live_rules_loader = live_rules_loader
 
+    def _analysis_event_scope_context(
+        self,
+        conn: sqlite3.Connection,
+        event_id: int,
+        *,
+        fallback_ip: str,
+        fallback_tag: str,
+        fallback_module_id: str | None,
+        fallback_module_name: str | None,
+    ) -> dict[str, Any]:
+        row = conn.execute(
+            """
+            SELECT created_at, ip, tag, module_id, module_name, client_device_id, client_device_label,
+                   client_os_family, client_app_name
+            FROM analysis_events
+            WHERE id = ?
+            """,
+            (event_id,),
+        ).fetchone()
+        payload = dict(row) if row else {}
+        payload["ip"] = clean_text(payload.get("ip")) or clean_text(fallback_ip)
+        payload["tag"] = clean_text(payload.get("tag")) or clean_text(fallback_tag)
+        payload["module_id"] = clean_text(payload.get("module_id")) or clean_text(fallback_module_id)
+        payload["module_name"] = clean_text(payload.get("module_name")) or clean_text(fallback_module_name)
+        scope = build_review_scope(payload, ip=payload["ip"])
+        return {
+            "created_at": clean_text(payload.get("created_at")) or _utcnow(),
+            "ip": payload["ip"],
+            "tag": payload["tag"],
+            "module_id": payload["module_id"] or None,
+            "module_name": payload["module_name"] or None,
+            **scope,
+            **_device_fields_from_row(payload),
+        }
+
+    def _same_device_ip_history(
+        self,
+        conn: sqlite3.Connection,
+        *,
+        device_scope_key: str,
+        limit: int = 8,
+    ) -> list[dict[str, Any]]:
+        normalized_scope = clean_text(device_scope_key)
+        if not normalized_scope:
+            return []
+        rows = conn.execute(
+            """
+            SELECT ip,
+                   COUNT(*) AS hit_count,
+                   MIN(created_at) AS first_seen_at,
+                   MAX(created_at) AS last_seen_at
+            FROM analysis_events
+            WHERE device_scope_key = ?
+            GROUP BY ip
+            ORDER BY MAX(created_at) DESC, ip ASC
+            LIMIT ?
+            """,
+            (normalized_scope, max(int(limit), 1)),
+        ).fetchall()
+        history: list[dict[str, Any]] = []
+        for row in rows:
+            latest = conn.execute(
+                """
+                SELECT isp, asn, country, region, city, module_id, module_name, tag
+                FROM analysis_events
+                WHERE device_scope_key = ? AND ip = ?
+                ORDER BY created_at DESC, id DESC
+                LIMIT 1
+                """,
+                (normalized_scope, str(row["ip"])),
+            ).fetchone()
+            payload = dict(row)
+            latest_payload = dict(latest) if latest else {}
+            payload["isp"] = clean_text(latest_payload.get("isp")) or None
+            payload["asn"] = latest_payload.get("asn")
+            payload["country"] = clean_text(latest_payload.get("country")) or None
+            payload["region"] = clean_text(latest_payload.get("region")) or None
+            payload["city"] = clean_text(latest_payload.get("city")) or None
+            payload["module_id"] = clean_text(latest_payload.get("module_id")) or None
+            payload["module_name"] = clean_text(latest_payload.get("module_name")) or None
+            payload["inbound_tag"] = clean_text(latest_payload.get("tag")) or None
+            history.append(payload)
+        return history
+
     def record_analysis_event(
         self,
         user: Optional[dict[str, Any]],
@@ -94,6 +195,7 @@ class ReviewAdminRepository(SQLiteRepository):
             observation,
             signal_flags=bundle.signal_flags,
         )
+        scope = build_review_scope({**usage_observation, "ip": ip}, ip=ip)
         with self.connect() as conn:
             cursor = conn.execute(
                 """
@@ -103,9 +205,10 @@ class ReviewAdminRepository(SQLiteRepository):
                     country, region, city, loc, latitude, longitude,
                     client_device_id, client_device_label, client_os_family, client_os_version,
                     client_app_name, client_app_version,
+                    case_scope_key, device_scope_key, scope_type,
                     punitive_eligible,
                     reasons_json, signal_flags_json, bundle_json
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     now,
@@ -135,6 +238,9 @@ class ReviewAdminRepository(SQLiteRepository):
                     usage_observation.get("client_os_version"),
                     usage_observation.get("client_app_name"),
                     usage_observation.get("client_app_version"),
+                    scope["case_scope_key"],
+                    scope["device_scope_key"],
+                    scope["scope_type"],
                     int(bundle.punitive_eligible),
                     json.dumps([reason.to_dict() for reason in bundle.reasons], ensure_ascii=False),
                     json.dumps(bundle.signal_flags, ensure_ascii=False),
@@ -372,11 +478,15 @@ class ReviewAdminRepository(SQLiteRepository):
         bundle: DecisionBundle,
         repeat_count: int,
         anchor_started_at: str,
+        device_scope_key: str,
+        case_scope_key: str,
     ) -> dict[str, Any]:
         snapshot = build_usage_profile_snapshot(
             self,
             _review_identity(user),
             anchor_started_at=anchor_started_at,
+            device_scope_key=device_scope_key,
+            case_scope_key=case_scope_key,
         )
         priority = build_usage_profile_priority(
             snapshot,
@@ -402,40 +512,65 @@ class ReviewAdminRepository(SQLiteRepository):
         event_id: int,
         review_reason: str,
     ) -> ReviewCaseSummary:
-        now = _utcnow()
-        module_id = str((user or {}).get("module_id") or "").strip()
-        module_name = str((user or {}).get("module_name") or "").strip() or module_id
-        subject_key = subject_key_from_identity(user, ip=ip)
-        unique_key = f"{subject_key}:{event_id}"
+        fallback_module_id = str((user or {}).get("module_id") or "").strip()
+        fallback_module_name = str((user or {}).get("module_name") or "").strip() or fallback_module_id
         reason_codes = json.dumps(bundle.reason_codes, ensure_ascii=False)
         provider_summary = _provider_summary_payload(bundle)
         with self.connect() as conn:
+            event_context = self._analysis_event_scope_context(
+                conn,
+                event_id,
+                fallback_ip=ip,
+                fallback_tag=tag,
+                fallback_module_id=fallback_module_id,
+                fallback_module_name=fallback_module_name,
+            )
+            subject_key = subject_key_from_identity(user, ip=event_context["ip"])
+            unique_key = f"{event_context['case_scope_key']}:{event_id}"
             existing = conn.execute(
                 """
-                SELECT id, repeat_count, opened_at
+                SELECT id, repeat_count, opened_at, last_repeat_at
                 FROM review_cases
-                WHERE subject_key = ? AND status != 'MERGED'
+                WHERE case_scope_key = ? AND status != 'MERGED'
                 ORDER BY updated_at DESC, id DESC
                 LIMIT 1
                 """,
-                (subject_key,),
+                (event_context["case_scope_key"],),
             ).fetchone()
             if existing:
-                next_repeat_count = int(existing["repeat_count"]) + 1
+                current_repeat_count = max(int(existing["repeat_count"] or 1), 1)
+                repeat_anchor = clean_text(existing["last_repeat_at"] or existing["opened_at"])
+                repeat_anchor_dt = datetime.fromisoformat(repeat_anchor) if repeat_anchor else None
+                event_created_at = clean_text(event_context["created_at"]) or _utcnow()
+                event_created_dt = datetime.fromisoformat(event_created_at) if event_created_at else None
+                increment_repeat = True
+                if repeat_anchor_dt is not None and event_created_dt is not None:
+                    increment_repeat = event_created_dt - repeat_anchor_dt >= REPEAT_COUNT_MIN_GAP
+                next_repeat_count = current_repeat_count + (1 if increment_repeat else 0)
+                last_repeat_at = event_created_at if increment_repeat else repeat_anchor
                 usage_fields = self._usage_profile_fields(
                     user,
                     bundle=bundle,
                     repeat_count=next_repeat_count,
-                    anchor_started_at=str(existing["opened_at"] or now),
+                    anchor_started_at=str(existing["opened_at"] or event_created_at),
+                    device_scope_key=event_context["device_scope_key"],
+                    case_scope_key=event_context["case_scope_key"],
                 )
                 conn.execute(
                     """
                     UPDATE review_cases
                     SET status = 'OPEN',
                         review_reason = ?,
+                        case_scope_key = ?,
+                        device_scope_key = ?,
+                        scope_type = ?,
                         subject_key = ?,
                         module_id = ?,
                         module_name = ?,
+                        client_device_id = ?,
+                        client_device_label = ?,
+                        client_os_family = ?,
+                        client_app_name = ?,
                         username = ?,
                         system_id = ?,
                         telegram_id = ?,
@@ -454,6 +589,7 @@ class ReviewAdminRepository(SQLiteRepository):
                         punitive_eligible = ?,
                         latest_event_id = ?,
                         repeat_count = ?,
+                        last_repeat_at = ?,
                         reason_codes_json = ?,
                         usage_profile_summary = ?,
                         usage_profile_signal_count = ?,
@@ -466,14 +602,21 @@ class ReviewAdminRepository(SQLiteRepository):
                     """,
                     (
                         review_reason,
+                        event_context["case_scope_key"],
+                        event_context["device_scope_key"],
+                        event_context["scope_type"],
                         subject_key,
-                        module_id,
-                        module_name,
+                        event_context["module_id"],
+                        event_context["module_name"],
+                        event_context["client_device_id"],
+                        event_context["client_device_label"],
+                        event_context["client_os_family"],
+                        event_context["client_app_name"],
                         (user or {}).get("username"),
                         coerce_optional_int((user or {}).get("id")),
                         str((user or {}).get("telegramId")) if (user or {}).get("telegramId") is not None else None,
-                        ip,
-                        tag,
+                        event_context["ip"],
+                        event_context["tag"],
                         bundle.verdict,
                         bundle.confidence_band,
                         bundle.score,
@@ -487,6 +630,7 @@ class ReviewAdminRepository(SQLiteRepository):
                         int(bundle.punitive_eligible),
                         event_id,
                         next_repeat_count,
+                        last_repeat_at,
                         reason_codes,
                         usage_fields["usage_profile_summary"],
                         usage_fields["usage_profile_signal_count"],
@@ -494,7 +638,7 @@ class ReviewAdminRepository(SQLiteRepository):
                         usage_fields["usage_profile_soft_reasons_json"],
                         usage_fields["usage_profile_ongoing_duration_seconds"],
                         usage_fields["usage_profile_ongoing_duration_text"],
-                        now,
+                        event_created_at,
                         existing["id"],
                     ),
                 )
@@ -502,46 +646,59 @@ class ReviewAdminRepository(SQLiteRepository):
                 self._attach_case_context(
                     conn,
                     case_id=case_id,
-                    ip=ip,
+                    ip=event_context["ip"],
                     isp=bundle.isp,
                     asn=bundle.asn,
-                    module_id=module_id,
-                    module_name=module_name,
-                    seen_at=now,
+                    module_id=event_context["module_id"],
+                    module_name=event_context["module_name"],
+                    seen_at=event_created_at,
                     hit_increment=1,
-                    first_seen_at=str(existing["opened_at"] or now),
+                    first_seen_at=str(existing["opened_at"] or event_created_at),
                 )
             else:
+                event_created_at = clean_text(event_context["created_at"]) or _utcnow()
                 usage_fields = self._usage_profile_fields(
                     user,
                     bundle=bundle,
                     repeat_count=1,
-                    anchor_started_at=now,
+                    anchor_started_at=event_created_at,
+                    device_scope_key=event_context["device_scope_key"],
+                    case_scope_key=event_context["case_scope_key"],
                 )
                 cursor = conn.execute(
                     """
                     INSERT INTO review_cases (
-                        unique_key, status, review_reason, subject_key, module_id, module_name, uuid, username, system_id, telegram_id, ip, tag,
+                        unique_key, status, review_reason, case_scope_key, device_scope_key, scope_type, subject_key,
+                        module_id, module_name, client_device_id, client_device_label, client_os_family, client_app_name,
+                        uuid, username, system_id, telegram_id, ip, tag,
                         verdict, confidence_band, score, isp, asn, provider_key, provider_classification, provider_service_hint,
                         provider_conflict, provider_review_recommended, punitive_eligible, latest_event_id, repeat_count,
+                        last_repeat_at,
                         reason_codes_json, usage_profile_summary, usage_profile_signal_count, usage_profile_priority,
                         usage_profile_soft_reasons_json, usage_profile_ongoing_duration_seconds, usage_profile_ongoing_duration_text,
                         opened_at, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         unique_key,
                         "OPEN",
                         review_reason,
+                        event_context["case_scope_key"],
+                        event_context["device_scope_key"],
+                        event_context["scope_type"],
                         subject_key,
-                        module_id,
-                        module_name,
+                        event_context["module_id"],
+                        event_context["module_name"],
+                        event_context["client_device_id"],
+                        event_context["client_device_label"],
+                        event_context["client_os_family"],
+                        event_context["client_app_name"],
                         (user or {}).get("uuid"),
                         (user or {}).get("username"),
                         coerce_optional_int((user or {}).get("id")),
                         str((user or {}).get("telegramId")) if (user or {}).get("telegramId") is not None else None,
-                        ip,
-                        tag,
+                        event_context["ip"],
+                        event_context["tag"],
                         bundle.verdict,
                         bundle.confidence_band,
                         bundle.score,
@@ -555,6 +712,7 @@ class ReviewAdminRepository(SQLiteRepository):
                         int(bundle.punitive_eligible),
                         event_id,
                         1,
+                        event_created_at,
                         reason_codes,
                         usage_fields["usage_profile_summary"],
                         usage_fields["usage_profile_signal_count"],
@@ -562,22 +720,22 @@ class ReviewAdminRepository(SQLiteRepository):
                         usage_fields["usage_profile_soft_reasons_json"],
                         usage_fields["usage_profile_ongoing_duration_seconds"],
                         usage_fields["usage_profile_ongoing_duration_text"],
-                        now,
-                        now,
+                        event_created_at,
+                        event_created_at,
                     ),
                 )
                 case_id = int(cursor.lastrowid)
                 self._attach_case_context(
                     conn,
                     case_id=case_id,
-                    ip=ip,
+                    ip=event_context["ip"],
                     isp=bundle.isp,
                     asn=bundle.asn,
-                    module_id=module_id,
-                    module_name=module_name,
-                    seen_at=now,
+                    module_id=event_context["module_id"],
+                    module_name=event_context["module_name"],
+                    seen_at=event_created_at,
                     hit_increment=1,
-                    first_seen_at=now,
+                    first_seen_at=event_created_at,
                 )
             conn.commit()
         summary = self.get_review_case(case_id)
@@ -616,24 +774,41 @@ class ReviewAdminRepository(SQLiteRepository):
         actor_tg_id: Optional[int] = None,
         note: str = "",
     ) -> dict[str, Any]:
-        now = _utcnow()
         reason_codes = json.dumps(bundle.reason_codes, ensure_ascii=False)
+        fallback_module_id = str((user or {}).get("module_id") or "").strip()
+        fallback_module_name = str((user or {}).get("module_name") or "").strip() or fallback_module_id
 
         with self.connect() as conn:
             case_row = conn.execute(
-                "SELECT id, review_reason, repeat_count, opened_at FROM review_cases WHERE id = ?",
+                """
+                SELECT id, review_reason, repeat_count, opened_at, last_repeat_at
+                FROM review_cases
+                WHERE id = ?
+                """,
                 (case_id,),
             ).fetchone()
             if not case_row:
                 raise KeyError(f"Review case {case_id} not found")
         event_id = self.record_analysis_event(user, ip, tag, bundle)
+        with self.connect() as conn:
+            event_context = self._analysis_event_scope_context(
+                conn,
+                event_id,
+                fallback_ip=ip,
+                fallback_tag=tag,
+                fallback_module_id=fallback_module_id,
+                fallback_module_name=fallback_module_name,
+            )
+        event_created_at = clean_text(event_context["created_at"]) or _utcnow()
         usage_fields = self._usage_profile_fields(
             user,
             bundle=bundle,
-            repeat_count=int(case_row["repeat_count"] or 0),
-            anchor_started_at=str(case_row["opened_at"] or now),
+            repeat_count=max(int(case_row["repeat_count"] or 1), 1),
+            anchor_started_at=str(case_row["opened_at"] or event_created_at),
+            device_scope_key=event_context["device_scope_key"],
+            case_scope_key=event_context["case_scope_key"],
         )
-        subject_key = subject_key_from_identity(user, ip=ip)
+        subject_key = subject_key_from_identity(user, ip=event_context["ip"])
         provider_summary = _provider_summary_payload(bundle)
 
         with self.connect() as conn:
@@ -644,9 +819,16 @@ class ReviewAdminRepository(SQLiteRepository):
                 UPDATE review_cases
                 SET status = ?,
                     review_reason = ?,
+                    case_scope_key = ?,
+                    device_scope_key = ?,
+                    scope_type = ?,
                     subject_key = ?,
                     module_id = ?,
                     module_name = ?,
+                    client_device_id = ?,
+                    client_device_label = ?,
+                    client_os_family = ?,
+                    client_app_name = ?,
                     uuid = ?,
                     username = ?,
                     system_id = ?,
@@ -678,15 +860,22 @@ class ReviewAdminRepository(SQLiteRepository):
                 (
                     next_status,
                     stored_review_reason,
+                    event_context["case_scope_key"],
+                    event_context["device_scope_key"],
+                    event_context["scope_type"],
                     subject_key,
-                    str((user or {}).get("module_id") or "").strip(),
-                    str((user or {}).get("module_name") or "").strip() or str((user or {}).get("module_id") or "").strip(),
+                    event_context["module_id"],
+                    event_context["module_name"],
+                    event_context["client_device_id"],
+                    event_context["client_device_label"],
+                    event_context["client_os_family"],
+                    event_context["client_app_name"],
                     (user or {}).get("uuid"),
                     (user or {}).get("username"),
                     coerce_optional_int((user or {}).get("id")),
                     str((user or {}).get("telegramId")) if (user or {}).get("telegramId") is not None else None,
-                    ip,
-                    tag,
+                    event_context["ip"],
+                    event_context["tag"],
                     bundle.verdict,
                     bundle.confidence_band,
                     bundle.score,
@@ -706,7 +895,7 @@ class ReviewAdminRepository(SQLiteRepository):
                     usage_fields["usage_profile_soft_reasons_json"],
                     usage_fields["usage_profile_ongoing_duration_seconds"],
                     usage_fields["usage_profile_ongoing_duration_text"],
-                    now,
+                    event_created_at,
                     case_id,
                 ),
             )
@@ -716,14 +905,14 @@ class ReviewAdminRepository(SQLiteRepository):
                     INSERT INTO review_resolutions (case_id, event_id, resolution, actor, actor_tg_id, note, created_at)
                     VALUES (?, ?, 'SKIP', ?, ?, ?, ?)
                     """,
-                    (case_id, event_id, actor, actor_tg_id, note, now),
+                    (case_id, event_id, actor, actor_tg_id, note, event_created_at),
                 )
                 conn.execute(
                     """
                     DELETE FROM exact_ip_overrides
                     WHERE ip = ? AND source = 'review_resolution'
                     """,
-                    (ip,),
+                    (event_context["ip"],),
                 )
                 conn.execute(
                     """
@@ -735,14 +924,14 @@ class ReviewAdminRepository(SQLiteRepository):
             self._attach_case_context(
                 conn,
                 case_id=case_id,
-                ip=ip,
+                ip=event_context["ip"],
                 isp=bundle.isp,
                 asn=bundle.asn,
-                module_id=str((user or {}).get("module_id") or "").strip(),
-                module_name=str((user or {}).get("module_name") or "").strip() or str((user or {}).get("module_id") or "").strip(),
-                seen_at=now,
+                module_id=event_context["module_id"],
+                module_name=event_context["module_name"],
+                seen_at=event_created_at,
                 hit_increment=1,
-                first_seen_at=str(case_row["opened_at"] or now),
+                first_seen_at=str(case_row["opened_at"] or event_created_at),
             )
             conn.commit()
 
@@ -760,6 +949,10 @@ class ReviewAdminRepository(SQLiteRepository):
             item["usage_profile_soft_reasons"] = json.loads(item.pop("usage_profile_soft_reasons_json"))
         item["provider_conflict"] = bool(item.get("provider_conflict"))
         item["provider_review_recommended"] = bool(item.get("provider_review_recommended"))
+        item["inbound_tag"] = clean_text(item.get("tag")) or None
+        item["target_ip"] = clean_text(item.get("ip")) or None
+        item["target_scope_type"] = clean_text(item.get("scope_type")) or "ip_only"
+        item["device_display"] = device_display_from_identity(item) or None
         item["review_url"] = self.build_review_url(int(item["id"]))
         return item
 
@@ -769,6 +962,10 @@ class ReviewAdminRepository(SQLiteRepository):
             event_payload["reasons"] = json.loads(event_payload.pop("reasons_json"))
             event_payload["signal_flags"] = json.loads(event_payload.pop("signal_flags_json"))
             event_payload["bundle"] = json.loads(event_payload.pop("bundle_json"))
+            event_payload["inbound_tag"] = clean_text(event_payload.get("tag")) or None
+            event_payload["target_ip"] = clean_text(event_payload.get("ip")) or None
+            event_payload["target_scope_type"] = clean_text(event_payload.get("scope_type")) or "ip_only"
+            event_payload["device_display"] = device_display_from_identity(event_payload) or None
         return event_payload
 
     def list_review_cases(self, filters: Optional[dict[str, Any]] = None) -> dict[str, Any]:
@@ -788,12 +985,14 @@ class ReviewAdminRepository(SQLiteRepository):
         }
         order_by = sort_map.get(sort, "updated_at DESC")
         query = [
-            """SELECT id, status, review_reason, subject_key, module_id, module_name, uuid, username, system_id, telegram_id, ip, tag, verdict, confidence_band,
+            """SELECT id, status, review_reason, case_scope_key, device_scope_key, scope_type, subject_key,
+               module_id, module_name, client_device_id, client_device_label, client_os_family, client_app_name,
+               uuid, username, system_id, telegram_id, ip, tag, verdict, confidence_band,
                score, isp, asn, punitive_eligible, repeat_count, reason_codes_json,
                provider_key, provider_classification, provider_service_hint, provider_conflict, provider_review_recommended,
                usage_profile_summary, usage_profile_signal_count, usage_profile_priority,
                usage_profile_soft_reasons_json, usage_profile_ongoing_duration_seconds, usage_profile_ongoing_duration_text,
-               opened_at, updated_at,
+               opened_at, updated_at, last_repeat_at,
                CASE
                    WHEN punitive_eligible = 1 THEN 'critical'
                    WHEN confidence_band = 'HIGH_HOME' THEN 'high'
@@ -864,9 +1063,9 @@ class ReviewAdminRepository(SQLiteRepository):
         if filters.get("q"):
             search = f"%{filters['q']}%"
             clauses.append(
-                "(ip LIKE ? OR username LIKE ? OR isp LIKE ? OR uuid LIKE ? OR telegram_id LIKE ? OR CAST(system_id AS TEXT) LIKE ?)"
+                "(ip LIKE ? OR username LIKE ? OR isp LIKE ? OR uuid LIKE ? OR telegram_id LIKE ? OR CAST(system_id AS TEXT) LIKE ? OR client_device_id LIKE ? OR client_device_label LIKE ?)"
             )
-            params.extend([search] * 6)
+            params.extend([search] * 8)
         if clauses:
             query.append("WHERE " + " AND ".join(clauses))
         where_sql = (" WHERE " + " AND ".join(clauses)) if clauses else ""
@@ -888,6 +1087,12 @@ class ReviewAdminRepository(SQLiteRepository):
                 )
                 for item in items
             ]
+            for item in items:
+                item["same_device_ip_history"] = self._same_device_ip_history(
+                    conn,
+                    device_scope_key=clean_text(item.get("device_scope_key")),
+                    limit=6,
+                )
         return {
             "items": items,
             "count": total,
@@ -900,8 +1105,10 @@ class ReviewAdminRepository(SQLiteRepository):
         *,
         status: str = "OPEN",
         limit: int = 6,
+        timeout: float | None = None,
+        busy_timeout_ms: int | None = None,
     ) -> list[dict[str, Any]]:
-        with self.connect() as conn:
+        with self.storage.connect(timeout=timeout, busy_timeout_ms=busy_timeout_ms) as conn:
             rows = conn.execute(
                 """
                 SELECT id, review_reason, username, uuid, system_id, telegram_id, ip, updated_at
@@ -973,6 +1180,10 @@ class ReviewAdminRepository(SQLiteRepository):
                 ip_inventory=self._case_ip_inventory(conn, [case_id]).get(case_id, []),
                 module_inventory=self._case_module_inventory(conn, [case_id]).get(case_id, []),
             )
+            case["same_device_ip_history"] = self._same_device_ip_history(
+                conn,
+                device_scope_key=clean_text(case.get("device_scope_key")),
+            )
             case["latest_event"] = self._decode_analysis_event_payload(event_row)
             case["resolutions"] = [dict(row) for row in resolutions]
             related_items = [self._hydrate_review_list_item(conn, row) for row in related_cases]
@@ -992,19 +1203,54 @@ class ReviewAdminRepository(SQLiteRepository):
     def backfill_review_subjects_and_contexts(self, conn: sqlite3.Connection) -> None:
         case_rows = conn.execute(
             """
-            SELECT id, subject_key, module_id, module_name, uuid, username, system_id, telegram_id,
-                   ip, isp, asn, opened_at, updated_at, repeat_count
+            SELECT id, subject_key, case_scope_key, device_scope_key, scope_type, client_device_id,
+                   client_device_label, client_os_family, client_app_name, latest_event_id,
+                   module_id, module_name, uuid, username, system_id, telegram_id,
+                   ip, isp, asn, opened_at, updated_at, repeat_count, last_repeat_at
             FROM review_cases
             """
         ).fetchall()
         for row in case_rows:
             payload = dict(row)
             subject_key = subject_key_from_identity(payload, ip=payload.get("ip"))
+            latest_event_id = int(payload.get("latest_event_id") or 0)
+            event_context = self._analysis_event_scope_context(
+                conn,
+                latest_event_id,
+                fallback_ip=clean_text(payload.get("ip")),
+                fallback_tag="",
+                fallback_module_id=clean_text(payload.get("module_id")),
+                fallback_module_name=clean_text(payload.get("module_name")),
+            ) if latest_event_id else build_review_scope(payload, ip=payload.get("ip"))
             if clean_text(payload.get("subject_key")) != subject_key:
                 conn.execute(
                     "UPDATE review_cases SET subject_key = ? WHERE id = ?",
                     (subject_key, int(row["id"])),
                 )
+            conn.execute(
+                """
+                UPDATE review_cases
+                SET case_scope_key = ?,
+                    device_scope_key = ?,
+                    scope_type = ?,
+                    client_device_id = ?,
+                    client_device_label = ?,
+                    client_os_family = ?,
+                    client_app_name = ?,
+                    last_repeat_at = COALESCE(NULLIF(last_repeat_at, ''), updated_at, opened_at)
+                WHERE id = ?
+                """,
+                (
+                    event_context.get("case_scope_key"),
+                    event_context.get("device_scope_key"),
+                    event_context.get("scope_type"),
+                    event_context.get("client_device_id"),
+                    event_context.get("client_device_label"),
+                    event_context.get("client_os_family"),
+                    event_context.get("client_app_name"),
+                    int(row["id"]),
+                ),
+            )
             conn.execute(
                 """
                 INSERT OR IGNORE INTO review_case_ips (
@@ -1037,41 +1283,63 @@ class ReviewAdminRepository(SQLiteRepository):
             )
         event_rows = conn.execute(
             """
-            SELECT id, subject_key, uuid, username, system_id, telegram_id, ip
+            SELECT id, subject_key, case_scope_key, device_scope_key, scope_type,
+                   ip, client_device_id, client_device_label
             FROM analysis_events
             """
         ).fetchall()
         for row in event_rows:
             payload = dict(row)
             subject_key = subject_key_from_identity(payload, ip=payload.get("ip"))
+            scope = build_review_scope(payload, ip=payload.get("ip"))
             if clean_text(payload.get("subject_key")) != subject_key:
                 conn.execute(
                     "UPDATE analysis_events SET subject_key = ? WHERE id = ?",
                     (subject_key, int(row["id"])),
                 )
+            conn.execute(
+                """
+                UPDATE analysis_events
+                SET case_scope_key = ?,
+                    device_scope_key = ?,
+                    scope_type = ?
+                WHERE id = ?
+                """,
+                (
+                    scope.get("case_scope_key"),
+                    scope.get("device_scope_key"),
+                    scope.get("scope_type"),
+                    int(row["id"]),
+                ),
+            )
 
     def collapse_open_subject_duplicates(self, conn: sqlite3.Connection) -> int:
         rows = conn.execute(
             """
-            SELECT id, subject_key, ip, module_id, module_name, repeat_count, opened_at, updated_at,
+            SELECT id, subject_key, case_scope_key, device_scope_key, ip, module_id, module_name,
+                   repeat_count, opened_at, updated_at, last_repeat_at,
                    latest_event_id, verdict, confidence_band, score, isp, asn, punitive_eligible
             FROM review_cases
-            WHERE status = 'OPEN' AND subject_key IS NOT NULL AND subject_key != ''
-            ORDER BY subject_key ASC, updated_at DESC, id DESC
+            WHERE status = 'OPEN' AND case_scope_key IS NOT NULL AND case_scope_key != ''
+            ORDER BY case_scope_key ASC, updated_at DESC, id DESC
             """
         ).fetchall()
         grouped: dict[str, list[sqlite3.Row]] = {}
         for row in rows:
-            grouped.setdefault(str(row["subject_key"]), []).append(row)
+            grouped.setdefault(str(row["case_scope_key"]), []).append(row)
 
         merged_count = 0
-        for subject_key, bucket in grouped.items():
+        for case_scope_key, bucket in grouped.items():
             if len(bucket) < 2:
                 continue
             survivor = bucket[0]
             duplicate_rows = bucket[1:]
             earliest_opened = min(clean_text(row["opened_at"]) or clean_text(row["updated_at"]) for row in bucket)
             total_repeat_count = sum(max(int(row["repeat_count"] or 0), 0) for row in bucket)
+            last_repeat_at = max(
+                clean_text(row["last_repeat_at"] or row["updated_at"] or row["opened_at"])
+                for row in bucket
+            )
             for duplicate in duplicate_rows:
                 duplicate_ip_rows = conn.execute(
                     """
@@ -1116,23 +1384,25 @@ class ReviewAdminRepository(SQLiteRepository):
                     UPDATE review_cases
                     SET status = 'MERGED',
                         review_reason = 'merged_subject_key',
-                        subject_key = ?,
+                        case_scope_key = ?,
                         updated_at = ?
                     WHERE id = ?
                     """,
-                    (subject_key, clean_text(survivor["updated_at"]) or _utcnow(), int(duplicate["id"])),
+                    (case_scope_key, clean_text(survivor["updated_at"]) or _utcnow(), int(duplicate["id"])),
                 )
                 merged_count += 1
             conn.execute(
                 """
                 UPDATE review_cases
                 SET repeat_count = ?,
-                    opened_at = ?
+                    opened_at = ?,
+                    last_repeat_at = ?
                 WHERE id = ?
                 """,
                 (
                     max(total_repeat_count, 1),
                     earliest_opened,
+                    last_repeat_at,
                     int(survivor["id"]),
                 ),
             )

@@ -5,6 +5,7 @@ import { hasPermission } from "../app/permissions";
 import { prefetchRouteModule } from "../app/routeModules";
 import { api, ReviewItem, ReviewListResponse, Session } from "../api/client";
 import { useToast } from "../components/ToastProvider";
+import { describeReasonCode, describeSoftReason } from "../features/reviews/lib/signalBadges";
 import { useI18n } from "../localization";
 import { buildSearchParams } from "../shared/api/request";
 import { formatDisplayDateTime } from "../utils/datetime";
@@ -81,6 +82,13 @@ function normalizeFilters(searchParams: URLSearchParams): ReviewFilters {
 
 function filtersForStorage(filters: ReviewFilters): ReviewFilters {
   return { ...filters, page: 1 };
+}
+
+function compactLocation(item: Record<string, unknown>) {
+  return [item.city, item.country]
+    .map((value) => String(value || "").trim())
+    .filter(Boolean)
+    .join(", ");
 }
 
 export function ReviewQueuePage({ session }: { session?: Session }) {
@@ -633,10 +641,27 @@ export function ReviewQueuePage({ session }: { session?: Session }) {
                       asn: item.asn
                     }
                   ];
-              const moduleInventory = Array.isArray(item.module_inventory) ? item.module_inventory : [];
+              const sameDeviceHistory = Array.isArray(item.same_device_ip_history) && item.same_device_ip_history.length > 0
+                ? item.same_device_ip_history
+                : ipInventory;
               const providerKey = item.provider_key || "";
               const serviceHint = item.provider_service_hint || "unknown";
-              const moduleCount = item.module_count || moduleInventory.length;
+              const primaryIp = item.target_ip || item.ip;
+              const deviceDisplay = item.device_display || (item.target_scope_type === "ip_only"
+                ? t("reviewQueue.card.ipOnlyDevice")
+                : t("common.notAvailable"));
+              const decisionTarget = item.target_scope_type === "ip_device"
+                ? t("reviewQueue.card.ipDeviceScope")
+                : t("reviewQueue.card.ipOnlyScope");
+              const providerDisplay = item.isp || providerKey || t("common.notAvailable");
+              const operatorReasonBadges = item.reason_codes.slice(0, 3).map((code) => ({
+                code,
+                ...describeReasonCode(code)
+              }));
+              const operatorUsageBadges = (item.usage_profile_soft_reasons || []).slice(0, 2).map((code) => ({
+                code,
+                ...describeSoftReason(code)
+              }));
               return (
                 <>
                   <div className="queue-card-top">
@@ -651,84 +676,80 @@ export function ReviewQueuePage({ session }: { session?: Session }) {
                         }
                       />
                     </label>
-                    <strong>{item.username || item.uuid || formatIdentifier(t("reviewQueue.identifiers.user"), item.system_id)}</strong>
+                    <div>
+                      <strong>{primaryIp}</strong>
+                      <div className="muted">{decisionTarget}</div>
+                    </div>
                     <span className={`status-badge status-${item.status.toLowerCase()}`}>{item.status}</span>
                   </div>
                   <div className="queue-card-identifiers">
+                    <strong>{item.username || formatIdentifier(t("reviewQueue.identifiers.user"), item.system_id)}</strong>
                     <span>{formatIdentifier(t("reviewQueue.identifiers.module"), item.module_name || item.module_id)}</span>
+                    <span>{formatIdentifier(t("reviewQueue.identifiers.inbound"), item.inbound_tag || item.tag)}</span>
+                    <span>{formatIdentifier(t("reviewQueue.identifiers.device"), deviceDisplay)}</span>
                     <span>{formatIdentifier(t("reviewQueue.identifiers.system"), item.system_id)}</span>
                     <span>{formatIdentifier(t("reviewQueue.identifiers.telegram"), item.telegram_id)}</span>
-                    <span>{formatIdentifier(t("reviewQueue.identifiers.uuid"), item.uuid)}</span>
                   </div>
                   <div className="queue-card-stack">
-                    <div className="queue-card-meta">
-                      <span>{t("reviewQueue.card.asn")}</span>
-                      <strong>{t("reviewQueue.card.asnValue", { value: item.asn ?? "?" })}</strong>
-                    </div>
                     <div className="queue-card-meta">
                       <span>{t("reviewQueue.card.decision")}</span>
                       <strong>{item.verdict} / {item.confidence_band}</strong>
                     </div>
+                    <div className="queue-card-meta">
+                      <span>{t("reviewQueue.card.providerName")}</span>
+                      <strong>{providerDisplay}</strong>
+                    </div>
+                    <div className="queue-card-meta">
+                      <span>{t("reviewQueue.card.asn")}</span>
+                      <strong>{t("reviewQueue.card.asnValue", { value: item.asn ?? "?" })}</strong>
+                    </div>
                   </div>
-                  <div className="queue-card-meta">
+                  <div className="queue-card-flags">
                     <span className={`tag severity-${item.severity}`}>{item.severity}</span>
-                    <span className={item.punitive_eligible ? "tag punitive" : "tag review-only"}>
-                      {item.punitive_eligible ? t("reviewQueue.card.punitiveEligible") : t("reviewQueue.card.reviewOnly")}
+                    <span className={item.provider_review_recommended ? "tag review-only" : "tag status-resolved"}>
+                      {item.provider_review_recommended ? t("reviewQueue.card.reviewFirst") : t("reviewQueue.card.autoReady")}
                     </span>
+                    <span className="tag">{t("reviewQueue.card.repeat", { count: item.repeat_count })}</span>
                     {typeof item.usage_profile_priority === "number" ? (
                       <span className="tag">{t("reviewQueue.card.priority", { value: item.usage_profile_priority })}</span>
                     ) : null}
-                    {typeof item.usage_profile_signal_count === "number" && item.usage_profile_signal_count > 0 ? (
-                      <span className="tag">{t("reviewQueue.card.usageSignals", { count: item.usage_profile_signal_count })}</span>
-                    ) : null}
-                  </div>
-                  <div className="queue-card-flags">
-                    {providerKey ? <span className="tag queue-flag">{t("reviewQueue.card.provider", { value: providerKey })}</span> : null}
                     {providerKey && serviceHint !== "unknown" ? (
                       <span className={`tag queue-flag queue-flag-${serviceHint}`}>{t("reviewQueue.card.serviceHint", { value: serviceHint })}</span>
                     ) : null}
                     {item.provider_conflict ? <span className="tag severity-high">{t("reviewQueue.card.providerConflict")}</span> : null}
-                    {providerKey ? (
-                      <span className={item.provider_review_recommended ? "tag review-only" : "tag status-resolved"}>
-                        {item.provider_review_recommended
-                          ? t("reviewQueue.card.reviewFirst")
-                          : t("reviewQueue.card.autoReady")}
+                    {operatorReasonBadges.map((badge) => (
+                      <span key={badge.code} className="tag" title={badge.description}>
+                        {badge.label}
                       </span>
-                    ) : null}
-                    {moduleCount > 0 ? <span className="tag queue-flag">{t("reviewQueue.card.moduleCount", { count: moduleCount })}</span> : null}
+                    ))}
+                    {operatorUsageBadges.map((badge) => (
+                      <span key={`usage-${badge.code}`} className="tag" title={badge.description}>
+                        {badge.label}
+                      </span>
+                    ))}
                   </div>
                   <div className="queue-card-inventory">
                     <span className="queue-card-section-label">
-                      {t("reviewQueue.card.ipInventory", { count: item.distinct_ip_count || ipInventory.length })}
+                      {t("reviewQueue.card.sameDeviceHistory", { count: sameDeviceHistory.length })}
                     </span>
                     <div className="queue-card-chip-list">
-                      {ipInventory.map((entry) => (
+                      {sameDeviceHistory.map((entry) => (
                         <span
                           key={`${entry.ip}-${entry.last_seen_at}`}
                           className="tag queue-inventory-tag"
-                          title={t("reviewQueue.card.ipSeen", {
-                            first: formatInventoryDate(entry.first_seen_at),
-                            last: formatInventoryDate(entry.last_seen_at)
-                          })}
+                          title={[
+                            t("reviewQueue.card.ipSeen", {
+                              first: formatInventoryDate(entry.first_seen_at),
+                              last: formatInventoryDate(entry.last_seen_at)
+                            }),
+                            entry.isp || "",
+                            compactLocation(entry as Record<string, unknown>)
+                          ].filter(Boolean).join(" · ")}
                         >
                           {entry.ip} ×{entry.hit_count}
                         </span>
                       ))}
                     </div>
-                  </div>
-                  <p>{item.isp}</p>
-                  {item.usage_profile_summary ? <p>{item.usage_profile_summary}</p> : null}
-                  <div className="queue-card-tags">
-                    {item.reason_codes.slice(0, 4).map((code) => (
-                      <span key={code} className="tag">
-                        {code}
-                      </span>
-                    ))}
-                    {(item.usage_profile_soft_reasons || []).slice(0, 3).map((code) => (
-                      <span key={`usage-${code}`} className="tag">
-                        {code}
-                      </span>
-                    ))}
                   </div>
                   <div className="action-row queue-card-actions">
                     <Link
@@ -759,9 +780,10 @@ export function ReviewQueuePage({ session }: { session?: Session }) {
                     </div>
                   ) : null}
                   <div className="queue-card-bottom">
-                    <span>{t("reviewQueue.card.repeat", { count: item.repeat_count })}</span>
-                    <span>
-                      {t("reviewQueue.card.ongoing", {
+                    <span
+                      title={t("reviewQueue.card.activityObservedHint")}
+                    >
+                      {t("reviewQueue.card.activityObserved", {
                         value: item.usage_profile_ongoing_duration_text || t("common.notAvailable")
                       })}
                     </span>

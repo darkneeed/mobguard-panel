@@ -3,10 +3,12 @@ import json
 import shutil
 import sqlite3
 import tempfile
+import time
 import unittest
+from unittest.mock import patch
 
 from mobguard_platform.models import DecisionBundle
-from mobguard_platform.store import PlatformStore
+from mobguard_platform.store import PlatformStore, ReadSnapshotUnavailableError
 
 
 class StoreReviewFlowTests(unittest.TestCase):
@@ -158,7 +160,40 @@ class StoreReviewFlowTests(unittest.TestCase):
 
         self.assertEqual(reopened.id, summary.id)
         self.assertEqual(reopened.status, "OPEN")
-        self.assertEqual(reopened.repeat_count, 2)
+        self.assertEqual(reopened.repeat_count, 1)
+
+    def test_repeat_count_requires_minimum_gap_between_hits(self):
+        user = {"uuid": "uuid-1", "username": "alice", "telegramId": "1001", "id": 42}
+        bundle = DecisionBundle(
+            ip="10.10.10.15",
+            verdict="UNSURE",
+            confidence_band="UNSURE",
+            score=0,
+            asn=12345,
+            isp="ISP-A",
+        )
+
+        first_event = self.store.record_analysis_event(user, bundle.ip, "TAG", bundle)
+        with self.store._connect() as conn:
+            conn.execute("UPDATE analysis_events SET created_at = ? WHERE id = ?", ("2026-04-01T10:00:00", first_event))
+            conn.commit()
+        summary = self.store.ensure_review_case(user, bundle.ip, "TAG", bundle, first_event, "unsure")
+
+        second_event = self.store.record_analysis_event(user, bundle.ip, "TAG", bundle)
+        with self.store._connect() as conn:
+            conn.execute("UPDATE analysis_events SET created_at = ? WHERE id = ?", ("2026-04-01T10:04:00", second_event))
+            conn.commit()
+        second_summary = self.store.ensure_review_case(user, bundle.ip, "TAG", bundle, second_event, "unsure")
+
+        third_event = self.store.record_analysis_event(user, bundle.ip, "TAG", bundle)
+        with self.store._connect() as conn:
+            conn.execute("UPDATE analysis_events SET created_at = ? WHERE id = ?", ("2026-04-01T10:10:00", third_event))
+            conn.commit()
+        third_summary = self.store.ensure_review_case(user, bundle.ip, "TAG", bundle, third_event, "unsure")
+
+        self.assertEqual(summary.id, second_summary.id)
+        self.assertEqual(second_summary.repeat_count, 1)
+        self.assertEqual(third_summary.repeat_count, 2)
 
     def test_recheck_review_case_can_auto_skip_when_manual_review_is_no_longer_needed(self):
         user = {"uuid": "uuid-1", "username": "alice", "telegramId": "1001", "id": 42, "module_id": "node-a", "module_name": "Node A"}
@@ -495,7 +530,7 @@ class StoreReviewFlowTests(unittest.TestCase):
         self.assertEqual(metrics["mixed_providers"]["conflict_cases"], 1)
         self.assertEqual(metrics["mixed_providers"]["top_open_cases"][0]["provider_key"], "mts")
 
-    def test_review_cases_merge_globally_by_telegram_and_track_inventory(self):
+    def test_review_cases_stay_separate_across_different_ips_even_with_same_telegram(self):
         self.store.register_module(
             "node-a",
             "token-a",
@@ -532,20 +567,65 @@ class StoreReviewFlowTests(unittest.TestCase):
         first_event = self.store.record_analysis_event(first_user, first_bundle.ip, "TAG", first_bundle)
         first_case = self.store.ensure_review_case(first_user, first_bundle.ip, "TAG", first_bundle, first_event, "unsure")
         second_event = self.store.record_analysis_event(second_user, second_bundle.ip, "TAG", second_bundle)
-        merged_case = self.store.ensure_review_case(second_user, second_bundle.ip, "TAG", second_bundle, second_event, "unsure")
-        detail = self.store.get_review_case(merged_case.id)
+        second_case = self.store.ensure_review_case(second_user, second_bundle.ip, "TAG", second_bundle, second_event, "unsure")
+        first_detail = self.store.get_review_case(first_case.id)
+        second_detail = self.store.get_review_case(second_case.id)
         modules = {item["module_id"]: item["open_review_cases"] for item in self.store.list_modules()}
 
-        self.assertEqual(first_case.id, merged_case.id)
-        self.assertEqual(detail["subject_key"], "tg:1001")
-        self.assertEqual(detail["ip"], "10.10.10.11")
-        self.assertEqual(detail["module_id"], "node-b")
-        self.assertEqual(detail["distinct_ip_count"], 2)
-        self.assertEqual({item["ip"] for item in detail["ip_inventory"]}, {"10.10.10.10", "10.10.10.11"})
-        self.assertEqual(detail["module_count"], 2)
-        self.assertEqual({item["module_id"] for item in detail["module_inventory"]}, {"node-a", "node-b"})
+        self.assertNotEqual(first_case.id, second_case.id)
+        self.assertEqual(first_detail["subject_key"], "tg:1001")
+        self.assertEqual(second_detail["subject_key"], "tg:1001")
+        self.assertEqual(first_detail["ip"], "10.10.10.10")
+        self.assertEqual(second_detail["ip"], "10.10.10.11")
+        self.assertEqual(first_detail["distinct_ip_count"], 1)
+        self.assertEqual(second_detail["distinct_ip_count"], 1)
+        self.assertEqual(first_detail["module_count"], 1)
+        self.assertEqual(second_detail["module_count"], 1)
         self.assertEqual(modules["node-a"], 1)
         self.assertEqual(modules["node-b"], 1)
+
+    def test_review_cases_merge_by_same_device_and_same_ip_scope(self):
+        first_user = {"uuid": "uuid-1", "username": "alice", "telegramId": "1001", "id": 42}
+        second_user = {"uuid": "uuid-2", "username": "alice-alt", "telegramId": "2002", "id": 77}
+        bundle = DecisionBundle(
+            ip="10.10.10.42",
+            verdict="UNSURE",
+            confidence_band="UNSURE",
+            score=0,
+            asn=12345,
+            isp="ISP-A",
+        )
+
+        first_event = self.store.record_analysis_event(
+            first_user,
+            bundle.ip,
+            "TAG",
+            bundle,
+            observation={"client_device_id": "dev-1", "client_device_label": "Pixel 8"},
+        )
+        with self.store._connect() as conn:
+            conn.execute("UPDATE analysis_events SET created_at = ? WHERE id = ?", ("2026-04-01T10:00:00", first_event))
+            conn.commit()
+        first_case = self.store.ensure_review_case(first_user, bundle.ip, "TAG", bundle, first_event, "unsure")
+
+        second_event = self.store.record_analysis_event(
+            second_user,
+            bundle.ip,
+            "TAG",
+            bundle,
+            observation={"client_device_id": "dev-1", "client_device_label": "Pixel 8"},
+        )
+        with self.store._connect() as conn:
+            conn.execute("UPDATE analysis_events SET created_at = ? WHERE id = ?", ("2026-04-01T10:08:00", second_event))
+            conn.commit()
+        second_case = self.store.ensure_review_case(second_user, bundle.ip, "TAG", bundle, second_event, "unsure")
+
+        detail = self.store.get_review_case(second_case.id)
+
+        self.assertEqual(first_case.id, second_case.id)
+        self.assertEqual(second_case.repeat_count, 2)
+        self.assertEqual(detail["target_scope_type"], "ip_device")
+        self.assertEqual(detail["device_scope_key"], "device:dev-1")
 
     def test_quality_metrics_use_persisted_provider_summary_without_bundle_decode(self):
         user = {"uuid": "uuid-1", "username": "alice", "telegramId": "1001", "id": 42}
@@ -608,6 +688,44 @@ class StoreReviewFlowTests(unittest.TestCase):
             self.store.build_review_url(7),
             "https://mobguard.example.com/reviews/7",
         )
+
+    def test_overview_and_module_list_use_stale_cache_when_fast_read_hits_locked_db(self):
+        overview_before = self.store.get_overview_metrics()
+        modules_before = self.store.list_modules(include_counters=False, fast_read=True)
+
+        lock_conn = sqlite3.connect(self.db_path, timeout=1, check_same_thread=False)
+        self.addCleanup(lock_conn.close)
+        lock_conn.execute("PRAGMA busy_timeout = 1000")
+        lock_conn.execute("BEGIN IMMEDIATE")
+        lock_conn.execute(
+            """
+            INSERT INTO module_heartbeats (
+                module_id, status, version, protocol_version, config_revision_applied, details_json, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            ("node-a", "online", "1.0.0", "v1", 1, json.dumps({"locked": True}), "2026-04-12T00:00:00"),
+        )
+
+        started_at = time.monotonic()
+        overview_cached = self.store.get_overview_metrics()
+        modules_cached = self.store.list_modules(include_counters=False, fast_read=True)
+        elapsed = time.monotonic() - started_at
+
+        lock_conn.rollback()
+
+        self.assertLess(elapsed, 2.0)
+        self.assertEqual(overview_cached["queue"]["open_cases"], overview_before["queue"]["open_cases"])
+        self.assertEqual(len(modules_cached), len(modules_before))
+
+    def test_overview_fast_read_raises_when_database_is_locked_and_no_cache_exists(self):
+        self.store._read_cache.clear()
+        with patch.object(
+            self.store,
+            "_build_overview_metrics",
+            side_effect=sqlite3.OperationalError("database is locked"),
+        ):
+            with self.assertRaises(ReadSnapshotUnavailableError):
+                self.store.get_overview_metrics()
 
     def test_review_payload_normalizes_numeric_uuid_to_system_id_for_legacy_rows(self):
         with self.store._connect() as conn:

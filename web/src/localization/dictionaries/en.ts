@@ -69,6 +69,7 @@ export const enDictionary: TranslationDictionary = {
         cache: "Cache",
         learning: "Learning",
         cases: "Cases",
+        events: "Events",
         exports: "Exports",
         audit: "Audit"
       }
@@ -252,29 +253,31 @@ export const enDictionary: TranslationDictionary = {
     identifiers: {
       user: "User",
       module: "Module",
+      inbound: "Inbound",
+      device: "Device",
       system: "System",
       telegram: "TG",
       uuid: "UUID"
     },
     card: {
       ip: "IP",
-      ipInventory: "{count} linked IPs",
+      sameDeviceHistory: "{count} IPs on this device",
       ipSeen: "First seen {first} · last seen {last}",
       asn: "ASN",
       asnValue: "AS{value}",
       decision: "Decision",
-      provider: "provider {value}",
-      serviceHint: "service {value}",
+      providerName: "Provider",
+      serviceHint: "Service: {value}",
       providerConflict: "Provider conflict",
-      reviewFirst: "Review-first",
-      autoReady: "Auto-ready",
-      moduleCount: "{count} modules",
-      punitiveEligible: "punitive eligible",
-      reviewOnly: "review only",
+      reviewFirst: "Manual review",
+      autoReady: "Automation ready",
       priority: "priority {value}",
-      usageSignals: "usage {count}",
       repeat: "repeat x{count}",
-      ongoing: "ongoing {value}",
+      ipDeviceScope: "Decision for this IP in device context",
+      ipOnlyScope: "Decision for this IP only",
+      ipOnlyDevice: "Device unavailable",
+      activityObserved: "Observed activity: {value}",
+      activityObservedHint: "How long this case has been continuously active.",
       opened: "opened {value}"
     },
     pageSize: {
@@ -399,7 +402,7 @@ export const enDictionary: TranslationDictionary = {
       summary: "Summary",
       reasons: "Reasons",
       providerEvidence: "Provider evidence",
-      ipInventory: "Linked IP inventory",
+      ipInventory: "IP and device history",
       moduleInventory: "Touched modules",
       usageProfile: "Usage profile",
       log: "Log",
@@ -413,13 +416,14 @@ export const enDictionary: TranslationDictionary = {
       telegramId: "Telegram ID",
       uuid: "UUID",
       ip: "IP",
-      tag: "Tag",
+      device: "Device",
+      asn: "ASN",
+      tag: "Inbound",
       verdict: "Verdict",
       confidence: "Confidence",
-      punitive: "Punitive",
       opened: "Opened",
       updated: "Updated",
-      isp: "ISP",
+      isp: "Provider",
       reviewUrl: "Review URL"
     },
     history: {
@@ -437,7 +441,7 @@ export const enDictionary: TranslationDictionary = {
       saved: "Review decision saved"
     },
     summaryHint: "Fast identifiers and review context without digging through raw payloads.",
-    resolutionHint: "This note is written into the audit trail together with the chosen outcome.",
+    resolutionHint: "This note is written into the audit trail together with the decision for IP {ip}.",
     copyIp: "Copy IP",
     copyUuid: "Copy UUID",
     copyTelegram: "Copy Telegram ID",
@@ -650,6 +654,7 @@ export const enDictionary: TranslationDictionary = {
       cache: "Live cache entries that can be corrected or removed without waiting for natural expiry.",
       learning: "Promoted patterns, legacy confidence rows, and provider-learning slices.",
       cases: "Recent review cases with a compact operator jump-list into full detail.",
+      events: "Normalized analysis events with filters by IP, device, module, and decision.",
       exports: "Calibration archive generation with dataset readiness and manifest visibility.",
       audit: "Operator action history for moderation, data mutations, settings, and module operations."
     },
@@ -660,6 +665,7 @@ export const enDictionary: TranslationDictionary = {
       cache: "cache",
       learning: "learning",
       cases: "cases",
+      events: "events",
       exports: "exports",
       audit: "audit"
     },
@@ -832,6 +838,37 @@ export const enDictionary: TranslationDictionary = {
     },
     cases: {
       title: "Cases"
+    },
+    events: {
+      title: "Analysis events",
+      description: "Normalized analysis events with links to IP, device context, and related review cases.",
+      filtersTitle: "Event filters",
+      count: "{count} found",
+      empty: "No events for the current filters",
+      ipOnly: "IP without device",
+      noCase: "no case",
+      filters: {
+        search: "Search",
+        ip: "IP",
+        deviceId: "Device ID",
+        moduleId: "Module ID",
+        inbound: "Inbound",
+        provider: "Provider",
+        asn: "ASN",
+        anyVerdict: "Any verdict",
+        anyConfidence: "Any confidence",
+        anyCase: "With and without case",
+        withCase: "With case only",
+        withoutCase: "Without case only"
+      },
+      meta: {
+        module: "Module: {value}",
+        inbound: "Inbound: {value}",
+        provider: "Provider: {value}",
+        asn: "ASN: {value}",
+        scope: "Scope: {value}",
+        case: "Case: {value}"
+      }
     },
     exports: {
       title: "Calibration export",

@@ -132,6 +132,15 @@ DEFAULT_SETTINGS = {
 logger = logging.getLogger(__name__)
 LOW_PRIORITY_SQLITE_TIMEOUT_SECONDS = 1
 LOW_PRIORITY_SQLITE_BUSY_TIMEOUT_MS = 1000
+FAST_READ_SQLITE_TIMEOUT_SECONDS = 0.5
+FAST_READ_SQLITE_BUSY_TIMEOUT_MS = 500
+
+
+class ReadSnapshotUnavailableError(RuntimeError):
+    def __init__(self, cache_key: str, reason: str = "database_locked"):
+        super().__init__(reason)
+        self.cache_key = cache_key
+        self.reason = reason
 
 
 def _utcnow() -> str:
@@ -483,6 +492,12 @@ class PlatformStore:
             busy_timeout_ms=LOW_PRIORITY_SQLITE_BUSY_TIMEOUT_MS,
         )
 
+    def _fast_read_connect(self) -> sqlite3.Connection:
+        return self.storage.connect(
+            timeout=FAST_READ_SQLITE_TIMEOUT_SECONDS,
+            busy_timeout_ms=FAST_READ_SQLITE_BUSY_TIMEOUT_MS,
+        )
+
     def _table_exists(self, conn: sqlite3.Connection, table_name: str) -> bool:
         row = conn.execute(
             "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
@@ -490,12 +505,27 @@ class PlatformStore:
         ).fetchone()
         return row is not None
 
-    def _ttl_cache_get(self, cache_key: str, ttl_seconds: float, loader) -> Any:
+    def _ttl_cache_get(
+        self,
+        cache_key: str,
+        ttl_seconds: float,
+        loader,
+        *,
+        allow_stale_on_busy: bool = False,
+    ) -> Any:
         now = time.monotonic()
         cached = self._read_cache.get(cache_key)
         if cached and cached[0] > now:
             return copy.deepcopy(cached[1])
-        payload = loader()
+        try:
+            payload = loader()
+        except sqlite3.OperationalError as exc:
+            if allow_stale_on_busy and is_sqlite_busy_error(exc):
+                if cached:
+                    logger.warning("Serving stale cache for %s because SQLite is locked", cache_key)
+                    return copy.deepcopy(cached[1])
+                raise ReadSnapshotUnavailableError(cache_key) from exc
+            raise
         self._read_cache[cache_key] = (now + ttl_seconds, copy.deepcopy(payload))
         return payload
 
@@ -699,6 +729,9 @@ class PlatformStore:
                     created_at TEXT NOT NULL,
                     module_id TEXT,
                     module_name TEXT,
+                    case_scope_key TEXT NOT NULL DEFAULT '',
+                    device_scope_key TEXT NOT NULL DEFAULT '',
+                    scope_type TEXT NOT NULL DEFAULT 'ip_only',
                     subject_key TEXT NOT NULL DEFAULT '',
                     uuid TEXT,
                     username TEXT,
@@ -737,9 +770,16 @@ class PlatformStore:
                     unique_key TEXT NOT NULL UNIQUE,
                     status TEXT NOT NULL,
                     review_reason TEXT NOT NULL,
+                    case_scope_key TEXT NOT NULL DEFAULT '',
+                    device_scope_key TEXT NOT NULL DEFAULT '',
+                    scope_type TEXT NOT NULL DEFAULT 'ip_only',
                     subject_key TEXT NOT NULL DEFAULT '',
                     module_id TEXT,
                     module_name TEXT,
+                    client_device_id TEXT,
+                    client_device_label TEXT,
+                    client_os_family TEXT,
+                    client_app_name TEXT,
                     uuid TEXT,
                     username TEXT,
                     system_id INTEGER,
@@ -759,6 +799,7 @@ class PlatformStore:
                     punitive_eligible INTEGER NOT NULL DEFAULT 0,
                     latest_event_id INTEGER NOT NULL,
                     repeat_count INTEGER NOT NULL DEFAULT 1,
+                    last_repeat_at TEXT NOT NULL DEFAULT '',
                     reason_codes_json TEXT NOT NULL,
                     usage_profile_summary TEXT NOT NULL DEFAULT '',
                     usage_profile_signal_count INTEGER NOT NULL DEFAULT 0,
@@ -989,6 +1030,12 @@ class PlatformStore:
                 conn.execute("ALTER TABLE analysis_events ADD COLUMN module_id TEXT")
             if analysis_event_columns and "module_name" not in analysis_event_columns:
                 conn.execute("ALTER TABLE analysis_events ADD COLUMN module_name TEXT")
+            if analysis_event_columns and "case_scope_key" not in analysis_event_columns:
+                conn.execute("ALTER TABLE analysis_events ADD COLUMN case_scope_key TEXT NOT NULL DEFAULT ''")
+            if analysis_event_columns and "device_scope_key" not in analysis_event_columns:
+                conn.execute("ALTER TABLE analysis_events ADD COLUMN device_scope_key TEXT NOT NULL DEFAULT ''")
+            if analysis_event_columns and "scope_type" not in analysis_event_columns:
+                conn.execute("ALTER TABLE analysis_events ADD COLUMN scope_type TEXT NOT NULL DEFAULT 'ip_only'")
             if analysis_event_columns and "subject_key" not in analysis_event_columns:
                 conn.execute("ALTER TABLE analysis_events ADD COLUMN subject_key TEXT NOT NULL DEFAULT ''")
             if analysis_event_columns and "system_id" not in analysis_event_columns:
@@ -1046,8 +1093,22 @@ class PlatformStore:
                 conn.execute("ALTER TABLE review_cases ADD COLUMN module_id TEXT")
             if review_case_columns and "module_name" not in review_case_columns:
                 conn.execute("ALTER TABLE review_cases ADD COLUMN module_name TEXT")
+            if review_case_columns and "case_scope_key" not in review_case_columns:
+                conn.execute("ALTER TABLE review_cases ADD COLUMN case_scope_key TEXT NOT NULL DEFAULT ''")
+            if review_case_columns and "device_scope_key" not in review_case_columns:
+                conn.execute("ALTER TABLE review_cases ADD COLUMN device_scope_key TEXT NOT NULL DEFAULT ''")
+            if review_case_columns and "scope_type" not in review_case_columns:
+                conn.execute("ALTER TABLE review_cases ADD COLUMN scope_type TEXT NOT NULL DEFAULT 'ip_only'")
             if review_case_columns and "subject_key" not in review_case_columns:
                 conn.execute("ALTER TABLE review_cases ADD COLUMN subject_key TEXT NOT NULL DEFAULT ''")
+            if review_case_columns and "client_device_id" not in review_case_columns:
+                conn.execute("ALTER TABLE review_cases ADD COLUMN client_device_id TEXT")
+            if review_case_columns and "client_device_label" not in review_case_columns:
+                conn.execute("ALTER TABLE review_cases ADD COLUMN client_device_label TEXT")
+            if review_case_columns and "client_os_family" not in review_case_columns:
+                conn.execute("ALTER TABLE review_cases ADD COLUMN client_os_family TEXT")
+            if review_case_columns and "client_app_name" not in review_case_columns:
+                conn.execute("ALTER TABLE review_cases ADD COLUMN client_app_name TEXT")
             if review_case_columns and "punitive_eligible" not in review_case_columns:
                 conn.execute("ALTER TABLE review_cases ADD COLUMN punitive_eligible INTEGER NOT NULL DEFAULT 0")
             if review_case_columns and "provider_key" not in review_case_columns:
@@ -1086,6 +1147,8 @@ class PlatformStore:
                 conn.execute(
                     "ALTER TABLE review_cases ADD COLUMN usage_profile_ongoing_duration_text TEXT NOT NULL DEFAULT ''"
                 )
+            if review_case_columns and "last_repeat_at" not in review_case_columns:
+                conn.execute("ALTER TABLE review_cases ADD COLUMN last_repeat_at TEXT NOT NULL DEFAULT ''")
             live_rules_columns = {
                 row["name"] for row in conn.execute("PRAGMA table_info(live_rules)").fetchall()
             }
@@ -1130,6 +1193,12 @@ class PlatformStore:
                 "CREATE INDEX IF NOT EXISTS idx_review_cases_subject_status ON review_cases(subject_key, status, updated_at DESC)"
             )
             conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_review_cases_scope_status ON review_cases(case_scope_key, status, updated_at DESC)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_review_cases_device_scope_status ON review_cases(device_scope_key, status, updated_at DESC)"
+            )
+            conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_review_cases_priority ON review_cases(status, usage_profile_priority DESC, updated_at DESC)"
             )
             conn.execute(
@@ -1161,6 +1230,12 @@ class PlatformStore:
             )
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_analysis_events_subject_created ON analysis_events(subject_key, created_at DESC)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_analysis_events_scope_created ON analysis_events(case_scope_key, created_at DESC)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_analysis_events_device_scope_created ON analysis_events(device_scope_key, created_at DESC)"
             )
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_analysis_events_module_id ON analysis_events(module_id, created_at DESC)"
@@ -1310,11 +1385,23 @@ class PlatformStore:
             details=details,
         )
 
-    def list_modules(self, stale_after_seconds: int = 180) -> list[dict[str, Any]]:
+    def list_modules(
+        self,
+        stale_after_seconds: int = 180,
+        *,
+        include_counters: bool = True,
+        fast_read: bool = False,
+    ) -> list[dict[str, Any]]:
         return self._ttl_cache_get(
-            f"modules:{int(stale_after_seconds)}",
+            f"modules:{int(stale_after_seconds)}:{int(include_counters)}",
             10.0,
-            lambda: self.modules_admin.list_modules(stale_after_seconds=stale_after_seconds),
+            lambda: self.modules_admin.list_modules(
+                stale_after_seconds=stale_after_seconds,
+                include_counters=include_counters,
+                timeout=FAST_READ_SQLITE_TIMEOUT_SECONDS if fast_read else None,
+                busy_timeout_ms=FAST_READ_SQLITE_BUSY_TIMEOUT_MS if fast_read else None,
+            ),
+            allow_stale_on_busy=fast_read,
         )
 
     def ingest_raw_event(
@@ -1538,8 +1625,19 @@ class PlatformStore:
     def list_review_cases(self, filters: Optional[dict[str, Any]] = None) -> dict[str, Any]:
         return self.review_admin.list_review_cases(filters)
 
-    def list_review_case_teasers(self, *, status: str = "OPEN", limit: int = 6) -> list[dict[str, Any]]:
-        return self.review_admin.list_review_case_teasers(status=status, limit=limit)
+    def list_review_case_teasers(
+        self,
+        *,
+        status: str = "OPEN",
+        limit: int = 6,
+        fast_read: bool = False,
+    ) -> list[dict[str, Any]]:
+        return self.review_admin.list_review_case_teasers(
+            status=status,
+            limit=limit,
+            timeout=FAST_READ_SQLITE_TIMEOUT_SECONDS if fast_read else None,
+            busy_timeout_ms=FAST_READ_SQLITE_BUSY_TIMEOUT_MS if fast_read else None,
+        )
 
     def get_review_case(self, case_id: int) -> dict[str, Any]:
         return self.review_admin.get_review_case(case_id)
@@ -1815,10 +1913,11 @@ class PlatformStore:
             lambda: self._build_quality_metrics(module_filter),
         )
 
-    def _build_overview_metrics(self) -> dict[str, Any]:
-        health = self.get_health_snapshot()
+    def _build_overview_metrics(self, *, fast_read: bool = False) -> dict[str, Any]:
+        health = self.get_health_snapshot(fast_read=fast_read)
         live_rules_state = self.get_live_rules_state(skip_db_mirror=True)
-        with self._connect() as conn:
+        connect = self._fast_read_connect if fast_read else self._connect
+        with connect() as conn:
             queue_open_cases = int(
                 conn.execute(
                     "SELECT COUNT(*) AS cnt FROM review_cases WHERE status = 'OPEN'"
@@ -1902,14 +2001,15 @@ class PlatformStore:
             "learning": {
                 "promoted_patterns": promoted_patterns,
             },
-            "latest_cases": self.list_review_case_teasers(status="OPEN", limit=6),
+            "latest_cases": self.list_review_case_teasers(status="OPEN", limit=6, fast_read=fast_read),
         }
 
     def get_overview_metrics(self) -> dict[str, Any]:
         return self._ttl_cache_get(
             "overview",
             30.0,
-            self._build_overview_metrics,
+            lambda: self._build_overview_metrics(fast_read=True),
+            allow_stale_on_busy=True,
         )
 
     def get_db_maintenance_settings(self) -> dict[str, int]:
@@ -2288,13 +2388,16 @@ class PlatformStore:
     def get_service_heartbeat(self, service_name: str, stale_after_seconds: int = 60) -> dict[str, Any]:
         return self.health.get_heartbeat(service_name, stale_after_seconds=stale_after_seconds)
 
-    def get_health_snapshot(self) -> dict[str, Any]:
+    def get_health_snapshot(self, *, fast_read: bool = False) -> dict[str, Any]:
         return self._ttl_cache_get(
             "health",
             10.0,
             lambda: self.health.get_snapshot(
-                live_rules_state_loader=lambda: self.get_live_rules_state(skip_db_mirror=True)
+                live_rules_state_loader=lambda: self.get_live_rules_state(skip_db_mirror=True),
+                timeout=FAST_READ_SQLITE_TIMEOUT_SECONDS if fast_read else None,
+                busy_timeout_ms=FAST_READ_SQLITE_BUSY_TIMEOUT_MS if fast_read else None,
             ),
+            allow_stale_on_busy=fast_read,
         )
 
     def is_admin_tg_id(self, tg_id: int) -> bool:
