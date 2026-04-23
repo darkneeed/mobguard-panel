@@ -7,6 +7,7 @@ import json
 import logging
 import os
 import sqlite3
+import threading
 import time
 from datetime import datetime, timedelta
 from typing import Any, Optional
@@ -135,9 +136,14 @@ LOW_PRIORITY_SQLITE_BUSY_TIMEOUT_MS = 1000
 FAST_READ_SQLITE_TIMEOUT_SECONDS = 0.5
 FAST_READ_SQLITE_BUSY_TIMEOUT_MS = 500
 FAST_READ_SQLITE_QUERY_LIMIT_MS = 250
+INGEST_PIPELINE_SNAPSHOT_REFRESH_INTERVAL_SECONDS = 5.0
+OVERVIEW_SNAPSHOT_STALE_AFTER_SECONDS = 15
+PIPELINE_SNAPSHOT_STALE_AFTER_SECONDS = 5
 READ_MODEL_OVERVIEW = "overview"
 READ_MODEL_INGEST_PIPELINE = "ingest_pipeline"
 READ_MODEL_REVIEW_USAGE_PROFILE = "review_usage_profile"
+LAST_GOOD_OVERVIEW_SNAPSHOT_CACHE_KEY = "__last_good_overview_snapshot__"
+LAST_GOOD_INGEST_PIPELINE_CACHE_KEY = "__last_good_ingest_pipeline__"
 
 
 class ReadSnapshotUnavailableError(RuntimeError):
@@ -149,6 +155,16 @@ class ReadSnapshotUnavailableError(RuntimeError):
 
 def _utcnow() -> str:
     return datetime.utcnow().replace(microsecond=0).isoformat()
+
+
+def _age_seconds(raw_value: str, *, now_dt: datetime | None = None) -> int:
+    if not raw_value:
+        return 0
+    try:
+        current = now_dt or datetime.utcnow().replace(microsecond=0)
+        return max(int((current - datetime.fromisoformat(raw_value)).total_seconds()), 0)
+    except ValueError:
+        return 0
 
 
 def _coerce_int(value: Any, default: int) -> int:
@@ -476,6 +492,9 @@ class PlatformStore:
         self._rules_cache_mtime: Optional[float] = None
         self._mirrored_live_rules_marker: Optional[tuple[int, str, str]] = None
         self._read_cache: dict[str, tuple[float, Any]] = {}
+        self._maintenance_state_lock = threading.Lock()
+        self._ingest_pipeline_snapshot_dirty = True
+        self._last_ingest_pipeline_snapshot_attempt_monotonic = 0.0
         self.storage = SQLiteStorage(db_path)
         self.sessions = AdminSessionRepository(self.storage)
         self.admin_security = AdminSecurityRepository(self.storage)
@@ -504,6 +523,97 @@ class PlatformStore:
             busy_timeout_ms=FAST_READ_SQLITE_BUSY_TIMEOUT_MS,
             query_time_limit_ms=FAST_READ_SQLITE_QUERY_LIMIT_MS,
         )
+
+    def _snapshot_connect(
+        self,
+        *,
+        fast_read: bool = False,
+        low_priority: bool = False,
+    ) -> sqlite3.Connection:
+        if fast_read:
+            return self._fast_read_connect()
+        if low_priority:
+            return self._maintenance_connect()
+        return self._connect()
+
+    def _remember_last_good_snapshot(self, cache_key: str, payload: dict[str, Any]) -> None:
+        self._read_cache[cache_key] = (float("inf"), copy.deepcopy(payload))
+
+    def _load_last_good_snapshot(self, cache_key: str) -> dict[str, Any] | None:
+        cached = self._read_cache.get(cache_key)
+        if not cached:
+            return None
+        return copy.deepcopy(cached[1])
+
+    def _normalize_pipeline_status_payload(
+        self,
+        payload: dict[str, Any] | None,
+        *,
+        force_stale: bool = False,
+    ) -> dict[str, Any]:
+        normalized = copy.deepcopy(payload or {})
+        existing_stale = bool(normalized.get("stale"))
+        snapshot_updated_at = str(
+            normalized.pop("_snapshot_updated_at", normalized.get("snapshot_updated_at") or "") or ""
+        ).strip()
+        snapshot_age_seconds = _age_seconds(snapshot_updated_at)
+        normalized["snapshot_updated_at"] = snapshot_updated_at or None
+        normalized["snapshot_age_seconds"] = snapshot_age_seconds
+        normalized["stale"] = bool(
+            force_stale or existing_stale or snapshot_age_seconds > PIPELINE_SNAPSHOT_STALE_AFTER_SECONDS
+        )
+        return normalized
+
+    def _build_overview_response(
+        self,
+        snapshot_payload: dict[str, Any],
+        pipeline_payload: dict[str, Any],
+    ) -> dict[str, Any]:
+        response = copy.deepcopy(snapshot_payload)
+        snapshot_updated_at = str(
+            response.pop("_snapshot_updated_at", (response.get("freshness") or {}).get("overview_updated_at") or "") or ""
+        ).strip()
+        normalized_pipeline = self._normalize_pipeline_status_payload(pipeline_payload)
+        response["pipeline"] = normalized_pipeline
+        response["freshness"] = {
+            "overview_updated_at": snapshot_updated_at or None,
+            "overview_age_seconds": _age_seconds(snapshot_updated_at),
+            "pipeline_updated_at": normalized_pipeline.get("snapshot_updated_at") or None,
+            "pipeline_age_seconds": int(normalized_pipeline.get("snapshot_age_seconds") or 0),
+        }
+        return response
+
+    def _read_snapshot_payload(
+        self,
+        snapshot_type: str,
+        *,
+        fast_read: bool = False,
+    ) -> dict[str, Any] | None:
+        with self._snapshot_connect(fast_read=fast_read) as conn:
+            return self._read_read_model_snapshot_conn(conn, snapshot_type, "")
+
+    def mark_ingest_pipeline_snapshot_dirty(self) -> None:
+        with self._maintenance_state_lock:
+            self._ingest_pipeline_snapshot_dirty = True
+
+    def refresh_due_ingest_pipeline_snapshot(self, *, force: bool = False) -> dict[str, Any]:
+        now = time.monotonic()
+        with self._maintenance_state_lock:
+            due = force or (
+                self._ingest_pipeline_snapshot_dirty
+                and now - self._last_ingest_pipeline_snapshot_attempt_monotonic
+                >= INGEST_PIPELINE_SNAPSHOT_REFRESH_INTERVAL_SECONDS
+            )
+            if not due:
+                return {"attempted": False, "refreshed": False, "busy": False}
+            self._last_ingest_pipeline_snapshot_attempt_monotonic = now
+        try:
+            self.refresh_ingest_pipeline_snapshot(low_priority=True)
+            return {"attempted": True, "refreshed": True, "busy": False}
+        except sqlite3.OperationalError as exc:
+            if is_sqlite_busy_error(exc) or is_sqlite_interrupted_error(exc):
+                return {"attempted": True, "refreshed": False, "busy": True, "reason": str(exc)}
+            raise
 
     def _table_exists(self, conn: sqlite3.Connection, table_name: str) -> bool:
         row = conn.execute(
@@ -1671,7 +1781,7 @@ class PlatformStore:
                 else:
                     duplicates += 1
             conn.commit()
-        self.refresh_ingest_pipeline_snapshot()
+        self.mark_ingest_pipeline_snapshot_dirty()
         return {
             "accepted": accepted,
             "duplicates": duplicates,
@@ -1761,7 +1871,7 @@ class PlatformStore:
                 (_utcnow(), analysis_event_id, review_case_id, event_uid),
             )
             conn.commit()
-        self.refresh_ingest_pipeline_snapshot()
+        self.mark_ingest_pipeline_snapshot_dirty()
 
     def mark_raw_event_retry(
         self,
@@ -1793,7 +1903,7 @@ class PlatformStore:
                 ),
             )
             conn.commit()
-        self.refresh_ingest_pipeline_snapshot()
+        self.mark_ingest_pipeline_snapshot_dirty()
 
     def create_enforcement_job(
         self,
@@ -1844,7 +1954,7 @@ class PlatformStore:
                 (str(job_key or "").strip(),),
             ).fetchone()
             conn.commit()
-        self.refresh_ingest_pipeline_snapshot()
+        self.mark_ingest_pipeline_snapshot_dirty()
         return dict(row) if row else {}
 
     def claim_enforcement_jobs(
@@ -1923,7 +2033,7 @@ class PlatformStore:
                 (now, now, int(job_id)),
             )
             conn.commit()
-        self.refresh_ingest_pipeline_snapshot()
+        self.mark_ingest_pipeline_snapshot_dirty()
 
     def mark_enforcement_job_retry(
         self,
@@ -1957,12 +2067,17 @@ class PlatformStore:
                 ),
             )
             conn.commit()
-        self.refresh_ingest_pipeline_snapshot()
+        self.mark_ingest_pipeline_snapshot_dirty()
 
-    def refresh_ingest_pipeline_snapshot(self) -> dict[str, Any]:
+    def refresh_ingest_pipeline_snapshot(
+        self,
+        *,
+        fast_read: bool = False,
+        low_priority: bool = False,
+    ) -> dict[str, Any]:
         now_dt = datetime.utcnow().replace(microsecond=0)
         now = now_dt.isoformat()
-        with self._connect() as conn:
+        with self._snapshot_connect(fast_read=fast_read, low_priority=low_priority) as conn:
             previous = self._read_read_model_snapshot_conn(conn, READ_MODEL_INGEST_PIPELINE, "") or {}
             queue_row = conn.execute(
                 """
@@ -2037,14 +2152,29 @@ class PlatformStore:
                 now,
             )
             conn.commit()
-            return payload
+        payload["_snapshot_updated_at"] = now
+        normalized = self._normalize_pipeline_status_payload(payload)
+        self._remember_last_good_snapshot(LAST_GOOD_INGEST_PIPELINE_CACHE_KEY, payload)
+        with self._maintenance_state_lock:
+            self._ingest_pipeline_snapshot_dirty = False
+            self._last_ingest_pipeline_snapshot_attempt_monotonic = time.monotonic()
+        return normalized
 
-    def get_ingest_pipeline_status(self) -> dict[str, Any]:
-        with self._connect() as conn:
-            payload = self._read_read_model_snapshot_conn(conn, READ_MODEL_INGEST_PIPELINE, "")
-        if payload is None:
-            return self.refresh_ingest_pipeline_snapshot()
-        return payload
+    def get_ingest_pipeline_status(self, *, fast_read: bool = False) -> dict[str, Any]:
+        cached = self._load_last_good_snapshot(LAST_GOOD_INGEST_PIPELINE_CACHE_KEY)
+        try:
+            payload = self._read_snapshot_payload(READ_MODEL_INGEST_PIPELINE, fast_read=fast_read)
+            if payload is None:
+                return self.refresh_ingest_pipeline_snapshot(fast_read=fast_read)
+            self._remember_last_good_snapshot(LAST_GOOD_INGEST_PIPELINE_CACHE_KEY, payload)
+            return self._normalize_pipeline_status_payload(payload)
+        except sqlite3.OperationalError as exc:
+            if fast_read and (is_sqlite_busy_error(exc) or is_sqlite_interrupted_error(exc)):
+                if cached is not None:
+                    return self._normalize_pipeline_status_payload(cached, force_stale=True)
+                reason = "query_timeout" if is_sqlite_interrupted_error(exc) else "database_locked"
+                raise ReadSnapshotUnavailableError("ingest_pipeline", reason=reason) from exc
+            raise
 
     def get_live_rules(self) -> dict[str, Any]:
         return self.get_live_rules_state()["rules"]
@@ -2295,7 +2425,13 @@ class PlatformStore:
     ) -> dict[str, Any]:
         return self.review_admin.resolve_review_case(case_id, resolution, actor, actor_tg_id, note)
 
-    def _build_quality_metrics(self, module_filter: str) -> dict[str, Any]:
+    def _build_quality_metrics(
+        self,
+        module_filter: str,
+        *,
+        fast_read: bool = False,
+        low_priority: bool = False,
+    ) -> dict[str, Any]:
         live_rules_state = self.get_live_rules_state(skip_db_mirror=True)
         runtime_dir = os.path.dirname(self.config_path) if self.config_path else os.path.dirname(self.db_path)
         asn_source = detect_asn_source(runtime_dir, self.base_config.get("settings", {}).get("geoip_db"))
@@ -2356,7 +2492,7 @@ class PlatformStore:
             provider_where = "WHERE rc.status = 'OPEN' AND rc.provider_classification = 'mixed'"
             provider_params = ()
 
-        with self._connect() as conn:
+        with self._snapshot_connect(fast_read=fast_read, low_priority=low_priority) as conn:
             open_cases = conn.execute(
                 f"SELECT COUNT(*) AS cnt FROM review_cases {open_case_where}",
                 open_case_params,
@@ -2540,70 +2676,91 @@ class PlatformStore:
             lambda: self._build_quality_metrics(module_filter),
         )
 
-    def _build_overview_metrics(self, *, fast_read: bool = False) -> dict[str, Any]:
-        quality = self._build_quality_metrics("")
+    def _build_overview_metrics(
+        self,
+        *,
+        fast_read: bool = False,
+        low_priority: bool = False,
+    ) -> dict[str, Any]:
+        quality = self._build_quality_metrics("", fast_read=fast_read, low_priority=low_priority)
         latest_cases = self.review_admin.list_review_cases(
             {
                 "status": "OPEN",
                 "page": 1,
                 "page_size": 6,
                 "sort": "updated_desc",
-            }
+            },
+            timeout=(
+                FAST_READ_SQLITE_TIMEOUT_SECONDS
+                if fast_read
+                else LOW_PRIORITY_SQLITE_TIMEOUT_SECONDS if low_priority else None
+            ),
+            busy_timeout_ms=(
+                FAST_READ_SQLITE_BUSY_TIMEOUT_MS
+                if fast_read
+                else LOW_PRIORITY_SQLITE_BUSY_TIMEOUT_MS if low_priority else None
+            ),
+            query_time_limit_ms=FAST_READ_SQLITE_QUERY_LIMIT_MS if fast_read else None,
         )
         return {
-            "health": self.get_health_snapshot(fast_read=fast_read),
+            "health": self.get_health_snapshot(fast_read=fast_read, low_priority=low_priority),
             "quality": quality,
             "latest_cases": latest_cases,
         }
 
-    def refresh_overview_snapshot(self) -> dict[str, Any]:
-        payload = self._build_overview_metrics(fast_read=False)
-        with self._connect() as conn:
+    def refresh_overview_snapshot(
+        self,
+        *,
+        fast_read: bool = False,
+        low_priority: bool = False,
+    ) -> dict[str, Any]:
+        payload = self._build_overview_metrics(fast_read=fast_read, low_priority=low_priority)
+        updated_at = _utcnow()
+        with self._snapshot_connect(fast_read=fast_read, low_priority=low_priority) as conn:
             self._write_read_model_snapshot_conn(
                 conn,
                 READ_MODEL_OVERVIEW,
                 "",
                 payload,
-                _utcnow(),
+                updated_at,
             )
             conn.commit()
-        self._read_cache.pop("overview", None)
+        payload["_snapshot_updated_at"] = updated_at
+        self._remember_last_good_snapshot(LAST_GOOD_OVERVIEW_SNAPSHOT_CACHE_KEY, payload)
         return payload
 
-    def get_overview_metrics(self) -> dict[str, Any]:
-        with self._connect() as conn:
-            payload = self._read_read_model_snapshot_conn(conn, READ_MODEL_OVERVIEW, "")
-            snapshot_updated_at = str((payload or {}).get("_snapshot_updated_at") or "")
-        if payload is None or not isinstance(payload.get("quality"), dict) or not payload.get("quality"):
-            try:
-                payload = self.refresh_overview_snapshot()
-                snapshot_updated_at = _utcnow()
-            except sqlite3.OperationalError:
-                if payload is None:
-                    raise
+    def get_overview_metrics(self, *, fast_read: bool = False) -> dict[str, Any]:
+        cached_snapshot = self._load_last_good_snapshot(LAST_GOOD_OVERVIEW_SNAPSHOT_CACHE_KEY)
 
-        pipeline = self.get_ingest_pipeline_status()
+        def _usable(snapshot_payload: dict[str, Any] | None) -> bool:
+            return bool(
+                snapshot_payload
+                and isinstance(snapshot_payload.get("quality"), dict)
+                and snapshot_payload.get("quality")
+            )
 
-        def _age_seconds(raw_value: str) -> int:
-            if not raw_value:
-                return 0
-            try:
-                return max(
-                    int((datetime.utcnow().replace(microsecond=0) - datetime.fromisoformat(raw_value)).total_seconds()),
-                    0,
-                )
-            except ValueError:
-                return 0
+        try:
+            payload = self._read_snapshot_payload(READ_MODEL_OVERVIEW, fast_read=fast_read)
+            if not _usable(payload):
+                payload = self.refresh_overview_snapshot(fast_read=fast_read)
+            self._remember_last_good_snapshot(LAST_GOOD_OVERVIEW_SNAPSHOT_CACHE_KEY, payload)
+        except ReadSnapshotUnavailableError:
+            if fast_read and _usable(cached_snapshot):
+                payload = cached_snapshot
+            else:
+                raise
+        except sqlite3.OperationalError as exc:
+            if fast_read and (is_sqlite_busy_error(exc) or is_sqlite_interrupted_error(exc)):
+                if _usable(cached_snapshot):
+                    payload = cached_snapshot
+                else:
+                    reason = "query_timeout" if is_sqlite_interrupted_error(exc) else "database_locked"
+                    raise ReadSnapshotUnavailableError("overview", reason=reason) from exc
+            else:
+                raise
 
-        response = copy.deepcopy(payload)
-        response["pipeline"] = pipeline
-        response["freshness"] = {
-            "overview_updated_at": snapshot_updated_at or None,
-            "overview_age_seconds": _age_seconds(snapshot_updated_at),
-            "pipeline_updated_at": pipeline.get("_snapshot_updated_at") or None,
-            "pipeline_age_seconds": _age_seconds(str(pipeline.get("_snapshot_updated_at") or "")),
-        }
-        return response
+        pipeline = self.get_ingest_pipeline_status(fast_read=fast_read)
+        return self._build_overview_response(payload, pipeline)
 
     def get_db_maintenance_settings(self) -> dict[str, int]:
         settings = self.get_live_rules_state(skip_db_mirror=True)["rules"].get("settings", {})
@@ -2977,20 +3134,36 @@ class PlatformStore:
         service_name: str,
         status: str = "ok",
         details: Optional[dict[str, Any]] = None,
+        *,
+        low_priority: bool = False,
     ) -> None:
-        self.health.update_heartbeat(service_name, status=status, details=details)
+        self.health.update_heartbeat(
+            service_name,
+            status=status,
+            details=details,
+            timeout=LOW_PRIORITY_SQLITE_TIMEOUT_SECONDS if low_priority else None,
+            busy_timeout_ms=LOW_PRIORITY_SQLITE_BUSY_TIMEOUT_MS if low_priority else None,
+        )
 
     def get_service_heartbeat(self, service_name: str, stale_after_seconds: int = 60) -> dict[str, Any]:
         return self.health.get_heartbeat(service_name, stale_after_seconds=stale_after_seconds)
 
-    def get_health_snapshot(self, *, fast_read: bool = False) -> dict[str, Any]:
+    def get_health_snapshot(self, *, fast_read: bool = False, low_priority: bool = False) -> dict[str, Any]:
         return self._ttl_cache_get(
             "health",
             10.0,
             lambda: self.health.get_snapshot(
                 live_rules_state_loader=lambda: self.get_live_rules_state(skip_db_mirror=True),
-                timeout=FAST_READ_SQLITE_TIMEOUT_SECONDS if fast_read else None,
-                busy_timeout_ms=FAST_READ_SQLITE_BUSY_TIMEOUT_MS if fast_read else None,
+                timeout=(
+                    FAST_READ_SQLITE_TIMEOUT_SECONDS
+                    if fast_read
+                    else LOW_PRIORITY_SQLITE_TIMEOUT_SECONDS if low_priority else None
+                ),
+                busy_timeout_ms=(
+                    FAST_READ_SQLITE_BUSY_TIMEOUT_MS
+                    if fast_read
+                    else LOW_PRIORITY_SQLITE_BUSY_TIMEOUT_MS if low_priority else None
+                ),
                 query_time_limit_ms=FAST_READ_SQLITE_QUERY_LIMIT_MS if fast_read else None,
             ),
             allow_stale_on_busy=fast_read,

@@ -40,6 +40,7 @@ type QualityPayload = {
 };
 
 const OVERVIEW_REFRESH_MS = 30000;
+const OVERVIEW_STALE_AFTER_SECONDS = 15;
 
 export function OverviewPage({ session }: { session?: Session }) {
   const { t, language } = useI18n();
@@ -85,6 +86,8 @@ export function OverviewPage({ session }: { session?: Session }) {
   const queue = data?.latest_cases || null;
   const pipeline = data?.pipeline || null;
   const freshness = data?.freshness || null;
+  const overviewStale = Boolean((freshness?.overview_age_seconds ?? 0) > OVERVIEW_STALE_AFTER_SECONDS);
+  const pipelineStale = Boolean(pipeline?.stale);
 
   const systemStatusClass =
     health?.status === "ok" ? "status-resolved" : health?.status ? "severity-high" : "severity-low";
@@ -143,10 +146,21 @@ export function OverviewPage({ session }: { session?: Session }) {
               )
             })}
           </span>
+          {overviewStale ? <span className="tag severity-high">{t("overview.snapshotStale")}</span> : null}
+          {pipelineStale ? <span className="tag severity-high">{t("overview.pipeline.stale")}</span> : null}
         </div>
       </div>
 
-      {error ? <div className="error-box">{error}</div> : null}
+      {error ? (
+        <div className="error-box">
+          {error}
+          {data
+            ? ` ${t("overview.errors.showingLastGood", {
+                value: formatAge(freshness?.overview_age_seconds)
+              })}`
+            : ""}
+        </div>
+      ) : null}
 
       <div className="dashboard-grid dashboard-grid-hero">
           <div className="panel panel-hero">
@@ -277,7 +291,9 @@ export function OverviewPage({ session }: { session?: Session }) {
               <h2>{t("overview.pipelineTitle")}</h2>
               <p className="muted">{t("overview.pipelineDescription")}</p>
             </div>
-            <span className="tag review-only">{pipeline?.worker_status || t("common.notAvailable")}</span>
+            <span className={`tag ${pipelineStale ? "severity-high" : "review-only"}`}>
+              {pipelineStale ? t("overview.pipeline.stale") : pipeline?.worker_status || t("common.notAvailable")}
+            </span>
           </div>
           <div className="metric-list">
             <div className="metric-row">
@@ -327,7 +343,7 @@ export function OverviewPage({ session }: { session?: Session }) {
               </div>
               <div className="record-meta">
                 {t("overview.pipeline.snapshotAge", {
-                  value: formatAge(freshness?.pipeline_age_seconds)
+                  value: formatAge(pipeline?.snapshot_age_seconds ?? freshness?.pipeline_age_seconds)
                 })}
               </div>
             </div>

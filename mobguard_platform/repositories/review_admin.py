@@ -1079,7 +1079,14 @@ class ReviewAdminRepository(SQLiteRepository):
             event_payload["device_display"] = device_display_from_identity(event_payload) or None
         return event_payload
 
-    def list_review_cases(self, filters: Optional[dict[str, Any]] = None) -> dict[str, Any]:
+    def list_review_cases(
+        self,
+        filters: Optional[dict[str, Any]] = None,
+        *,
+        timeout: float | None = None,
+        busy_timeout_ms: int | None = None,
+        query_time_limit_ms: int | None = None,
+    ) -> dict[str, Any]:
         filters = filters or {}
         page = max(int(filters.get("page", 1) or 1), 1)
         page_size = min(max(int(filters.get("page_size", 25) or 25), 1), 100)
@@ -1183,7 +1190,11 @@ class ReviewAdminRepository(SQLiteRepository):
         count_sql = f"SELECT COUNT(*) AS cnt FROM review_cases{where_sql}"
         query.append(f"ORDER BY {order_by} LIMIT ? OFFSET ?")
         sql = " ".join(query)
-        with self.connect() as conn:
+        with self.storage.connect(
+            timeout=timeout,
+            busy_timeout_ms=busy_timeout_ms,
+            query_time_limit_ms=query_time_limit_ms,
+        ) as conn:
             total = conn.execute(count_sql, params).fetchone()["cnt"]
             rows = conn.execute(sql, [*params, page_size, (page - 1) * page_size]).fetchall()
             items = [self._hydrate_review_list_item(conn, row) for row in rows]

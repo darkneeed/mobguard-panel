@@ -27,7 +27,7 @@ def get_overview(
     container=Depends(get_container),
 ) -> dict[str, Any]:
     try:
-        return container.store.get_overview_metrics()
+        return container.store.get_overview_metrics(fast_read=True)
     except ReadSnapshotUnavailableError as exc:
         raise HTTPException(
             status_code=503,

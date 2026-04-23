@@ -19,6 +19,8 @@ type ModuleDraft = {
   inbound_tags: string;
 };
 
+const MODULES_REFRESH_MS = 15000;
+
 const EMPTY_DRAFT: ModuleDraft = {
   module_name: "",
   inbound_tags: ""
@@ -98,6 +100,7 @@ export function ModulesPage({ session }: { session?: Session }) {
   const canManageModules = hasPermission(session, "modules.write");
   const canRevealModuleToken = hasPermission(session, "modules.token_reveal");
   const pipeline = data?.pipeline;
+  const pipelineStale = Boolean(pipeline?.stale);
   const canSubmit =
     modalMode === "create"
       ? draftDirty && Boolean(draft.module_name.trim())
@@ -119,9 +122,13 @@ export function ModulesPage({ session }: { session?: Session }) {
       }
     }
 
-    loadInitialState();
+    void loadInitialState();
+    const timer = window.setInterval(() => {
+      void loadInitialState();
+    }, MODULES_REFRESH_MS);
     return () => {
       cancelled = true;
+      window.clearInterval(timer);
     };
   }, [t]);
 
@@ -184,7 +191,7 @@ export function ModulesPage({ session }: { session?: Session }) {
         setRevealedToken(response.install.module_token || "");
         setData((prev) => {
           const nextItems = [response.module, ...(prev?.items || []).filter((item) => item.module_id !== response.module.module_id)];
-          return { items: nextItems, count: nextItems.length };
+          return { items: nextItems, count: nextItems.length, pipeline: prev?.pipeline };
         });
         setSaved(t("modules.createSuccess"));
       } else if (selectedId) {
@@ -195,7 +202,8 @@ export function ModulesPage({ session }: { session?: Session }) {
         setSavedDraft(nextDraft);
         setData((prev) => ({
           items: (prev?.items || []).map((item) => (item.module_id === response.module.module_id ? response.module : item)),
-          count: prev?.count || 0
+          count: prev?.count || 0,
+          pipeline: prev?.pipeline
         }));
         setSaved(t("modules.updateSuccess"));
       }
@@ -234,6 +242,13 @@ export function ModulesPage({ session }: { session?: Session }) {
     if (total < 60) return `${total}s`;
     if (total < 3600) return `${Math.round(total / 60)}m`;
     return `${Math.round(total / 3600)}h`;
+  }
+
+  function formatQueueDepth(value?: number | null): string {
+    if (value === null || value === undefined || Number.isNaN(value)) {
+      return "—";
+    }
+    return pipelineStale ? `${value} · ${t("modules.pipeline.stale")}` : String(value);
   }
 
   function renderModuleCard(item: ModuleRecord) {
@@ -316,7 +331,7 @@ export function ModulesPage({ session }: { session?: Session }) {
         </div>
         <div className="stat-card">
           <span>{t("modules.cards.queueDepth")}</span>
-          <strong>{pipeline?.queue_depth ?? "—"}</strong>
+          <strong>{formatQueueDepth(pipeline?.queue_depth)}</strong>
         </div>
         <div className="stat-card">
           <span>{t("modules.cards.failedQueue")}</span>
@@ -330,12 +345,21 @@ export function ModulesPage({ session }: { session?: Session }) {
             <h2>{t("modules.pipelineTitle")}</h2>
             <p className="muted">{t("modules.pipelineDescription")}</p>
           </div>
-          <span className="tag review-only">{pipeline?.worker_status || t("common.notAvailable")}</span>
+          <div className="action-row">
+            <span className={`tag ${pipelineStale ? "severity-high" : "review-only"}`}>
+              {pipelineStale ? t("modules.pipeline.stale") : pipeline?.worker_status || t("common.notAvailable")}
+            </span>
+            <span className="muted">
+              {t("modules.pipeline.snapshotAge", {
+                value: formatAge(pipeline?.snapshot_age_seconds)
+              })}
+            </span>
+          </div>
         </div>
         <div className="detail-list">
           <div>
             <dt>{t("modules.pipeline.queueDepth")}</dt>
-            <dd>{pipeline?.queue_depth ?? "—"}</dd>
+            <dd>{formatQueueDepth(pipeline?.queue_depth)}</dd>
           </div>
           <div>
             <dt>{t("modules.pipeline.pendingRemote")}</dt>
@@ -348,6 +372,10 @@ export function ModulesPage({ session }: { session?: Session }) {
           <div>
             <dt>{t("modules.pipeline.lastDrain")}</dt>
             <dd>{formatDisplayDateTime(pipeline?.last_successful_drain_at || "", t("common.notAvailable"), language)}</dd>
+          </div>
+          <div>
+            <dt>{t("modules.pipeline.snapshotAgeLabel")}</dt>
+            <dd>{t("modules.pipeline.snapshotAge", { value: formatAge(pipeline?.snapshot_age_seconds) })}</dd>
           </div>
         </div>
       </div>

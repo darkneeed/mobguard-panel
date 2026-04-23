@@ -8,7 +8,7 @@ import unittest
 from unittest.mock import patch
 
 from mobguard_platform.models import DecisionBundle
-from mobguard_platform.store import PlatformStore
+from mobguard_platform.store import PlatformStore, ReadSnapshotUnavailableError
 
 
 class StoreReviewFlowTests(unittest.TestCase):
@@ -689,9 +689,46 @@ class StoreReviewFlowTests(unittest.TestCase):
             "https://mobguard.example.com/reviews/7",
         )
 
-    def test_overview_and_module_list_use_stale_cache_when_fast_read_hits_locked_db(self):
+    def test_overview_and_pipeline_use_stale_cache_when_fast_read_hits_locked_db(self):
         overview_before = self.store.get_overview_metrics()
+        pipeline_before = self.store.get_ingest_pipeline_status()
         modules_before = self.store.list_modules(include_counters=False, fast_read=True)
+
+        started_at = time.monotonic()
+        with patch.object(self.store, "_read_snapshot_payload", side_effect=sqlite3.OperationalError("database is locked")):
+            overview_cached = self.store.get_overview_metrics(fast_read=True)
+            pipeline_cached = self.store.get_ingest_pipeline_status(fast_read=True)
+            modules_cached = self.store.list_modules(include_counters=False, fast_read=True)
+        elapsed = time.monotonic() - started_at
+
+        self.assertLess(elapsed, 2.0)
+        self.assertEqual(
+            overview_cached["quality"].get("open_cases"),
+            overview_before["quality"].get("open_cases"),
+        )
+        self.assertEqual(pipeline_cached["queue_depth"], pipeline_before["queue_depth"])
+        self.assertTrue(pipeline_cached["stale"])
+        self.assertTrue(overview_cached["pipeline"]["stale"])
+        self.assertEqual(len(modules_cached), len(modules_before))
+
+    def test_overview_reads_last_good_snapshot_without_live_rebuild(self):
+        snapshot = self.store.get_overview_metrics()
+
+        with patch.object(
+            self.store,
+            "refresh_overview_snapshot",
+            side_effect=sqlite3.OperationalError("database is locked"),
+        ):
+            served = self.store.get_overview_metrics()
+
+        self.assertEqual(served["quality"], snapshot["quality"])
+        self.assertIn("pipeline", served)
+
+    def test_fast_read_raises_when_snapshot_is_missing_and_db_is_locked(self):
+        self.store._read_cache.clear()
+        with self.store._connect() as conn:
+            conn.execute("DELETE FROM read_model_snapshots WHERE snapshot_type IN (?, ?)", ("overview", "ingest_pipeline"))
+            conn.commit()
 
         lock_conn = sqlite3.connect(self.db_path, timeout=1, check_same_thread=False)
         self.addCleanup(lock_conn.close)
@@ -707,31 +744,29 @@ class StoreReviewFlowTests(unittest.TestCase):
         )
 
         started_at = time.monotonic()
-        overview_cached = self.store.get_overview_metrics()
-        modules_cached = self.store.list_modules(include_counters=False, fast_read=True)
+        with self.assertRaises(ReadSnapshotUnavailableError):
+            self.store.get_ingest_pipeline_status(fast_read=True)
+        with self.assertRaises(ReadSnapshotUnavailableError):
+            self.store.get_overview_metrics(fast_read=True)
         elapsed = time.monotonic() - started_at
 
         lock_conn.rollback()
 
         self.assertLess(elapsed, 2.0)
-        self.assertEqual(
-            overview_cached["quality"].get("open_cases"),
-            overview_before["quality"].get("open_cases"),
-        )
-        self.assertEqual(len(modules_cached), len(modules_before))
 
-    def test_overview_reads_last_good_snapshot_without_live_rebuild(self):
-        snapshot = self.store.get_overview_metrics()
+    def test_ingest_pipeline_snapshot_refresh_is_throttled_while_dirty(self):
+        self.store.mark_ingest_pipeline_snapshot_dirty()
 
-        with patch.object(
-            self.store,
-            "refresh_overview_snapshot",
-            side_effect=sqlite3.OperationalError("database is locked"),
-        ):
-            served = self.store.get_overview_metrics()
+        with patch("mobguard_platform.store.time.monotonic", side_effect=[100.0, 100.2, 100.4]):
+            with patch.object(self.store, "refresh_ingest_pipeline_snapshot") as refresh_snapshot:
+                first = self.store.refresh_due_ingest_pipeline_snapshot()
+                second = self.store.refresh_due_ingest_pipeline_snapshot()
+                third = self.store.refresh_due_ingest_pipeline_snapshot()
 
-        self.assertEqual(served["quality"], snapshot["quality"])
-        self.assertIn("pipeline", served)
+        refresh_snapshot.assert_called_once_with(low_priority=True)
+        self.assertTrue(first["refreshed"])
+        self.assertFalse(second["attempted"])
+        self.assertFalse(third["attempted"])
 
     def test_review_payload_normalizes_numeric_uuid_to_system_id_for_legacy_rows(self):
         with self.store._connect() as conn:

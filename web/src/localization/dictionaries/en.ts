@@ -105,8 +105,10 @@ export const enDictionary: TranslationDictionary = {
     description: "One screen for live state, moderation pressure, learning quality, and risky hotspots.",
     lastUpdated: "Last synced {value}",
     errors: {
-      loadFailed: "Failed to load overview data"
+      loadFailed: "Failed to load overview data",
+      showingLastGood: "Showing the last good snapshot ({value} old)."
     },
+    snapshotStale: "overview snapshot is stale",
     systemStatusTitle: "Live operator status",
     systemStatusDescription: "Core, queue, runtime rules, and export readiness in one glance.",
     healthTitle: "Health snapshot",
@@ -165,7 +167,8 @@ export const enDictionary: TranslationDictionary = {
       lag: "Current lag",
       oldestQueued: "Oldest queued {value}",
       lastDrain: "Last successful drain",
-      snapshotAge: "Snapshot age {value}"
+      snapshotAge: "Snapshot age {value}",
+      stale: "stale snapshot"
     }
   },
   login: {
@@ -410,7 +413,10 @@ export const enDictionary: TranslationDictionary = {
       queueDepth: "Queue depth",
       pendingRemote: "Pending remote jobs",
       lag: "Current lag",
-      lastDrain: "Last successful drain"
+      lastDrain: "Last successful drain",
+      snapshotAge: "Snapshot age {value}",
+      snapshotAgeLabel: "Snapshot freshness",
+      stale: "stale snapshot"
     }
   },
   reviewDetail: {

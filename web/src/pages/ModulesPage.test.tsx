@@ -27,6 +27,7 @@ describe("ModulesPage", () => {
   beforeEach(() => {
     cleanup();
     vi.clearAllMocks();
+    vi.useRealTimers();
     Object.assign(navigator, {
       clipboard: {
         writeText: vi.fn().mockResolvedValue(undefined)
@@ -37,7 +38,18 @@ describe("ModulesPage", () => {
   it("creates a module and shows install bundle with revealed token", async () => {
     vi.mocked(api.getModules).mockResolvedValue({
       items: [],
-      count: 0
+      count: 0,
+      pipeline: {
+        queue_depth: 0,
+        queued_count: 0,
+        processing_count: 0,
+        failed_count: 0,
+        snapshot_updated_at: "2026-04-12T00:00:00Z",
+        snapshot_age_seconds: 1,
+        stale: false,
+        enforcement_pending_count: 0,
+        worker_status: "ok"
+      }
     });
     vi.mocked(api.createModule).mockResolvedValue({
       module: {
@@ -113,7 +125,18 @@ describe("ModulesPage", () => {
           analysis_events_count: 1
         }
       ],
-      count: 1
+      count: 1,
+      pipeline: {
+        queue_depth: 4,
+        queued_count: 2,
+        processing_count: 2,
+        failed_count: 0,
+        snapshot_updated_at: "2026-04-12T00:01:00Z",
+        snapshot_age_seconds: 1,
+        stale: false,
+        enforcement_pending_count: 0,
+        worker_status: "ok"
+      }
     });
     vi.mocked(api.getModuleDetail).mockResolvedValue({
       module: {
@@ -166,5 +189,106 @@ describe("ModulesPage", () => {
     });
     expect(await screen.findByText("revealed-token")).toBeInTheDocument();
     expect(screen.getAllByText("Access log path not found")).toHaveLength(2);
+  });
+
+  it("polls modules and labels stale pipeline snapshots", async () => {
+    const intervalCallbacks: Array<{ callback: TimerHandler; delay?: number }> = [];
+    vi.spyOn(window, "setInterval").mockImplementation(((callback: TimerHandler, delay?: number) => {
+      intervalCallbacks.push({ callback, delay });
+      return 1 as unknown as number;
+    }) as typeof window.setInterval);
+    vi.spyOn(window, "clearInterval").mockImplementation(() => {});
+    vi.mocked(api.getModules)
+      .mockResolvedValueOnce({
+        items: [
+          {
+            module_id: "module-abc123",
+            module_name: "Node Alpha",
+            status: "online",
+            version: "1.0.0",
+            protocol_version: "v1",
+            config_revision_applied: 3,
+            install_state: "online",
+            managed: true,
+            inbound_tags: ["DEFAULT-INBOUND"],
+            health_status: "ok",
+            error_text: "",
+            last_validation_at: "2026-04-12T00:02:00",
+            spool_depth: 4,
+            access_log_exists: true,
+            first_seen_at: "2026-04-12T00:00:00",
+            last_seen_at: "2026-04-12T00:01:00",
+            healthy: true,
+            open_review_cases: 0,
+            analysis_events_count: 1
+          }
+        ],
+        count: 1,
+        pipeline: {
+          queue_depth: 902673,
+          queued_count: 902600,
+          processing_count: 73,
+          failed_count: 2,
+          snapshot_updated_at: "2026-04-12T00:01:00Z",
+          snapshot_age_seconds: 12,
+          stale: true,
+          enforcement_pending_count: 1,
+          worker_status: "ok"
+        }
+      })
+      .mockResolvedValueOnce({
+        items: [
+          {
+            module_id: "module-abc123",
+            module_name: "Node Alpha",
+            status: "online",
+            version: "1.0.0",
+            protocol_version: "v1",
+            config_revision_applied: 3,
+            install_state: "online",
+            managed: true,
+            inbound_tags: ["DEFAULT-INBOUND"],
+            health_status: "ok",
+            error_text: "",
+            last_validation_at: "2026-04-12T00:02:00",
+            spool_depth: 4,
+            access_log_exists: true,
+            first_seen_at: "2026-04-12T00:00:00",
+            last_seen_at: "2026-04-12T00:01:00",
+            healthy: true,
+            open_review_cases: 0,
+            analysis_events_count: 1
+          }
+        ],
+        count: 1,
+        pipeline: {
+          queue_depth: 18,
+          queued_count: 10,
+          processing_count: 8,
+          failed_count: 0,
+          snapshot_updated_at: "2026-04-12T00:01:15Z",
+          snapshot_age_seconds: 1,
+          stale: false,
+          enforcement_pending_count: 0,
+          worker_status: "ok"
+        }
+      });
+
+    renderWithProviders(<ModulesPage session={ownerSession} />);
+
+    expect((await screen.findAllByText("902673 · stale snapshot")).length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Snapshot age 12s").length).toBeGreaterThan(0);
+
+    const refreshInterval = intervalCallbacks.find((entry) => entry.delay === 15000);
+    expect(refreshInterval).toBeTruthy();
+    (refreshInterval?.callback as () => void)();
+
+    await waitFor(() => {
+      expect(api.getModules).toHaveBeenCalledTimes(2);
+    });
+    await waitFor(() => {
+      expect(screen.queryAllByText("902673 · stale snapshot")).toHaveLength(0);
+    });
+    expect(screen.getAllByText("Snapshot age 1s").length).toBeGreaterThan(0);
   });
 });

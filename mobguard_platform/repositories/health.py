@@ -22,9 +22,12 @@ class ServiceHealthRepository(SQLiteRepository):
         service_name: str,
         status: str = "ok",
         details: dict[str, Any] | None = None,
+        *,
+        timeout: float | None = None,
+        busy_timeout_ms: int | None = None,
     ) -> None:
         now = utcnow()
-        with self.connect() as conn:
+        with self.storage.connect(timeout=timeout, busy_timeout_ms=busy_timeout_ms) as conn:
             conn.execute(
                 """
                 INSERT INTO service_heartbeats (service_name, status, details_json, updated_at)

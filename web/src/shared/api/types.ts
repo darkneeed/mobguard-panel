@@ -367,6 +367,9 @@ export type PipelineStatus = {
   queued_count: number;
   processing_count: number;
   failed_count: number;
+  snapshot_updated_at?: string | null;
+  snapshot_age_seconds?: number;
+  stale?: boolean;
   enforcement_pending_count: number;
   enforcement_failed_count?: number;
   oldest_queued_at?: string | null;

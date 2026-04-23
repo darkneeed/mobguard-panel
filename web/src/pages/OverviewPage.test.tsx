@@ -22,6 +22,7 @@ describe("OverviewPage", () => {
   beforeEach(() => {
     cleanup();
     vi.clearAllMocks();
+    vi.useRealTimers();
   });
 
   it("loads the aggregated overview snapshot with latest cases", async () => {
@@ -120,6 +121,9 @@ describe("OverviewPage", () => {
         queued_count: 0,
         processing_count: 1,
         failed_count: 0,
+        snapshot_updated_at: "2026-04-12T03:25:01Z",
+        snapshot_age_seconds: 2,
+        stale: false,
         enforcement_pending_count: 0,
         current_lag_seconds: 4,
         oldest_queued_age_seconds: 0,
@@ -140,5 +144,139 @@ describe("OverviewPage", () => {
     expect(screen.getByRole("link", { name: /alpha/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Open event console" })).toHaveAttribute("href", "/data/events");
     expect(api.getOverview).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the last successful snapshot visible when polling fails", async () => {
+    const intervalCallbacks: Array<{ callback: TimerHandler; delay?: number }> = [];
+    vi.spyOn(window, "setInterval").mockImplementation(((callback: TimerHandler, delay?: number) => {
+      intervalCallbacks.push({ callback, delay });
+      return 1 as unknown as number;
+    }) as typeof window.setInterval);
+    vi.spyOn(window, "clearInterval").mockImplementation(() => {});
+    vi.mocked(api.getOverview)
+      .mockResolvedValueOnce({
+        health: {
+          status: "ok",
+          admin_sessions: 2,
+          ipinfo_token_present: true,
+          db: { healthy: true, path: "/tmp/test.sqlite3" },
+          core: {
+            healthy: true,
+            status: "embedded",
+            mode: "embedded",
+            updated_at: "2026-04-12T03:25:00Z"
+          },
+          live_rules: {
+            revision: 7,
+            updated_at: "2026-04-12T03:00:00Z",
+            updated_by: "owner"
+          },
+          analysis_24h: {
+            total: 4,
+            score_zero_count: 1,
+            score_zero_ratio: 0.25,
+            asn_missing_count: 0,
+            asn_missing_ratio: 0
+          }
+        },
+        quality: {
+          open_cases: 2,
+          total_cases: 4,
+          resolved_home: 1,
+          resolved_mobile: 1,
+          skipped: 0,
+          active_learning_patterns: 2,
+          active_sessions: 2,
+          live_rules_revision: 7,
+          live_rules_updated_at: "2026-04-12T03:00:00Z",
+          live_rules_updated_by: "owner",
+          top_noisy_asns: [{ asn_key: "AS12345", cnt: 2 }],
+          mixed_providers: {
+            open_cases: 1,
+            conflict_cases: 1,
+            conflict_rate: 1,
+            top_open_cases: [
+              {
+                provider_key: "mts",
+                open_cases: 1,
+                conflict_cases: 1,
+                home_cases: 1,
+                mobile_cases: 0,
+                unsure_cases: 0
+              }
+            ]
+          },
+          learning: {
+            promoted: {
+              active_patterns: 2
+            }
+          }
+        },
+        latest_cases: {
+          items: [
+            {
+              id: 11,
+              status: "OPEN",
+              review_reason: "provider_conflict",
+              module_id: "node-a",
+              module_name: "Node A",
+              uuid: "u-11",
+              username: "alpha",
+              system_id: 11,
+              telegram_id: "111",
+              ip: "1.1.1.1",
+              tag: null,
+              verdict: "UNSURE",
+              confidence_band: "UNSURE",
+              score: 12,
+              isp: "ISP A",
+              asn: 12345,
+              punitive_eligible: 0,
+              severity: "high",
+              repeat_count: 2,
+              reason_codes: ["provider_conflict"],
+              opened_at: "2026-04-12T02:55:00Z",
+              updated_at: "2026-04-12T03:25:00Z",
+              review_url: "https://example.test/reviews/11"
+            }
+          ],
+          count: 1,
+          page: 1,
+          page_size: 6
+        },
+        pipeline: {
+          queue_depth: 1,
+          queued_count: 0,
+          processing_count: 1,
+          failed_count: 0,
+          snapshot_updated_at: "2026-04-12T03:25:01Z",
+          snapshot_age_seconds: 2,
+          stale: false,
+          enforcement_pending_count: 0,
+          current_lag_seconds: 4,
+          oldest_queued_age_seconds: 0,
+          last_successful_drain_at: "2026-04-12T03:24:00Z",
+          worker_status: "ok"
+        },
+        freshness: {
+          overview_updated_at: "2026-04-12T03:25:00Z",
+          overview_age_seconds: 3,
+          pipeline_updated_at: "2026-04-12T03:25:01Z",
+          pipeline_age_seconds: 2
+        }
+      })
+      .mockRejectedValueOnce(new Error("temporary refresh failure"));
+
+    renderWithProviders(<OverviewPage session={session} />, { route: "/overview" });
+
+    expect(await screen.findByText("provider_conflict")).toBeInTheDocument();
+
+    const refreshInterval = intervalCallbacks.find((entry) => entry.delay === 30000);
+    expect(refreshInterval).toBeTruthy();
+    (refreshInterval?.callback as () => void)();
+
+    expect(await screen.findByText(/temporary refresh failure/i)).toBeInTheDocument();
+    expect(screen.getByText("provider_conflict")).toBeInTheDocument();
+    expect(api.getOverview).toHaveBeenCalledTimes(2);
   });
 });

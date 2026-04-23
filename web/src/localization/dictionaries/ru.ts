@@ -105,8 +105,10 @@ export const ruDictionary: TranslationDictionary = {
     description: "Один экран для live-state, модерационной нагрузки, качества learning и рискованных зон.",
     lastUpdated: "Последняя синхронизация {value}",
     errors: {
-      loadFailed: "Не удалось загрузить обзорный экран"
+      loadFailed: "Не удалось загрузить обзорный экран",
+      showingLastGood: "Показан последний успешный snapshot (возраст {value})."
     },
+    snapshotStale: "snapshot обзора устарел",
     systemStatusTitle: "Live-состояние операторской панели",
     systemStatusDescription: "Core, очередь, live rules и готовность экспортов на одном экране.",
     healthTitle: "Снимок здоровья",
@@ -165,7 +167,8 @@ export const ruDictionary: TranslationDictionary = {
       lag: "Текущий лаг",
       oldestQueued: "Старейшая queued-запись {value}",
       lastDrain: "Последний полный drain",
-      snapshotAge: "Возраст snapshot {value}"
+      snapshotAge: "Возраст snapshot {value}",
+      stale: "устаревший snapshot"
     }
   },
   login: {
@@ -410,7 +413,10 @@ export const ruDictionary: TranslationDictionary = {
       queueDepth: "Глубина очереди",
       pendingRemote: "Ожидают remote-задачи",
       lag: "Текущий лаг",
-      lastDrain: "Последний полный drain"
+      lastDrain: "Последний полный drain",
+      snapshotAge: "Возраст snapshot {value}",
+      snapshotAgeLabel: "Свежесть snapshot",
+      stale: "устаревший snapshot"
     }
   },
   reviewDetail: {

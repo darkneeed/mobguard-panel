@@ -17,7 +17,7 @@ from mobguard_platform import (
     should_warning_only,
 )
 from mobguard_platform.runtime_admin_defaults import ENFORCEMENT_SETTINGS_DEFAULTS
-from mobguard_platform.storage.sqlite import is_sqlite_busy_error
+from mobguard_platform.storage.sqlite import is_sqlite_busy_error, is_sqlite_interrupted_error
 
 from ..context import APIContainer
 from .modules import _analyze_event, _build_batch_context, _remnawave_client, _resolve_remote_user
@@ -33,7 +33,9 @@ INGEST_CLAIM_TIMEOUT_SECONDS = 120
 ENFORCEMENT_CLAIM_TIMEOUT_SECONDS = 120
 INGEST_IDLE_SLEEP_SECONDS = 1.0
 ENFORCEMENT_IDLE_SLEEP_SECONDS = 1.0
-SNAPSHOT_REFRESH_INTERVAL_SECONDS = 5.0
+PIPELINE_SNAPSHOT_REFRESH_INTERVAL_SECONDS = 5.0
+OVERVIEW_SNAPSHOT_REFRESH_INTERVAL_SECONDS = 15.0
+HEARTBEAT_WRITE_INTERVAL_SECONDS = 15.0
 INGEST_MAX_ATTEMPTS = 5
 ENFORCEMENT_MAX_ATTEMPTS = 5
 
@@ -53,6 +55,17 @@ def _is_transient_error(exc: BaseException) -> bool:
     if isinstance(exc, sqlite3.IntegrityError):
         return False
     return True
+
+
+def _is_best_effort_sqlite_error(exc: BaseException) -> bool:
+    return is_sqlite_busy_error(exc) or is_sqlite_interrupted_error(exc)
+
+
+def _log_best_effort_skip(action: str, exc: BaseException) -> None:
+    if is_sqlite_interrupted_error(exc):
+        logger.debug("%s skipped because SQLite fast-read timed out", action)
+        return
+    logger.warning("%s skipped because SQLite is busy", action)
 
 
 def _cache_decision_tx(conn: sqlite3.Connection, ip: str, bundle: DecisionBundle) -> None:
@@ -574,7 +587,7 @@ async def process_ingest_batch_once(
             summary["failed" if dead_letter else "retried"] += 1
             logger.exception("Queued ingest event failed: event_uid=%s", row.get("event_uid"))
 
-    await asyncio.to_thread(container.store.refresh_ingest_pipeline_snapshot)
+    container.store.mark_ingest_pipeline_snapshot_dirty()
     return summary
 
 
@@ -648,56 +661,85 @@ async def dispatch_enforcement_batch_once(
             summary["failed" if dead_letter else "retried"] += 1
             logger.exception("Enforcement job failed: id=%s", job_id)
 
-    await asyncio.to_thread(container.store.refresh_ingest_pipeline_snapshot)
+    container.store.mark_ingest_pipeline_snapshot_dirty()
     return summary
 
 
 async def ingest_worker_loop(container: APIContainer) -> None:
-    last_snapshot_refresh = 0.0
+    last_overview_snapshot_refresh = 0.0
+    last_heartbeat_write = 0.0
     while True:
         summary = await process_ingest_batch_once(container)
         now = time.monotonic()
-        if now - last_snapshot_refresh >= SNAPSHOT_REFRESH_INTERVAL_SECONDS:
+        pipeline_snapshot_result = await asyncio.to_thread(container.store.refresh_due_ingest_pipeline_snapshot)
+        if pipeline_snapshot_result.get("busy"):
+            logger.warning("Pipeline snapshot refresh skipped because SQLite is busy")
+        if now - last_overview_snapshot_refresh >= OVERVIEW_SNAPSHOT_REFRESH_INTERVAL_SECONDS:
             try:
-                await asyncio.to_thread(container.store.refresh_ingest_pipeline_snapshot)
-                await asyncio.to_thread(container.store.refresh_overview_snapshot)
+                await asyncio.to_thread(container.store.refresh_overview_snapshot, low_priority=True)
+            except sqlite3.OperationalError as exc:
+                if _is_best_effort_sqlite_error(exc):
+                    _log_best_effort_skip("Overview snapshot refresh", exc)
+                else:
+                    logger.exception("Overview snapshot refresh failed")
             except Exception:
                 logger.exception("Overview/pipeline snapshot refresh failed")
-            last_snapshot_refresh = now
-        try:
-            await asyncio.to_thread(
-                container.store.update_service_heartbeat,
-                INGEST_WORKER_NAME,
-                "ok",
-                {
-                    "claimed": summary["claimed"],
-                    "processed": summary["processed"],
-                    "retried": summary["retried"],
-                    "failed": summary["failed"],
-                },
-            )
-        except Exception:
-            logger.exception("Failed to update ingest worker heartbeat")
+            last_overview_snapshot_refresh = now
+        if now - last_heartbeat_write >= HEARTBEAT_WRITE_INTERVAL_SECONDS:
+            try:
+                await asyncio.to_thread(
+                    container.store.update_service_heartbeat,
+                    INGEST_WORKER_NAME,
+                    "ok",
+                    {
+                        "claimed": summary["claimed"],
+                        "processed": summary["processed"],
+                        "retried": summary["retried"],
+                        "failed": summary["failed"],
+                    },
+                    low_priority=True,
+                )
+            except sqlite3.OperationalError as exc:
+                if _is_best_effort_sqlite_error(exc):
+                    _log_best_effort_skip("Ingest worker heartbeat update", exc)
+                else:
+                    logger.exception("Failed to update ingest worker heartbeat")
+            except Exception:
+                logger.exception("Failed to update ingest worker heartbeat")
+            last_heartbeat_write = now
         if summary["claimed"] == 0:
             await asyncio.sleep(INGEST_IDLE_SLEEP_SECONDS)
 
 
 async def enforcement_dispatcher_loop(container: APIContainer) -> None:
+    last_heartbeat_write = 0.0
     while True:
         summary = await dispatch_enforcement_batch_once(container)
-        try:
-            await asyncio.to_thread(
-                container.store.update_service_heartbeat,
-                ENFORCEMENT_DISPATCHER_NAME,
-                "ok",
-                {
-                    "claimed": summary["claimed"],
-                    "applied": summary["applied"],
-                    "retried": summary["retried"],
-                    "failed": summary["failed"],
-                },
-            )
-        except Exception:
-            logger.exception("Failed to update enforcement dispatcher heartbeat")
+        pipeline_snapshot_result = await asyncio.to_thread(container.store.refresh_due_ingest_pipeline_snapshot)
+        if pipeline_snapshot_result.get("busy"):
+            logger.warning("Pipeline snapshot refresh skipped because SQLite is busy")
+        now = time.monotonic()
+        if now - last_heartbeat_write >= HEARTBEAT_WRITE_INTERVAL_SECONDS:
+            try:
+                await asyncio.to_thread(
+                    container.store.update_service_heartbeat,
+                    ENFORCEMENT_DISPATCHER_NAME,
+                    "ok",
+                    {
+                        "claimed": summary["claimed"],
+                        "applied": summary["applied"],
+                        "retried": summary["retried"],
+                        "failed": summary["failed"],
+                    },
+                    low_priority=True,
+                )
+            except sqlite3.OperationalError as exc:
+                if _is_best_effort_sqlite_error(exc):
+                    _log_best_effort_skip("Enforcement dispatcher heartbeat update", exc)
+                else:
+                    logger.exception("Failed to update enforcement dispatcher heartbeat")
+            except Exception:
+                logger.exception("Failed to update enforcement dispatcher heartbeat")
+            last_heartbeat_write = now
         if summary["claimed"] == 0:
             await asyncio.sleep(ENFORCEMENT_IDLE_SLEEP_SECONDS)

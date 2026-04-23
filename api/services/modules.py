@@ -694,7 +694,7 @@ def list_modules(container: APIContainer) -> dict[str, Any]:
         return {
             "items": modules,
             "count": len(modules),
-            "pipeline": container.store.get_ingest_pipeline_status(),
+            "pipeline": container.store.get_ingest_pipeline_status(fast_read=True),
         }
     except ReadSnapshotUnavailableError as exc:
         raise ValueError(f"Module list is temporarily unavailable ({exc.reason})") from exc
