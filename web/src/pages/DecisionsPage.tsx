@@ -44,7 +44,9 @@ function normalizeFilters(searchParams: URLSearchParams): DecisionFilters {
     decision_source: searchParams.get("decision_source") ?? "",
     enforcement_status: searchParams.get("enforcement_status") ?? "",
     page: Number(searchParams.get("page") || DEFAULT_FILTERS.page),
-    page_size: Number(searchParams.get("page_size") || DEFAULT_FILTERS.page_size),
+    page_size: Number(
+      searchParams.get("page_size") || DEFAULT_FILTERS.page_size,
+    ),
     sort: searchParams.get("sort") ?? DEFAULT_FILTERS.sort,
   };
 }
@@ -52,8 +54,15 @@ function normalizeFilters(searchParams: URLSearchParams): DecisionFilters {
 export function DecisionsPage({ session: _session }: { session?: Session }) {
   const { t, language } = useI18n();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [filters, setFilters] = useState<DecisionFilters>(() => normalizeFilters(searchParams));
-  const [data, setData] = useState<{ items: AnalysisEventItem[]; count: number; page: number; page_size: number }>({
+  const [filters, setFilters] = useState<DecisionFilters>(() =>
+    normalizeFilters(searchParams),
+  );
+  const [data, setData] = useState<{
+    items: AnalysisEventItem[];
+    count: number;
+    page: number;
+    page_size: number;
+  }>({
     items: [],
     count: 0,
     page: 1,
@@ -65,15 +74,22 @@ export function DecisionsPage({ session: _session }: { session?: Session }) {
 
   useEffect(() => {
     const nextFilters = normalizeFilters(searchParams);
-    setFilters((prev) => (JSON.stringify(prev) === JSON.stringify(nextFilters) ? prev : nextFilters));
+    setFilters((prev) =>
+      JSON.stringify(prev) === JSON.stringify(nextFilters) ? prev : nextFilters,
+    );
   }, [searchParams]);
 
   useEffect(() => {
-    setSearchParams(new URLSearchParams(buildSearchParams(filters)), { replace: true });
+    setSearchParams(new URLSearchParams(buildSearchParams(filters)), {
+      replace: true,
+    });
   }, [filters, setSearchParams]);
 
   const effectiveFilters = useMemo(() => ({ ...filters }), [filters]);
-  const totalPages = Math.max(1, Math.ceil((data.count || 0) / Math.max(data.page_size || 1, 1)));
+  const totalPages = Math.max(
+    1,
+    Math.ceil((data.count || 0) / Math.max(data.page_size || 1, 1)),
+  );
 
   async function load() {
     try {
@@ -90,7 +106,10 @@ export function DecisionsPage({ session: _session }: { session?: Session }) {
 
   useVisiblePolling(true, load, DECISIONS_REFRESH_MS, [effectiveFilters, t]);
 
-  function updateFilter<K extends keyof DecisionFilters>(key: K, value: DecisionFilters[K]) {
+  function updateFilter<K extends keyof DecisionFilters>(
+    key: K,
+    value: DecisionFilters[K],
+  ) {
     setFilters((prev) => ({ ...prev, [key]: value, page: 1 }));
   }
 
@@ -115,15 +134,23 @@ export function DecisionsPage({ session: _session }: { session?: Session }) {
     <section className="page">
       <div className="page-header page-header-stack">
         <div>
-          <span className="eyebrow">{t("decisions.eyebrow")}</span>
           <h1>{t("decisions.title")}</h1>
           <p className="page-lede">{t("decisions.description")}</p>
         </div>
         <div className="dashboard-meta">
-          <div className="chip">{t("decisions.countSummary", { count: data.count, page: data.page })}</div>
+          <div className="chip">
+            {t("decisions.countSummary", {
+              count: data.count,
+              page: data.page,
+            })}
+          </div>
           <span className="muted">
             {t("decisions.lastUpdated", {
-              value: formatDisplayDateTime(lastUpdatedAt, t("common.notAvailable"), language),
+              value: formatDisplayDateTime(
+                lastUpdatedAt,
+                t("common.notAvailable"),
+                language,
+              ),
             })}
           </span>
         </div>
@@ -140,43 +167,52 @@ export function DecisionsPage({ session: _session }: { session?: Session }) {
             value={filters.q}
             onChange={(event) => updateFilter("q", event.target.value)}
           />
-          <input
-            placeholder={t("decisions.filters.moduleId")}
-            value={filters.module_id}
-            onChange={(event) => updateFilter("module_id", event.target.value)}
-          />
-          <input
-            placeholder={t("decisions.filters.provider")}
-            value={filters.provider}
-            onChange={(event) => updateFilter("provider", event.target.value)}
-          />
-          <select value={filters.verdict} onChange={(event) => updateFilter("verdict", event.target.value)}>
+          <select
+            value={filters.verdict}
+            onChange={(event) => updateFilter("verdict", event.target.value)}
+          >
             <option value="">{t("decisions.filters.anyVerdict")}</option>
             <option value="HOME">{t("data.decisions.home")}</option>
             <option value="MOBILE">{t("data.decisions.mobile")}</option>
           </select>
           <select
             value={filters.decision_source}
-            onChange={(event) => updateFilter("decision_source", event.target.value)}
+            onChange={(event) =>
+              updateFilter("decision_source", event.target.value)
+            }
           >
             <option value="">{t("decisions.filters.anySource")}</option>
-            <option value="rule_engine">{t("decisions.sources.rule_engine")}</option>
+            <option value="rule_engine">
+              {t("decisions.sources.rule_engine")}
+            </option>
             <option value="cache">{t("decisions.sources.cache")}</option>
-            <option value="manual_override">{t("decisions.sources.manual_override")}</option>
+            <option value="manual_override">
+              {t("decisions.sources.manual_override")}
+            </option>
           </select>
           <select
             value={filters.enforcement_status}
-            onChange={(event) => updateFilter("enforcement_status", event.target.value)}
+            onChange={(event) =>
+              updateFilter("enforcement_status", event.target.value)
+            }
           >
             <option value="">{t("decisions.filters.anyEnforcement")}</option>
             <option value="none">{t("decisions.enforcement.none")}</option>
-            <option value="pending">{t("decisions.enforcement.status.pending")}</option>
-            <option value="applied">{t("decisions.enforcement.status.applied")}</option>
-            <option value="failed">{t("decisions.enforcement.status.failed")}</option>
+            <option value="pending">
+              {t("decisions.enforcement.status.pending")}
+            </option>
+            <option value="applied">
+              {t("decisions.enforcement.status.applied")}
+            </option>
+            <option value="failed">
+              {t("decisions.enforcement.status.failed")}
+            </option>
           </select>
           <select
             value={String(filters.page_size)}
-            onChange={(event) => updateFilter("page_size", Number(event.target.value))}
+            onChange={(event) =>
+              updateFilter("page_size", Number(event.target.value))
+            }
           >
             {PAGE_SIZE_OPTIONS.map((size) => (
               <option key={size} value={size}>
@@ -195,7 +231,12 @@ export function DecisionsPage({ session: _session }: { session?: Session }) {
             <h2>{t("decisions.listTitle")}</h2>
             <p className="muted">{t("decisions.listDescription")}</p>
           </div>
-          <span className="tag">{t("decisions.pagination.page", { page: data.page, total: totalPages })}</span>
+          <span className="tag">
+            {t("decisions.pagination.page", {
+              page: data.page,
+              total: totalPages,
+            })}
+          </span>
         </div>
         <div className="record-list">
           {loading ? (
@@ -230,15 +271,49 @@ export function DecisionsPage({ session: _session }: { session?: Session }) {
                       </span>
                     </div>
                     <div className="record-meta">
-                      <span>{t("decisions.meta.module", { value: String(item.module_name || item.module_id || "—") })}</span>
-                      <span>{t("decisions.meta.inbound", { value: String(item.inbound_tag || item.tag || "—") })}</span>
-                      <span>{t("decisions.meta.provider", { value: String(item.isp || "—") })}</span>
-                      <span>{t("decisions.meta.source", { value: t(`decisions.sources.${String(item.decision_source || "rule_engine")}`) })}</span>
-                      <span>{formatDisplayDateTime(item.created_at, t("common.notAvailable"), language)}</span>
+                      <span>
+                        {t("decisions.meta.module", {
+                          value: String(
+                            item.module_name || item.module_id || "—",
+                          ),
+                        })}
+                      </span>
+                      <span>
+                        {t("decisions.meta.inbound", {
+                          value: String(item.inbound_tag || item.tag || "—"),
+                        })}
+                      </span>
+                      <span>
+                        {t("decisions.meta.provider", {
+                          value: String(item.isp || "—"),
+                        })}
+                      </span>
+                      <span>
+                        {t("decisions.meta.source", {
+                          value: t(
+                            `decisions.sources.${String(item.decision_source || "rule_engine")}`,
+                          ),
+                        })}
+                      </span>
+                      <span>
+                        {formatDisplayDateTime(
+                          item.created_at,
+                          t("common.notAvailable"),
+                          language,
+                        )}
+                      </span>
                     </div>
                     <div className="record-meta">
-                      <span>{t("decisions.meta.scope", { value: scopeContext.scopeMeta })}</span>
-                      <span>{t("decisions.meta.enforcement", { value: formatEnforcement(item) })}</span>
+                      <span>
+                        {t("decisions.meta.scope", {
+                          value: scopeContext.scopeMeta,
+                        })}
+                      </span>
+                      <span>
+                        {t("decisions.meta.enforcement", {
+                          value: formatEnforcement(item),
+                        })}
+                      </span>
                     </div>
                     {item.last_error ? (
                       <div className="error-box">{item.last_error}</div>
@@ -252,14 +327,24 @@ export function DecisionsPage({ session: _session }: { session?: Session }) {
           <button
             className="ghost"
             disabled={filters.page <= 1}
-            onClick={() => setFilters((prev) => ({ ...prev, page: Math.max(prev.page - 1, 1) }))}
+            onClick={() =>
+              setFilters((prev) => ({
+                ...prev,
+                page: Math.max(prev.page - 1, 1),
+              }))
+            }
           >
             {t("decisions.pagination.previous")}
           </button>
           <button
             className="ghost"
             disabled={filters.page >= totalPages}
-            onClick={() => setFilters((prev) => ({ ...prev, page: Math.min(prev.page + 1, totalPages) }))}
+            onClick={() =>
+              setFilters((prev) => ({
+                ...prev,
+                page: Math.min(prev.page + 1, totalPages),
+              }))
+            }
           >
             {t("decisions.pagination.next")}
           </button>

@@ -56,6 +56,7 @@
   border-radius: 24px;
   padding: 1.25rem;
   min-width: 0;
+  margin-top: 1rem;
 }
 
 .panel-heading,
@@ -100,6 +101,7 @@
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 0.85rem;
+  margin-top: 1rem;
 }
 
 .search-strip,
@@ -296,6 +298,7 @@
 .detail-list {
   display: grid;
   gap: 0.75rem;
+  margin-top: 1rem;
 }
 
 .detail-list div {
@@ -395,6 +398,7 @@
   border-radius: 16px;
   padding: 0.75rem 0.95rem;
   background: var(--surface-soft);
+  margin-top: 1rem;
 }
 
 .export-section summary {
@@ -426,7 +430,7 @@
 }
 
 .module-install-steps {
-  margin: 0;
+  margin-top: 1rem;
   padding-left: 1.35rem;
   display: flex;
   flex-direction: column;
@@ -705,6 +709,7 @@
   flex-wrap: wrap;
   gap: 0.45rem;
   color: var(--muted);
+  margin-top: 1rem;
 }
 
 .record-actions {
@@ -916,6 +921,7 @@
 .ok-box {
   border-radius: 18px;
   padding: 1rem 1.15rem;
+  margin-top: 1rem;
 }
 
 .error-box {

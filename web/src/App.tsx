@@ -33,7 +33,6 @@ function LoadingScreen({ branding }: { branding: BrandingConfig }) {
             <small>{t("layout.brandSubtitle")}</small>
           </div>
         </div>
-        <span className="eyebrow">{t("common.loadingLabel")}</span>
         <h1>{t("common.loadingSession")}</h1>
         <div className="loading-stack">
           <span className="skeleton-line long" />
@@ -48,14 +47,22 @@ function LoadingScreen({ branding }: { branding: BrandingConfig }) {
 export default function App() {
   const { session, setSession, state, setState } = useSession();
   const [branding, setBranding] = useState<BrandingConfig>(DEFAULT_BRANDING);
-  const [bootstrapAuth, setBootstrapAuth] = useState<AuthCapabilities | null>(null);
+  const [bootstrapAuth, setBootstrapAuth] = useState<AuthCapabilities | null>(
+    null,
+  );
   const [language, setLanguage] = useState<Language>(() => {
     const stored = window.localStorage.getItem(LANGUAGE_KEY);
     return stored === "en" ? "en" : "ru";
   });
   const [palette, setPalette] = useState<PaletteName>(() => {
     const stored = window.localStorage.getItem(PALETTE_KEY);
-    if (stored === "green" || stored === "orange" || stored === "blue" || stored === "purple" || stored === "red") {
+    if (
+      stored === "green" ||
+      stored === "orange" ||
+      stored === "blue" ||
+      stored === "purple" ||
+      stored === "red"
+    ) {
       return stored;
     }
     return DEFAULT_PALETTE;
@@ -71,7 +78,8 @@ export default function App() {
   useEffect(() => {
     const media = window.matchMedia("(prefers-color-scheme: dark)");
     const applyTheme = () => {
-      const resolved = theme === "system" ? (media.matches ? "dark" : "light") : theme;
+      const resolved =
+        theme === "system" ? (media.matches ? "dark" : "light") : theme;
       document.documentElement.dataset.theme = resolved;
       document.documentElement.dataset.palette = palette;
     };
@@ -99,7 +107,8 @@ export default function App() {
         setBootstrapAuth(payload);
         setBranding({
           panel_name: payload.panel_name || DEFAULT_BRANDING.panel_name,
-          panel_logo_url: payload.panel_logo_url || DEFAULT_BRANDING.panel_logo_url,
+          panel_logo_url:
+            payload.panel_logo_url || DEFAULT_BRANDING.panel_logo_url,
         });
       } catch {
         if (!cancelled) {
@@ -137,7 +146,8 @@ export default function App() {
               setBootstrapAuth(payload);
               setBranding({
                 panel_name: payload.panel_name || DEFAULT_BRANDING.panel_name,
-                panel_logo_url: payload.panel_logo_url || DEFAULT_BRANDING.panel_logo_url,
+                panel_logo_url:
+                  payload.panel_logo_url || DEFAULT_BRANDING.panel_logo_url,
               });
             }}
             onAuthenticated={(nextSession) => {

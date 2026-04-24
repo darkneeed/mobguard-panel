@@ -8,10 +8,15 @@ import {
   listValuesToText,
   normalizeGeneralSettingsDraft,
   normalizeRulesDraft,
-  parseListText
+  parseListText,
 } from "../features/rules/lib/serializers";
 import { useI18n } from "../localization";
-import { automationGuardrailLabels, automationModeLabel, automationModeReasonLabels, deriveAutomationStatus } from "../shared/automationStatus";
+import {
+  automationGuardrailLabels,
+  automationModeLabel,
+  automationModeReasonLabels,
+  deriveAutomationStatus,
+} from "../shared/automationStatus";
 import {
   ProviderProfileDraft,
   RULE_LIST_FIELDS,
@@ -20,7 +25,7 @@ import {
   RuleSettingFieldMeta,
   RuleSettingSectionKey,
   RuleSettingValue,
-  RulesDraft
+  RulesDraft,
 } from "../rulesMeta";
 import { formatDisplayDateTime } from "../utils/datetime";
 
@@ -56,13 +61,25 @@ const GENERAL_SETTINGS_FIELDS: GeneralSettingField[] = [
   { key: "full_access_squad_name", inputType: "text" },
   { key: "restricted_access_squad_name", inputType: "text" },
   { key: "traffic_cap_increment_gb", inputType: "number" },
-  { key: "traffic_cap_threshold_gb", inputType: "number" }
+  { key: "traffic_cap_threshold_gb", inputType: "number" },
 ];
 
 const LIST_SECTIONS = Array.from(
-  new Set(RULE_LIST_FIELDS.filter((field) => field.sectionKey !== "access").map((field) => field.sectionKey))
+  new Set(
+    RULE_LIST_FIELDS.filter((field) => field.sectionKey !== "access").map(
+      (field) => field.sectionKey,
+    ),
+  ),
 );
-const RULES_SECTIONS = ["general", "thresholds", "lists", "providers", "policy", "learning", "retention"] as const;
+const RULES_SECTIONS = [
+  "general",
+  "thresholds",
+  "lists",
+  "providers",
+  "policy",
+  "learning",
+  "retention",
+] as const;
 type RulesSection = (typeof RULES_SECTIONS)[number];
 
 function blankProviderProfile(): ProviderProfileDraft {
@@ -72,7 +89,7 @@ function blankProviderProfile(): ProviderProfileDraft {
     aliases: [],
     mobile_markers: [],
     home_markers: [],
-    asns: []
+    asns: [],
   };
 }
 
@@ -81,15 +98,23 @@ export function RulesPage() {
   const { section } = useParams();
   const navigate = useNavigate();
   const activeSection = useMemo<RulesSection>(() => {
-    return RULES_SECTIONS.includes(section as RulesSection) ? (section as RulesSection) : "general";
+    return RULES_SECTIONS.includes(section as RulesSection)
+      ? (section as RulesSection)
+      : "general";
   }, [section]);
   const [state, setState] = useState<RulesState | null>(null);
   const [draft, setDraft] = useState<RulesDraft | null>(null);
   const [savedDraft, setSavedDraft] = useState<RulesDraft | null>(null);
   const [error, setError] = useState("");
   const [saved, setSaved] = useState("");
-  const [generalDraft, setGeneralDraft] = useState<Record<string, string> | null>(null);
-  const [savedGeneralDraft, setSavedGeneralDraft] = useState<Record<string, string> | null>(null);
+  const [generalDraft, setGeneralDraft] = useState<Record<
+    string,
+    string
+  > | null>(null);
+  const [savedGeneralDraft, setSavedGeneralDraft] = useState<Record<
+    string,
+    string
+  > | null>(null);
   const [generalError, setGeneralError] = useState("");
   const [generalSaved, setGeneralSaved] = useState("");
   const automationStatus = useMemo(
@@ -97,14 +122,17 @@ export function RulesPage() {
       deriveAutomationStatus({
         dry_run: generalDraft?.dry_run === "true",
         warning_only_mode: generalDraft?.warning_only_mode === "true",
-        manual_review_mixed_home_enabled: generalDraft?.manual_review_mixed_home_enabled === "true",
-        manual_ban_approval_enabled: generalDraft?.manual_ban_approval_enabled === "true",
+        manual_review_mixed_home_enabled:
+          generalDraft?.manual_review_mixed_home_enabled === "true",
+        manual_ban_approval_enabled:
+          generalDraft?.manual_ban_approval_enabled === "true",
         shadow_mode: draft?.settings?.shadow_mode === true,
         auto_enforce_requires_hard_or_multi_signal:
           draft?.settings?.auto_enforce_requires_hard_or_multi_signal === true,
-        provider_conflict_review_only: draft?.settings?.provider_conflict_review_only === true,
+        provider_conflict_review_only:
+          draft?.settings?.provider_conflict_review_only === true,
       }),
-    [draft, generalDraft]
+    [draft, generalDraft],
   );
 
   useEffect(() => {
@@ -121,14 +149,18 @@ export function RulesPage() {
       try {
         const [detectionPayload, enforcementPayload] = await Promise.all([
           api.getDetectionSettings(),
-          api.getEnforcementSettings()
+          api.getEnforcementSettings(),
         ]);
         if (cancelled) return;
 
         const typedDetection = detectionPayload as RulesState;
         const normalizedRules = normalizeRulesDraft(typedDetection.rules);
-        const typedEnforcement = enforcementPayload as EnforcementSettingsResponse;
-        const normalizedGeneral = normalizeGeneralSettingsDraft(typedEnforcement.settings, GENERAL_SETTINGS_FIELDS);
+        const typedEnforcement =
+          enforcementPayload as EnforcementSettingsResponse;
+        const normalizedGeneral = normalizeGeneralSettingsDraft(
+          typedEnforcement.settings,
+          GENERAL_SETTINGS_FIELDS,
+        );
 
         setState(typedDetection);
         setDraft(normalizedRules);
@@ -149,14 +181,18 @@ export function RulesPage() {
   }, [t]);
 
   const dirty = JSON.stringify(draft) !== JSON.stringify(savedDraft);
-  const generalDirty = JSON.stringify(generalDraft) !== JSON.stringify(savedGeneralDraft);
-  const updatedBy = !state?.updated_by || state.updated_by === "bootstrap" ? t("common.system") : state.updated_by;
+  const generalDirty =
+    JSON.stringify(generalDraft) !== JSON.stringify(savedGeneralDraft);
+  const updatedBy =
+    !state?.updated_by || state.updated_by === "bootstrap"
+      ? t("common.system")
+      : state.updated_by;
 
   function listFieldMeta(field: RuleListFieldMeta) {
     return {
       label: t(`rulesMeta.listFields.${field.key}.label`),
       description: t(`rulesMeta.listFields.${field.key}.description`),
-      recommendation: t(`rulesMeta.listFields.${field.key}.recommendation`)
+      recommendation: t(`rulesMeta.listFields.${field.key}.recommendation`),
     };
   }
 
@@ -164,26 +200,39 @@ export function RulesPage() {
     return {
       label: t(`rulesMeta.settingFields.${field.key}.label`),
       description: t(`rulesMeta.settingFields.${field.key}.description`),
-      recommendation: t(`rulesMeta.settingFields.${field.key}.recommendation`)
+      recommendation: t(`rulesMeta.settingFields.${field.key}.recommendation`),
     };
   }
 
   function generalFieldMeta(key: GeneralSettingKey) {
     return {
       label: t(`rulesMeta.rulesGeneralFields.${key}.label`),
-      description: t(`rulesMeta.rulesGeneralFields.${key}.description`)
+      description: t(`rulesMeta.rulesGeneralFields.${key}.description`),
     };
   }
 
-  function providerFieldMeta(field: "key" | "classification" | "aliases" | "mobile_markers" | "home_markers" | "asns") {
+  function providerFieldMeta(
+    field:
+      | "key"
+      | "classification"
+      | "aliases"
+      | "mobile_markers"
+      | "home_markers"
+      | "asns",
+  ) {
     return {
       label: t(`rules.providerProfiles.fields.${field}.label`),
-      description: t(`rules.providerProfiles.fields.${field}.description`)
+      description: t(`rules.providerProfiles.fields.${field}.description`),
     };
   }
 
-  function serializeListField(meta: RuleListFieldMeta, values: Array<string | number> | undefined) {
-    const rawValues = (values || []).map((item) => String(item).trim()).filter(Boolean);
+  function serializeListField(
+    meta: RuleListFieldMeta,
+    values: Array<string | number> | undefined,
+  ) {
+    const rawValues = (values || [])
+      .map((item) => String(item).trim())
+      .filter(Boolean);
     if (meta.itemType === "string") {
       return rawValues;
     }
@@ -200,7 +249,10 @@ export function RulesPage() {
     return serialized;
   }
 
-  function serializeSettingField(meta: RuleSettingFieldMeta, value: RuleSettingValue) {
+  function serializeSettingField(
+    meta: RuleSettingFieldMeta,
+    value: RuleSettingValue,
+  ) {
     if (meta.inputType === "boolean") {
       return Boolean(value);
     }
@@ -209,7 +261,9 @@ export function RulesPage() {
     }
     const parsed = Number(value);
     if (!Number.isFinite(parsed)) {
-      throw new Error(t("rules.invalidNumber", { field: settingFieldMeta(meta).label }));
+      throw new Error(
+        t("rules.invalidNumber", { field: settingFieldMeta(meta).label }),
+      );
     }
     return parsed;
   }
@@ -231,7 +285,9 @@ export function RulesPage() {
           .map((item) => {
             const parsed = Number(item);
             if (!Number.isFinite(parsed)) {
-              throw new Error(t("rules.invalidValue", { field: label, value: item }));
+              throw new Error(
+                t("rules.invalidValue", { field: label, value: item }),
+              );
             }
             return parsed;
           });
@@ -250,11 +306,17 @@ export function RulesPage() {
     return payload;
   }
 
-  function serializeProviderProfiles(profiles: ProviderProfileDraft[] | undefined) {
+  function serializeProviderProfiles(
+    profiles: ProviderProfileDraft[] | undefined,
+  ) {
     return (profiles || []).map((profile, index) => {
       const key = profile.key.trim().toLowerCase();
       if (!key) {
-        throw new Error(t("rules.providerProfiles.validation.missingKey", { index: index + 1 }));
+        throw new Error(
+          t("rules.providerProfiles.validation.missingKey", {
+            index: index + 1,
+          }),
+        );
       }
       const asns = profile.asns
         .map((item) => item.trim())
@@ -265,8 +327,8 @@ export function RulesPage() {
             throw new Error(
               t("rules.invalidValue", {
                 field: providerFieldMeta("asns").label,
-                value: item
-              })
+                value: item,
+              }),
             );
           }
           return parsed;
@@ -274,10 +336,16 @@ export function RulesPage() {
       return {
         key,
         classification: profile.classification,
-        aliases: profile.aliases.map((item) => item.trim().toLowerCase()).filter(Boolean),
-        mobile_markers: profile.mobile_markers.map((item) => item.trim().toLowerCase()).filter(Boolean),
-        home_markers: profile.home_markers.map((item) => item.trim().toLowerCase()).filter(Boolean),
-        asns
+        aliases: profile.aliases
+          .map((item) => item.trim().toLowerCase())
+          .filter(Boolean),
+        mobile_markers: profile.mobile_markers
+          .map((item) => item.trim().toLowerCase())
+          .filter(Boolean),
+        home_markers: profile.home_markers
+          .map((item) => item.trim().toLowerCase())
+          .filter(Boolean),
+        asns,
       };
     });
   }
@@ -289,17 +357,22 @@ export function RulesPage() {
       for (const field of RULE_LIST_FIELDS) {
         payload[field.key] = serializeListField(field, draft[field.key]);
       }
-      payload.provider_profiles = serializeProviderProfiles(draft.provider_profiles);
+      payload.provider_profiles = serializeProviderProfiles(
+        draft.provider_profiles,
+      );
       for (const field of RULE_SETTING_FIELDS) {
         payload.settings = {
           ...(payload.settings as Record<string, unknown>),
-          [field.key]: serializeSettingField(field, draft.settings?.[field.key])
+          [field.key]: serializeSettingField(
+            field,
+            draft.settings?.[field.key],
+          ),
         };
       }
       const updated = (await api.updateDetectionSettings({
         rules: payload,
         revision: state.revision,
-        updated_at: state.updated_at
+        updated_at: state.updated_at,
       })) as RulesState;
       const normalized = normalizeRulesDraft(updated.rules);
       setState(updated);
@@ -317,15 +390,20 @@ export function RulesPage() {
     if (!generalDraft) return;
     try {
       const response = (await api.updateEnforcementSettings({
-        settings: serializeGeneralSettings(generalDraft)
+        settings: serializeGeneralSettings(generalDraft),
       })) as EnforcementSettingsResponse;
-      const normalized = normalizeGeneralSettingsDraft(response.settings, GENERAL_SETTINGS_FIELDS);
+      const normalized = normalizeGeneralSettingsDraft(
+        response.settings,
+        GENERAL_SETTINGS_FIELDS,
+      );
       setGeneralDraft(normalized);
       setSavedGeneralDraft(normalized);
       setGeneralError("");
       setGeneralSaved(t("rules.generalSaved"));
     } catch (err) {
-      setGeneralError(err instanceof Error ? err.message : t("rules.saveFailed"));
+      setGeneralError(
+        err instanceof Error ? err.message : t("rules.saveFailed"),
+      );
       setGeneralSaved("");
     }
   }
@@ -334,7 +412,7 @@ export function RulesPage() {
     setDraft((prev) => ({
       ...(prev || {}),
       [meta.key]: parseListText(text),
-      settings: prev?.settings || {}
+      settings: prev?.settings || {},
     }));
     setSaved("");
   }
@@ -344,8 +422,8 @@ export function RulesPage() {
       ...(prev || {}),
       settings: {
         ...(prev?.settings || {}),
-        [meta.key]: meta.inputType === "boolean" ? value === "true" : value
-      }
+        [meta.key]: meta.inputType === "boolean" ? value === "true" : value,
+      },
     }));
     setSaved("");
   }
@@ -353,19 +431,22 @@ export function RulesPage() {
   function updateGeneralField(key: string, value: string) {
     setGeneralDraft((prev) => ({
       ...(prev || {}),
-      [key]: value
+      [key]: value,
     }));
     setGeneralSaved("");
   }
 
-  function updateProviderProfile(index: number, patch: Partial<ProviderProfileDraft>) {
+  function updateProviderProfile(
+    index: number,
+    patch: Partial<ProviderProfileDraft>,
+  ) {
     setDraft((prev) => {
       const providerProfiles = [...(prev?.provider_profiles || [])];
       providerProfiles[index] = { ...providerProfiles[index], ...patch };
       return {
         ...(prev || {}),
         settings: prev?.settings || {},
-        provider_profiles: providerProfiles
+        provider_profiles: providerProfiles,
       };
     });
     setSaved("");
@@ -375,7 +456,10 @@ export function RulesPage() {
     setDraft((prev) => ({
       ...(prev || {}),
       settings: prev?.settings || {},
-      provider_profiles: [...(prev?.provider_profiles || []), blankProviderProfile()]
+      provider_profiles: [
+        ...(prev?.provider_profiles || []),
+        blankProviderProfile(),
+      ],
     }));
     setSaved("");
   }
@@ -384,7 +468,9 @@ export function RulesPage() {
     setDraft((prev) => ({
       ...(prev || {}),
       settings: prev?.settings || {},
-      provider_profiles: (prev?.provider_profiles || []).filter((_, itemIndex) => itemIndex !== index)
+      provider_profiles: (prev?.provider_profiles || []).filter(
+        (_, itemIndex) => itemIndex !== index,
+      ),
     }));
     setSaved("");
   }
@@ -416,7 +502,9 @@ export function RulesPage() {
           <span className="muted">{t("rules.general.description")}</span>
         </div>
         <div className="action-row">
-          <span className={generalDirty ? "tag review-only" : "tag severity-low"}>
+          <span
+            className={generalDirty ? "tag review-only" : "tag severity-low"}
+          >
             {generalDirty ? t("common.unsavedChanges") : t("common.saved")}
           </span>
           <button disabled={!generalDirty} onClick={saveGeneralSettings}>
@@ -427,7 +515,11 @@ export function RulesPage() {
     );
   }
 
-  function renderSettingPanel(title: string, description: string, sectionKeys: RuleSettingSectionKey[]) {
+  function renderSettingPanel(
+    title: string,
+    description: string,
+    sectionKeys: RuleSettingSectionKey[],
+  ) {
     if (!draft) return null;
     return (
       <div className="panel">
@@ -436,7 +528,9 @@ export function RulesPage() {
           <p className="muted">{description}</p>
         </div>
         <div className="form-grid compact-form-grid">
-          {RULE_SETTING_FIELDS.filter((field) => sectionKeys.includes(field.sectionKey)).map((field) => {
+          {RULE_SETTING_FIELDS.filter((field) =>
+            sectionKeys.includes(field.sectionKey),
+          ).map((field) => {
             const meta = settingFieldMeta(field);
             return (
               <div className="rule-field compact-rule-field" key={field.key}>
@@ -447,8 +541,13 @@ export function RulesPage() {
                 />
                 {field.inputType === "boolean" ? (
                   <select
-                    value={getSettingInputValue(field, draft.settings?.[field.key])}
-                    onChange={(event) => updateSettingField(field, event.target.value)}
+                    value={getSettingInputValue(
+                      field,
+                      draft.settings?.[field.key],
+                    )}
+                    onChange={(event) =>
+                      updateSettingField(field, event.target.value)
+                    }
                   >
                     <option value="true">{t("common.true")}</option>
                     <option value="false">{t("common.false")}</option>
@@ -457,8 +556,13 @@ export function RulesPage() {
                   <input
                     type={field.inputType === "number" ? "number" : "text"}
                     step={field.step}
-                    value={getSettingInputValue(field, draft.settings?.[field.key])}
-                    onChange={(event) => updateSettingField(field, event.target.value)}
+                    value={getSettingInputValue(
+                      field,
+                      draft.settings?.[field.key],
+                    )}
+                    onChange={(event) =>
+                      updateSettingField(field, event.target.value)
+                    }
                   />
                 )}
               </div>
@@ -484,14 +588,20 @@ export function RulesPage() {
             const meta = generalFieldMeta(field.key);
             return (
               <div
-                className={field.inputType === "number-list" ? "rule-field rule-field-wide compact-rule-field" : "rule-field compact-rule-field"}
+                className={
+                  field.inputType === "number-list"
+                    ? "rule-field rule-field-wide compact-rule-field"
+                    : "rule-field compact-rule-field"
+                }
                 key={field.key}
               >
                 <FieldLabel label={meta.label} description={meta.description} />
                 {field.inputType === "boolean" ? (
                   <select
                     value={generalDraft[field.key] || "false"}
-                    onChange={(event) => updateGeneralField(field.key, event.target.value)}
+                    onChange={(event) =>
+                      updateGeneralField(field.key, event.target.value)
+                    }
                   >
                     <option value="true">{t("common.true")}</option>
                     <option value="false">{t("common.false")}</option>
@@ -500,20 +610,26 @@ export function RulesPage() {
                   <textarea
                     className="note-box compact-note-box"
                     value={generalDraft[field.key] || ""}
-                    onChange={(event) => updateGeneralField(field.key, event.target.value)}
+                    onChange={(event) =>
+                      updateGeneralField(field.key, event.target.value)
+                    }
                   />
                 ) : field.inputType === "text" ? (
                   <input
                     type="text"
                     value={generalDraft[field.key] || ""}
-                    onChange={(event) => updateGeneralField(field.key, event.target.value)}
+                    onChange={(event) =>
+                      updateGeneralField(field.key, event.target.value)
+                    }
                   />
                 ) : (
                   <input
                     type="number"
                     step={field.step}
                     value={generalDraft[field.key] || ""}
-                    onChange={(event) => updateGeneralField(field.key, event.target.value)}
+                    onChange={(event) =>
+                      updateGeneralField(field.key, event.target.value)
+                    }
                   />
                 )}
               </div>
@@ -540,11 +656,19 @@ export function RulesPage() {
           </div>
           <div>
             <dt>{t("rules.automationStatus.modeReasonsLabel")}</dt>
-            <dd>{modeReasons.length > 0 ? modeReasons.join(", ") : t("rules.automationStatus.noModeReasons")}</dd>
+            <dd>
+              {modeReasons.length > 0
+                ? modeReasons.join(", ")
+                : t("rules.automationStatus.noModeReasons")}
+            </dd>
           </div>
           <div>
             <dt>{t("rules.automationStatus.guardrailsLabel")}</dt>
-            <dd>{guardrails.length > 0 ? guardrails.join(", ") : t("rules.automationStatus.noGuardrails")}</dd>
+            <dd>
+              {guardrails.length > 0
+                ? guardrails.join(", ")
+                : t("rules.automationStatus.noGuardrails")}
+            </dd>
           </div>
         </div>
       </div>
@@ -560,23 +684,27 @@ export function RulesPage() {
           <p className="muted">{t("rules.listSectionDescription")}</p>
         </div>
         <div className="detail-grid">
-          {RULE_LIST_FIELDS.filter((field) => field.sectionKey === section).map((field) => {
-            const meta = listFieldMeta(field);
-            return (
-              <div className="rule-field compact-rule-field" key={field.key}>
-                <FieldLabel
-                  label={meta.label}
-                  description={meta.description}
-                  recommendation={meta.recommendation}
-                />
-                <textarea
-                  className="note-box compact-note-box"
-                  value={listValuesToText(draft[field.key])}
-                  onChange={(event) => updateListField(field, event.target.value)}
-                />
-              </div>
-            );
-          })}
+          {RULE_LIST_FIELDS.filter((field) => field.sectionKey === section).map(
+            (field) => {
+              const meta = listFieldMeta(field);
+              return (
+                <div className="rule-field compact-rule-field" key={field.key}>
+                  <FieldLabel
+                    label={meta.label}
+                    description={meta.description}
+                    recommendation={meta.recommendation}
+                  />
+                  <textarea
+                    className="note-box compact-note-box"
+                    value={listValuesToText(draft[field.key])}
+                    onChange={(event) =>
+                      updateListField(field, event.target.value)
+                    }
+                  />
+                </div>
+              );
+            },
+          )}
         </div>
       </div>
     ));
@@ -597,56 +725,99 @@ export function RulesPage() {
         </div>
         <div className="provider-profiles">
           {(draft.provider_profiles || []).map((profile, index) => (
-            <div className="provider-card" key={`${profile.key || "provider"}-${index}`}>
+            <div
+              className="provider-card"
+              key={`${profile.key || "provider"}-${index}`}
+            >
               <div className="provider-card-header">
                 <div>
-                  <strong>{profile.key || t("rules.providerProfiles.cardTitle", { index: index + 1 })}</strong>
-                  <p className="muted">{t("rules.providerProfiles.cardSubtitle")}</p>
+                  <strong>
+                    {profile.key ||
+                      t("rules.providerProfiles.cardTitle", {
+                        index: index + 1,
+                      })}
+                  </strong>
+                  <p className="muted">
+                    {t("rules.providerProfiles.cardSubtitle")}
+                  </p>
                 </div>
-                <button className="ghost small-button" onClick={() => removeProviderProfile(index)}>
+                <button
+                  className="ghost small-button"
+                  onClick={() => removeProviderProfile(index)}
+                >
                   {t("rules.providerProfiles.remove")}
                 </button>
               </div>
               <div className="form-grid compact-form-grid">
                 <div className="rule-field compact-rule-field">
-                  <FieldLabel label={providerFieldMeta("key").label} description={providerFieldMeta("key").description} />
-                  <input value={profile.key} onChange={(event) => updateProviderProfile(index, { key: event.target.value })} />
+                  <FieldLabel
+                    label={providerFieldMeta("key").label}
+                    description={providerFieldMeta("key").description}
+                  />
+                  <input
+                    value={profile.key}
+                    onChange={(event) =>
+                      updateProviderProfile(index, { key: event.target.value })
+                    }
+                  />
                 </div>
                 <div className="rule-field compact-rule-field">
                   <FieldLabel
                     label={providerFieldMeta("classification").label}
-                    description={providerFieldMeta("classification").description}
+                    description={
+                      providerFieldMeta("classification").description
+                    }
                   />
                   <select
                     value={profile.classification}
                     onChange={(event) =>
                       updateProviderProfile(index, {
-                        classification: event.target.value as ProviderProfileDraft["classification"]
+                        classification: event.target
+                          .value as ProviderProfileDraft["classification"],
                       })
                     }
                   >
-                    <option value="mixed">{t("rules.providerProfiles.classifications.mixed")}</option>
-                    <option value="mobile">{t("rules.providerProfiles.classifications.mobile")}</option>
-                    <option value="home">{t("rules.providerProfiles.classifications.home")}</option>
+                    <option value="mixed">
+                      {t("rules.providerProfiles.classifications.mixed")}
+                    </option>
+                    <option value="mobile">
+                      {t("rules.providerProfiles.classifications.mobile")}
+                    </option>
+                    <option value="home">
+                      {t("rules.providerProfiles.classifications.home")}
+                    </option>
                   </select>
                 </div>
                 <div className="rule-field rule-field-wide compact-rule-field">
-                  <FieldLabel label={providerFieldMeta("aliases").label} description={providerFieldMeta("aliases").description} />
+                  <FieldLabel
+                    label={providerFieldMeta("aliases").label}
+                    description={providerFieldMeta("aliases").description}
+                  />
                   <textarea
                     className="note-box compact-note-box"
                     value={listValuesToText(profile.aliases)}
-                    onChange={(event) => updateProviderProfile(index, { aliases: parseListText(event.target.value) })}
+                    onChange={(event) =>
+                      updateProviderProfile(index, {
+                        aliases: parseListText(event.target.value),
+                      })
+                    }
                   />
                 </div>
                 <div className="rule-field compact-rule-field">
                   <FieldLabel
                     label={providerFieldMeta("mobile_markers").label}
-                    description={providerFieldMeta("mobile_markers").description}
+                    description={
+                      providerFieldMeta("mobile_markers").description
+                    }
                   />
                   <textarea
                     className="note-box compact-note-box"
                     value={listValuesToText(profile.mobile_markers)}
-                    onChange={(event) => updateProviderProfile(index, { mobile_markers: parseListText(event.target.value) })}
+                    onChange={(event) =>
+                      updateProviderProfile(index, {
+                        mobile_markers: parseListText(event.target.value),
+                      })
+                    }
                   />
                 </div>
                 <div className="rule-field compact-rule-field">
@@ -657,15 +828,26 @@ export function RulesPage() {
                   <textarea
                     className="note-box compact-note-box"
                     value={listValuesToText(profile.home_markers)}
-                    onChange={(event) => updateProviderProfile(index, { home_markers: parseListText(event.target.value) })}
+                    onChange={(event) =>
+                      updateProviderProfile(index, {
+                        home_markers: parseListText(event.target.value),
+                      })
+                    }
                   />
                 </div>
                 <div className="rule-field rule-field-wide compact-rule-field">
-                  <FieldLabel label={providerFieldMeta("asns").label} description={providerFieldMeta("asns").description} />
+                  <FieldLabel
+                    label={providerFieldMeta("asns").label}
+                    description={providerFieldMeta("asns").description}
+                  />
                   <textarea
                     className="note-box compact-note-box"
                     value={listValuesToText(profile.asns)}
-                    onChange={(event) => updateProviderProfile(index, { asns: parseListText(event.target.value) })}
+                    onChange={(event) =>
+                      updateProviderProfile(index, {
+                        asns: parseListText(event.target.value),
+                      })
+                    }
                   />
                 </div>
               </div>
@@ -701,28 +883,28 @@ export function RulesPage() {
           ? renderSettingPanel(
               t("rules.sectionTitles.thresholds"),
               t("rules.sectionDescriptions.thresholds"),
-              ["thresholds", "scores", "behavior"]
+              ["thresholds", "scores", "behavior"],
             )
           : null}
         {activeSection === "policy"
           ? renderSettingPanel(
               t("rules.sectionTitles.policy"),
               t("rules.sectionDescriptions.policy"),
-              ["policy"]
+              ["policy"],
             )
           : null}
         {activeSection === "learning"
           ? renderSettingPanel(
               t("rules.sectionTitles.learning"),
               t("rules.sectionDescriptions.learning"),
-              ["learning"]
+              ["learning"],
             )
           : null}
         {activeSection === "retention"
           ? renderSettingPanel(
               t("rules.sectionTitles.retention"),
               t("rules.sectionDescriptions.retention"),
-              ["retention"]
+              ["retention"],
             )
           : null}
       </>
@@ -733,18 +915,26 @@ export function RulesPage() {
     <section className="page">
       <div className="page-header page-header-stack">
         <div>
-          <span className="eyebrow">{t("rules.eyebrow")}</span>
           <h1>{t("rules.title")}</h1>
-          <p className="page-lede">{t(`rules.sectionDescriptions.${activeSection}`)}</p>
+          <p className="page-lede">
+            {t(`rules.sectionDescriptions.${activeSection}`)}
+          </p>
         </div>
-        <span className="chip">{t(`layout.subnav.rules.${activeSection}`)}</span>
       </div>
       {error ? <div className="error-box">{error}</div> : null}
       {saved ? <div className="ok-box">{saved}</div> : null}
       {state ? (
         <div className="panel compact-toolbar compact-toolbar-meta">
           <span>{t("rules.revision", { value: state.revision })}</span>
-          <span>{t("rules.updatedAt", { value: formatDisplayDateTime(state.updated_at, t("common.notAvailable"), language) })}</span>
+          <span>
+            {t("rules.updatedAt", {
+              value: formatDisplayDateTime(
+                state.updated_at,
+                t("common.notAvailable"),
+                language,
+              ),
+            })}
+          </span>
           <span>{t("rules.updatedBy", { value: updatedBy })}</span>
         </div>
       ) : null}

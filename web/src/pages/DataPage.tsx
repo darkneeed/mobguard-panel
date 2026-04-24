@@ -17,7 +17,7 @@ import {
   UserCardExportResponse,
   UserCardResponse,
   UserSearchResponse,
-  ViolationsResponse
+  ViolationsResponse,
 } from "../api/client";
 import { useToast } from "../components/ToastProvider";
 import { useI18n } from "../localization";
@@ -31,7 +31,17 @@ import { LearningCasesSection } from "./data/LearningCasesSection";
 import { OperationsDataSection } from "./data/OperationsDataSection";
 import { UserDataSection } from "./data/UserDataSection";
 
-type DataTab = "console" | "users" | "violations" | "overrides" | "cache" | "learning" | "cases" | "events" | "exports" | "audit";
+type DataTab =
+  | "console"
+  | "users"
+  | "violations"
+  | "overrides"
+  | "cache"
+  | "learning"
+  | "cases"
+  | "events"
+  | "exports"
+  | "audit";
 type ConsoleFilters = {
   q: string;
   source: string;
@@ -75,7 +85,7 @@ const DATA_TABS: DataTab[] = [
   "cases",
   "events",
   "exports",
-  "audit"
+  "audit",
 ];
 
 export function DataPage({ session }: { session?: Session }) {
@@ -84,15 +94,20 @@ export function DataPage({ session }: { session?: Session }) {
   const { section } = useParams();
   const navigate = useNavigate();
   const tab = useMemo<DataTab>(() => {
-    return DATA_TABS.includes(section as DataTab) ? (section as DataTab) : "users";
+    return DATA_TABS.includes(section as DataTab)
+      ? (section as DataTab)
+      : "users";
   }, [section]);
   const [pageError, setPageError] = useState("");
-  const [pending, setPending] = useState<Partial<Record<PendingKey, boolean>>>({});
+  const [pending, setPending] = useState<Partial<Record<PendingKey, boolean>>>(
+    {},
+  );
 
   const [userQuery, setUserQuery] = useState("");
   const [userSearch, setUserSearch] = useState<UserSearchResponse | null>(null);
   const [userCard, setUserCard] = useState<UserCardResponse | null>(null);
-  const [userCardExport, setUserCardExport] = useState<UserCardExportResponse | null>(null);
+  const [userCardExport, setUserCardExport] =
+    useState<UserCardExportResponse | null>(null);
   const [banMinutes, setBanMinutes] = useState("15");
   const [trafficCapGigabytes, setTrafficCapGigabytes] = useState("10");
   const [strikeCount, setStrikeCount] = useState("1");
@@ -104,7 +119,9 @@ export function DataPage({ session }: { session?: Session }) {
   const [learning, setLearning] = useState<LearningAdminResponse | null>(null);
   const [cases, setCases] = useState<ReviewListResponse | null>(null);
   const [events, setEvents] = useState<AnalysisEventListResponse | null>(null);
-  const [consoleData, setConsoleData] = useState<ConsoleListResponse | null>(null);
+  const [consoleData, setConsoleData] = useState<ConsoleListResponse | null>(
+    null,
+  );
   const [audit, setAudit] = useState<AuditTrailResponse | null>(null);
   const canWriteData = hasPermission(session, "data.write");
   const [consoleFilters, setConsoleFilters] = useState<ConsoleFilters>({
@@ -113,7 +130,7 @@ export function DataPage({ session }: { session?: Session }) {
     level: "",
     module_id: "",
     page: 1,
-    page_size: 100
+    page_size: 100,
   });
   const [eventFilters, setEventFilters] = useState<EventFilters>({
     q: "",
@@ -127,7 +144,7 @@ export function DataPage({ session }: { session?: Session }) {
     confidence_band: "",
     has_review_case: "",
     page: 1,
-    page_size: 50
+    page_size: 50,
   });
 
   const [exactOverrideIp, setExactOverrideIp] = useState("");
@@ -137,15 +154,18 @@ export function DataPage({ session }: { session?: Session }) {
   const [selectedCacheIp, setSelectedCacheIp] = useState("");
   const [cacheDraft, setCacheDraft] = useState<Record<string, string>>({});
 
-  const [calibrationFilters, setCalibrationFilters] = useState<Record<string, string | boolean>>({
+  const [calibrationFilters, setCalibrationFilters] = useState<
+    Record<string, string | boolean>
+  >({
     opened_from: "",
     opened_to: "",
     review_reason: "",
     provider_key: "",
     include_unknown: false,
-    status: "resolved_only"
+    status: "resolved_only",
   });
-  const [lastCalibrationManifest, setLastCalibrationManifest] = useState<CalibrationExportPreview | null>(null);
+  const [lastCalibrationManifest, setLastCalibrationManifest] =
+    useState<CalibrationExportPreview | null>(null);
   const [lastCalibrationFilename, setLastCalibrationFilename] = useState("");
   const [previewError, setPreviewError] = useState("");
 
@@ -155,7 +175,9 @@ export function DataPage({ session }: { session?: Session }) {
       setConsoleData(payload);
       setPageError("");
     } catch (err) {
-      setPageError(err instanceof Error ? err.message : t("data.errors.loadTabFailed"));
+      setPageError(
+        err instanceof Error ? err.message : t("data.errors.loadTabFailed"),
+      );
     }
   }
 
@@ -167,7 +189,9 @@ export function DataPage({ session }: { session?: Session }) {
   }, [navigate, section]);
 
   function displayValue(value: unknown): string {
-    return value === null || value === undefined || value === "" ? t("common.notAvailable") : String(value);
+    return value === null || value === undefined || value === ""
+      ? t("common.notAvailable")
+      : String(value);
   }
 
   function formatPanelSquads(value: unknown): string {
@@ -186,11 +210,15 @@ export function DataPage({ session }: { session?: Session }) {
 
   function formatTrafficBytes(value: unknown): string {
     const numeric =
-      typeof value === "number" ? value : typeof value === "string" && value.trim() ? Number(value) : NaN;
+      typeof value === "number"
+        ? value
+        : typeof value === "string" && value.trim()
+          ? Number(value)
+          : NaN;
     if (!Number.isFinite(numeric) || numeric < 0) {
       return t("common.notAvailable");
     }
-    const gib = numeric / (1024 ** 3);
+    const gib = numeric / 1024 ** 3;
     return `${gib.toFixed(2)} GB`;
   }
 
@@ -202,7 +230,10 @@ export function DataPage({ session }: { session?: Session }) {
     return keys.some((key) => Boolean(pending[key]));
   }
 
-  async function withPending<T>(key: PendingKey, action: () => Promise<T>): Promise<T> {
+  async function withPending<T>(
+    key: PendingKey,
+    action: () => Promise<T>,
+  ): Promise<T> {
     setPendingKey(key, true);
     try {
       return await action();
@@ -211,12 +242,17 @@ export function DataPage({ session }: { session?: Session }) {
     }
   }
 
-  function parseManifestHeader(header: string | null): Record<string, unknown> | null {
+  function parseManifestHeader(
+    header: string | null,
+  ): Record<string, unknown> | null {
     if (!header) return null;
     try {
       const binary = atob(header);
       const bytes = Uint8Array.from(binary, (item) => item.charCodeAt(0));
-      return JSON.parse(new TextDecoder().decode(bytes)) as Record<string, unknown>;
+      return JSON.parse(new TextDecoder().decode(bytes)) as Record<
+        string,
+        unknown
+      >;
     } catch {
       return null;
     }
@@ -246,7 +282,10 @@ export function DataPage({ session }: { session?: Session }) {
           const payload = await api.listCases({ page: 1, page_size: 50 });
           if (!cancelled) setCases(payload);
         } else if (tab === "events") {
-          const payload = await api.getAnalysisEvents({ ...eventFilters, sort: "created_desc" });
+          const payload = await api.getAnalysisEvents({
+            ...eventFilters,
+            sort: "created_desc",
+          });
           if (!cancelled) setEvents(payload);
         } else if (tab === "audit") {
           const payload = await api.getAuditTrail();
@@ -254,7 +293,9 @@ export function DataPage({ session }: { session?: Session }) {
         }
       } catch (err) {
         if (!cancelled) {
-          setPageError(err instanceof Error ? err.message : t("data.errors.loadTabFailed"));
+          setPageError(
+            err instanceof Error ? err.message : t("data.errors.loadTabFailed"),
+          );
         }
       }
     }
@@ -265,7 +306,10 @@ export function DataPage({ session }: { session?: Session }) {
     };
   }, [consoleFilters, eventFilters, tab, t]);
 
-  useVisiblePolling(tab === "console", loadConsoleTab, 3000, [consoleFilters, t]);
+  useVisiblePolling(tab === "console", loadConsoleTab, 3000, [
+    consoleFilters,
+    t,
+  ]);
 
   useEffect(() => {
     if (tab !== "exports") return undefined;
@@ -274,14 +318,23 @@ export function DataPage({ session }: { session?: Session }) {
     const timer = window.setTimeout(async () => {
       try {
         const payload = await withPending("calibrationPreview", () =>
-          api.previewCalibration(calibrationFilters as Record<string, string | number | boolean | undefined>)
+          api.previewCalibration(
+            calibrationFilters as Record<
+              string,
+              string | number | boolean | undefined
+            >,
+          ),
         );
         if (cancelled) return;
         setLastCalibrationManifest(payload);
         setPreviewError("");
       } catch (err) {
         if (cancelled) return;
-        setPreviewError(err instanceof Error ? err.message : t("data.errors.exportCalibrationFailed"));
+        setPreviewError(
+          err instanceof Error
+            ? err.message
+            : t("data.errors.exportCalibrationFailed"),
+        );
       }
     }, 220);
 
@@ -293,50 +346,80 @@ export function DataPage({ session }: { session?: Session }) {
 
   async function searchUsers() {
     try {
-      const payload = await withPending("userSearch", () => api.searchUsers(userQuery));
+      const payload = await withPending("userSearch", () =>
+        api.searchUsers(userQuery),
+      );
       setUserSearch(payload);
     } catch (err) {
-      pushToast("error", err instanceof Error ? err.message : t("data.errors.searchUsersFailed"));
+      pushToast(
+        "error",
+        err instanceof Error ? err.message : t("data.errors.searchUsersFailed"),
+      );
     }
   }
 
   async function loadUser(identifier: string) {
     try {
-      const payload = await withPending("userLoad", () => api.getUserCard(identifier));
+      const payload = await withPending("userLoad", () =>
+        api.getUserCard(identifier),
+      );
       setUserCard(payload);
       setUserCardExport(null);
     } catch (err) {
-      pushToast("error", err instanceof Error ? err.message : t("data.errors.loadUserFailed"));
+      pushToast(
+        "error",
+        err instanceof Error ? err.message : t("data.errors.loadUserFailed"),
+      );
     }
   }
 
-  async function runUserAction(action: () => Promise<UserCardResponse>, successMessage: string) {
+  async function runUserAction(
+    action: () => Promise<UserCardResponse>,
+    successMessage: string,
+  ) {
     try {
       const payload = await withPending("userAction", action);
       setUserCard(payload);
       pushToast("success", successMessage);
     } catch (err) {
-      pushToast("error", err instanceof Error ? err.message : t("data.errors.userActionFailed"));
+      pushToast(
+        "error",
+        err instanceof Error ? err.message : t("data.errors.userActionFailed"),
+      );
     }
   }
 
   async function saveExactOverride() {
     try {
-      await withPending("exactOverride", () => api.upsertExactOverride(exactOverrideIp, exactOverrideDecision));
+      await withPending("exactOverride", () =>
+        api.upsertExactOverride(exactOverrideIp, exactOverrideDecision),
+      );
       setOverrides(await api.getOverrides());
       pushToast("success", t("data.saved.exactOverride"));
     } catch (err) {
-      pushToast("error", err instanceof Error ? err.message : t("data.errors.saveExactOverrideFailed"));
+      pushToast(
+        "error",
+        err instanceof Error
+          ? err.message
+          : t("data.errors.saveExactOverrideFailed"),
+      );
     }
   }
 
   async function saveUnsureOverride() {
     try {
-      await withPending("unsureOverride", () => api.upsertUnsureOverride(unsureOverrideIp, unsureOverrideDecision));
+      await withPending("unsureOverride", () =>
+        api.upsertUnsureOverride(unsureOverrideIp, unsureOverrideDecision),
+      );
       setOverrides(await api.getOverrides());
       pushToast("success", t("data.saved.unsureOverride"));
     } catch (err) {
-      pushToast("error", err instanceof Error ? err.message : t("data.errors.saveUnsureOverrideFailed"));
+      pushToast(
+        "error",
+        err instanceof Error
+          ? err.message
+          : t("data.errors.saveUnsureOverrideFailed"),
+      );
     }
   }
 
@@ -348,31 +431,48 @@ export function DataPage({ session }: { session?: Session }) {
           status: cacheDraft.status,
           confidence: cacheDraft.confidence,
           details: cacheDraft.details,
-          asn: cacheDraft.asn ? Number(cacheDraft.asn) : null
-        })
+          asn: cacheDraft.asn ? Number(cacheDraft.asn) : null,
+        }),
       );
       setCache(await api.getCache());
       pushToast("success", t("data.saved.cacheUpdated"));
     } catch (err) {
-      pushToast("error", err instanceof Error ? err.message : t("data.errors.saveCacheFailed"));
+      pushToast(
+        "error",
+        err instanceof Error ? err.message : t("data.errors.saveCacheFailed"),
+      );
     }
   }
 
   async function buildUserExport(identifier: string) {
     try {
-      const payload = await withPending("userExport", () => api.getUserCardExport(identifier));
+      const payload = await withPending("userExport", () =>
+        api.getUserCardExport(identifier),
+      );
       setUserCardExport(payload);
       pushToast("success", t("data.saved.exportReady"));
     } catch (err) {
-      pushToast("error", err instanceof Error ? err.message : t("data.errors.exportUserFailed"));
+      pushToast(
+        "error",
+        err instanceof Error ? err.message : t("data.errors.exportUserFailed"),
+      );
     }
   }
 
   function downloadUserExport() {
     if (!userCardExport) return;
-    const identity = (userCardExport.identity as Record<string, unknown> | undefined) || {};
-    const baseName = String(identity.username || identity.uuid || identity.system_id || identity.telegram_id || "user-card").replace(/[^\w.-]+/g, "_");
-    const blob = new Blob([JSON.stringify(userCardExport, null, 2)], { type: "application/json" });
+    const identity =
+      (userCardExport.identity as Record<string, unknown> | undefined) || {};
+    const baseName = String(
+      identity.username ||
+        identity.uuid ||
+        identity.system_id ||
+        identity.telegram_id ||
+        "user-card",
+    ).replace(/[^\w.-]+/g, "_");
+    const blob = new Blob([JSON.stringify(userCardExport, null, 2)], {
+      type: "application/json",
+    });
     downloadBlob(`${baseName}-export.json`, blob);
     pushToast("info", t("data.saved.exportDownloaded"));
   }
@@ -380,10 +480,19 @@ export function DataPage({ session }: { session?: Session }) {
   async function generateCalibrationExport() {
     try {
       const response = await withPending("calibrationExport", () =>
-        api.exportCalibration(calibrationFilters as Record<string, string | number | boolean | undefined>)
+        api.exportCalibration(
+          calibrationFilters as Record<
+            string,
+            string | number | boolean | undefined
+          >,
+        ),
       );
-      const manifest = parseManifestHeader(response.headers.get("X-MobGuard-Export-Manifest"));
-      setLastCalibrationManifest((manifest as CalibrationExportPreview | null) ?? null);
+      const manifest = parseManifestHeader(
+        response.headers.get("X-MobGuard-Export-Manifest"),
+      );
+      setLastCalibrationManifest(
+        (manifest as CalibrationExportPreview | null) ?? null,
+      );
       setLastCalibrationFilename(response.filename);
       downloadBlob(response.filename, response.blob);
       pushToast("success", t("data.saved.calibrationExportReady"));
@@ -391,19 +500,37 @@ export function DataPage({ session }: { session?: Session }) {
         pushToast("warning", t("data.exports.notReadyToast"));
       }
     } catch (err) {
-      pushToast("error", err instanceof Error ? err.message : t("data.errors.exportCalibrationFailed"));
+      pushToast(
+        "error",
+        err instanceof Error
+          ? err.message
+          : t("data.errors.exportCalibrationFailed"),
+      );
     }
   }
 
-  function renderProviderEvidence(providerEvidence: Record<string, unknown> | undefined) {
+  function renderProviderEvidence(
+    providerEvidence: Record<string, unknown> | undefined,
+  ) {
     if (!providerEvidence || Object.keys(providerEvidence).length === 0) {
       return <span>{t("common.notAvailable")}</span>;
     }
     return (
       <div className="provider-evidence">
-        <span>{displayValue(providerEvidence.provider_key)} · {displayValue(providerEvidence.service_type_hint)}</span>
-        <span>{Boolean(providerEvidence.service_conflict) ? t("data.users.providerConflict") : t("data.users.providerClear")}</span>
-        <span>{Boolean(providerEvidence.review_recommended) ? t("data.users.reviewFirst") : t("data.users.autoReady")}</span>
+        <span>
+          {displayValue(providerEvidence.provider_key)} ·{" "}
+          {displayValue(providerEvidence.service_type_hint)}
+        </span>
+        <span>
+          {Boolean(providerEvidence.service_conflict)
+            ? t("data.users.providerConflict")
+            : t("data.users.providerClear")}
+        </span>
+        <span>
+          {Boolean(providerEvidence.review_recommended)
+            ? t("data.users.reviewFirst")
+            : t("data.users.autoReady")}
+        </span>
       </div>
     );
   }
@@ -421,7 +548,9 @@ export function DataPage({ session }: { session?: Session }) {
 
   function formatReadinessCheckLabel(key: string): string {
     const translated = t(`data.exports.readiness.checks.${key}`);
-    return translated === `data.exports.readiness.checks.${key}` ? key.replace(/_/g, " ") : translated;
+    return translated === `data.exports.readiness.checks.${key}`
+      ? key.replace(/_/g, " ")
+      : translated;
   }
 
   function formatReadinessCheckValue(check: CalibrationReadinessCheck): string {
@@ -438,11 +567,9 @@ export function DataPage({ session }: { session?: Session }) {
     <section className="page">
       <div className="page-header page-header-stack">
         <div>
-          <span className="eyebrow">{t("data.eyebrow")}</span>
           <h1>{t("data.title")}</h1>
           <p className="page-lede">{t(`data.sectionDescriptions.${tab}`)}</p>
         </div>
-        <span className="chip">{t(`data.tabs.${tab}`)}</span>
       </div>
 
       {pageError ? <div className="error-box">{pageError}</div> : null}
@@ -556,11 +683,7 @@ export function DataPage({ session }: { session?: Session }) {
         />
       ) : null}
       {tab === "audit" ? (
-        <AuditTrailSection
-          t={t}
-          language={language}
-          audit={audit}
-        />
+        <AuditTrailSection t={t} language={language} audit={audit} />
       ) : null}
     </section>
   );

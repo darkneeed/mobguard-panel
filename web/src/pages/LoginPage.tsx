@@ -1,7 +1,14 @@
 import type { FormEvent } from "react";
 import { useEffect, useState } from "react";
 
-import { api, AuthCapabilities, AuthResult, BrandingConfig, Session, TotpSetupPayload } from "../api/client";
+import {
+  api,
+  AuthCapabilities,
+  AuthResult,
+  BrandingConfig,
+  Session,
+  TotpSetupPayload,
+} from "../api/client";
 import { PaletteName } from "../app/appearance";
 import { BrandLogo } from "../components/BrandLogo";
 import { useI18n } from "../localization";
@@ -27,7 +34,7 @@ export function LoginPage({
   palette: _palette,
   onAuthCapabilitiesLoaded,
   onPaletteChange: _onPaletteChange,
-  onAuthenticated
+  onAuthenticated,
 }: LoginPageProps) {
   const { t } = useI18n();
   const [error, setError] = useState("");
@@ -39,7 +46,9 @@ export function LoginPage({
   const [challengeToken, setChallengeToken] = useState("");
   const [totpSetupRequired, setTotpSetupRequired] = useState(false);
   const [totpCode, setTotpCode] = useState("");
-  const [totpSetupData, setTotpSetupData] = useState<TotpSetupPayload | null>(null);
+  const [totpSetupData, setTotpSetupData] = useState<TotpSetupPayload | null>(
+    null,
+  );
 
   async function handleAuthResult(result: AuthResult) {
     if (result.requires_totp && result.challenge_token) {
@@ -154,19 +163,38 @@ export function LoginPage({
             <small>{t("layout.brandSubtitle")}</small>
           </div>
         </div>
-        <span className="eyebrow">{t("login.eyebrow")}</span>
         <h1>{t("login.title")}</h1>
         <p>{t("login.description")}</p>
         {challengeToken ? (
           <form className="login-method local-login" onSubmit={submitTotp}>
-            <strong>{totpSetupRequired ? t("login.totp.setupTitle") : t("login.totp.verifyTitle")}</strong>
-            <p className="muted">{totpSetupRequired ? t("login.totp.setupDescription") : t("login.totp.verifyDescription")}</p>
+            <strong>
+              {totpSetupRequired
+                ? t("login.totp.setupTitle")
+                : t("login.totp.verifyTitle")}
+            </strong>
+            <p className="muted">
+              {totpSetupRequired
+                ? t("login.totp.setupDescription")
+                : t("login.totp.verifyDescription")}
+            </p>
             {totpSetupRequired && totpSetupData ? (
               <div className="detail-list">
-                <div><dt>{t("login.totp.secretLabel")}</dt><dd>{totpSetupData.secret}</dd></div>
-                <div><dt>{t("login.totp.issuerLabel")}</dt><dd>{totpSetupData.issuer}</dd></div>
-                <div><dt>{t("login.totp.accountLabel")}</dt><dd>{totpSetupData.account_name}</dd></div>
-                <div><dt>{t("login.totp.uriLabel")}</dt><dd>{totpSetupData.provisioning_uri}</dd></div>
+                <div>
+                  <dt>{t("login.totp.secretLabel")}</dt>
+                  <dd>{totpSetupData.secret}</dd>
+                </div>
+                <div>
+                  <dt>{t("login.totp.issuerLabel")}</dt>
+                  <dd>{totpSetupData.issuer}</dd>
+                </div>
+                <div>
+                  <dt>{t("login.totp.accountLabel")}</dt>
+                  <dd>{totpSetupData.account_name}</dd>
+                </div>
+                <div>
+                  <dt>{t("login.totp.uriLabel")}</dt>
+                  <dd>{totpSetupData.provisioning_uri}</dd>
+                </div>
               </div>
             ) : null}
             <input
@@ -193,11 +221,18 @@ export function LoginPage({
           <div className="login-method">
             <strong>{t("login.telegramTitle")}</strong>
             <div id="telegram-login-slot" className="telegram-slot" />
-            {auth && !auth.telegram_enabled ? <p className="muted">{t("login.telegramNotConfigured")}</p> : null}
-            {!auth && !error ? <p className="muted">{t("login.telegramLoading")}</p> : null}
+            {auth && !auth.telegram_enabled ? (
+              <p className="muted">{t("login.telegramNotConfigured")}</p>
+            ) : null}
+            {!auth && !error ? (
+              <p className="muted">{t("login.telegramLoading")}</p>
+            ) : null}
           </div>
 
-          <form className="login-method local-login" onSubmit={submitLocalLogin}>
+          <form
+            className="login-method local-login"
+            onSubmit={submitLocalLogin}
+          >
             <strong>{t("login.localTitle")}</strong>
             <input
               placeholder={t("login.usernamePlaceholder")}
@@ -212,10 +247,16 @@ export function LoginPage({
               onChange={(event) => setLocalPassword(event.target.value)}
               disabled={!auth?.local_enabled || Boolean(challengeToken)}
             />
-            <button disabled={!auth?.local_enabled || submitting || Boolean(challengeToken)}>
+            <button
+              disabled={
+                !auth?.local_enabled || submitting || Boolean(challengeToken)
+              }
+            >
               {submitting ? t("login.signingIn") : t("login.signIn")}
             </button>
-            {auth && !auth.local_enabled ? <p className="muted">{t("login.localNotConfigured")}</p> : null}
+            {auth && !auth.local_enabled ? (
+              <p className="muted">{t("login.localNotConfigured")}</p>
+            ) : null}
           </form>
         </div>
         {error ? <div className="error-box">{error}</div> : null}

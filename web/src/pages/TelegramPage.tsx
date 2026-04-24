@@ -6,7 +6,7 @@ import { InfoTooltip } from "../components/InfoTooltip";
 import {
   buildEnvUpdates,
   buildInitialEnvDraft,
-  isEnvDirty
+  isEnvDirty,
 } from "../features/settings/lib/envFields";
 import { useI18n } from "../localization";
 
@@ -70,20 +70,73 @@ type TemplateField = {
 const TELEGRAM_FIELDS: TelegramField[] = [
   { key: "tg_admin_chat_id", section: "delivery", type: "text" },
   { key: "tg_topic_id", section: "delivery", type: "number" },
-  { key: "telegram_message_min_interval_seconds", section: "delivery", type: "number", step: 0.1 },
-  { key: "telegram_admin_notifications_enabled", section: "delivery", type: "boolean" },
-  { key: "telegram_user_notifications_enabled", section: "delivery", type: "boolean" },
-  { key: "telegram_admin_commands_enabled", section: "delivery", type: "boolean" },
-  { key: "telegram_notify_admin_review_enabled", section: "admin", type: "boolean" },
-  { key: "telegram_notify_admin_warning_only_enabled", section: "admin", type: "boolean" },
-  { key: "telegram_notify_admin_warning_enabled", section: "admin", type: "boolean" },
-  { key: "telegram_notify_admin_ban_enabled", section: "admin", type: "boolean" },
-  { key: "telegram_notify_admin_usage_profile_risk_enabled", section: "admin", type: "boolean" },
-  { key: "telegram_notify_admin_violation_continues_enabled", section: "admin", type: "boolean" },
-  { key: "telegram_notify_admin_traffic_limit_exceeded_enabled", section: "admin", type: "boolean" },
-  { key: "telegram_notify_user_warning_only_enabled", section: "user", type: "boolean" },
-  { key: "telegram_notify_user_warning_enabled", section: "user", type: "boolean" },
-  { key: "telegram_notify_user_ban_enabled", section: "user", type: "boolean" }
+  {
+    key: "telegram_message_min_interval_seconds",
+    section: "delivery",
+    type: "number",
+    step: 0.1,
+  },
+  {
+    key: "telegram_admin_notifications_enabled",
+    section: "delivery",
+    type: "boolean",
+  },
+  {
+    key: "telegram_user_notifications_enabled",
+    section: "delivery",
+    type: "boolean",
+  },
+  {
+    key: "telegram_admin_commands_enabled",
+    section: "delivery",
+    type: "boolean",
+  },
+  {
+    key: "telegram_notify_admin_review_enabled",
+    section: "admin",
+    type: "boolean",
+  },
+  {
+    key: "telegram_notify_admin_warning_only_enabled",
+    section: "admin",
+    type: "boolean",
+  },
+  {
+    key: "telegram_notify_admin_warning_enabled",
+    section: "admin",
+    type: "boolean",
+  },
+  {
+    key: "telegram_notify_admin_ban_enabled",
+    section: "admin",
+    type: "boolean",
+  },
+  {
+    key: "telegram_notify_admin_usage_profile_risk_enabled",
+    section: "admin",
+    type: "boolean",
+  },
+  {
+    key: "telegram_notify_admin_violation_continues_enabled",
+    section: "admin",
+    type: "boolean",
+  },
+  {
+    key: "telegram_notify_admin_traffic_limit_exceeded_enabled",
+    section: "admin",
+    type: "boolean",
+  },
+  {
+    key: "telegram_notify_user_warning_only_enabled",
+    section: "user",
+    type: "boolean",
+  },
+  {
+    key: "telegram_notify_user_warning_enabled",
+    section: "user",
+    type: "boolean",
+  },
+  { key: "telegram_notify_user_ban_enabled", section: "user", type: "boolean" },
 ];
 
 const TEMPLATE_FIELDS: TemplateField[] = [
@@ -96,18 +149,28 @@ const TEMPLATE_FIELDS: TemplateField[] = [
   { key: "admin_review_template", audience: "admin" },
   { key: "admin_usage_profile_risk_template", audience: "admin" },
   { key: "admin_violation_continues_template", audience: "admin" },
-  { key: "admin_traffic_limit_exceeded_template", audience: "admin" }
+  { key: "admin_traffic_limit_exceeded_template", audience: "admin" },
 ];
 
-function normalizeTelegramDraft(payload: TelegramPayload): Record<string, string> {
+function normalizeTelegramDraft(
+  payload: TelegramPayload,
+): Record<string, string> {
   return Object.fromEntries(
-    TELEGRAM_FIELDS.map((field) => [field.key, String(payload.settings[field.key] ?? "")])
+    TELEGRAM_FIELDS.map((field) => [
+      field.key,
+      String(payload.settings[field.key] ?? ""),
+    ]),
   );
 }
 
-function normalizeTemplateDraft(payload: EnforcementPayload): Record<string, string> {
+function normalizeTemplateDraft(
+  payload: EnforcementPayload,
+): Record<string, string> {
   return Object.fromEntries(
-    TEMPLATE_FIELDS.map((field) => [field.key, String(payload.settings[field.key] ?? "")])
+    TEMPLATE_FIELDS.map((field) => [
+      field.key,
+      String(payload.settings[field.key] ?? ""),
+    ]),
   );
 }
 
@@ -115,7 +178,9 @@ export function TelegramPage() {
   const { t } = useI18n();
   const [data, setData] = useState<TelegramPayload | null>(null);
   const [settings, setSettings] = useState<Record<string, string>>({});
-  const [savedSettings, setSavedSettings] = useState<Record<string, string>>({});
+  const [savedSettings, setSavedSettings] = useState<Record<string, string>>(
+    {},
+  );
   const [envDraft, setEnvDraft] = useState<Record<string, string>>({});
   const [openEnvField, setOpenEnvField] = useState("");
   const [error, setError] = useState("");
@@ -124,7 +189,9 @@ export function TelegramPage() {
   const [envSaved, setEnvSaved] = useState("");
 
   const [templates, setTemplates] = useState<Record<string, string>>({});
-  const [savedTemplates, setSavedTemplates] = useState<Record<string, string>>({});
+  const [savedTemplates, setSavedTemplates] = useState<Record<string, string>>(
+    {},
+  );
   const [templatesError, setTemplatesError] = useState("");
   const [templatesSaved, setTemplatesSaved] = useState("");
 
@@ -135,7 +202,7 @@ export function TelegramPage() {
       try {
         const [telegramPayload, enforcementPayload] = await Promise.all([
           api.getTelegramSettings(),
-          api.getEnforcementSettings()
+          api.getEnforcementSettings(),
         ]);
         if (cancelled) return;
 
@@ -153,7 +220,9 @@ export function TelegramPage() {
         setSavedTemplates(normalizedTemplates);
       } catch (err) {
         if (!cancelled) {
-          setError(err instanceof Error ? err.message : t("telegram.loadFailed"));
+          setError(
+            err instanceof Error ? err.message : t("telegram.loadFailed"),
+          );
         }
       }
     }
@@ -164,23 +233,30 @@ export function TelegramPage() {
     };
   }, [t]);
 
-  const runtimeDirty = JSON.stringify(settings) !== JSON.stringify(savedSettings);
-  const envDirty = useMemo(() => isEnvDirty(data?.env, envDraft), [data?.env, envDraft]);
-  const templatesDirty = JSON.stringify(templates) !== JSON.stringify(savedTemplates);
+  const runtimeDirty =
+    JSON.stringify(settings) !== JSON.stringify(savedSettings);
+  const envDirty = useMemo(
+    () => isEnvDirty(data?.env, envDraft),
+    [data?.env, envDraft],
+  );
+  const templatesDirty =
+    JSON.stringify(templates) !== JSON.stringify(savedTemplates);
   const envFieldCount = Object.values(data?.env || {}).length;
-  const envPresentCount = Object.values(data?.env || {}).filter((field) => field.present).length;
+  const envPresentCount = Object.values(data?.env || {}).filter(
+    (field) => field.present,
+  ).length;
 
   function fieldMeta(key: TelegramFieldKey) {
     return {
       label: t(`rulesMeta.telegramFields.${key}.label`),
-      description: t(`rulesMeta.telegramFields.${key}.description`)
+      description: t(`rulesMeta.telegramFields.${key}.description`),
     };
   }
 
   function templateMeta(key: TemplateFieldKey) {
     return {
       label: t(`rulesMeta.telegramTemplateFields.${key}.label`),
-      description: t(`rulesMeta.telegramTemplateFields.${key}.description`)
+      description: t(`rulesMeta.telegramTemplateFields.${key}.description`),
     };
   }
 
@@ -195,15 +271,19 @@ export function TelegramPage() {
           if (field.type === "number") {
             const parsed = Number(settings[field.key]);
             if (!Number.isFinite(parsed)) {
-              throw new Error(t("telegram.invalidNumber", { field: fieldMeta(field.key).label }));
+              throw new Error(
+                t("telegram.invalidNumber", {
+                  field: fieldMeta(field.key).label,
+                }),
+              );
             }
             return [field.key, parsed];
           }
           return [field.key, settings[field.key]];
-        })
+        }),
       );
       const response = (await api.updateTelegramSettings({
-        settings: settingsPayload
+        settings: settingsPayload,
       })) as TelegramPayload;
       const normalized = normalizeTelegramDraft(response);
       setData(response);
@@ -225,7 +305,7 @@ export function TelegramPage() {
     if (Object.keys(envUpdates).length === 0) return;
     try {
       const response = (await api.updateTelegramSettings({
-        env: envUpdates
+        env: envUpdates,
       })) as TelegramPayload;
       const normalized = normalizeTelegramDraft(response);
       setData(response);
@@ -236,7 +316,9 @@ export function TelegramPage() {
       setEnvSaved(t("telegram.envSaved"));
       setEnvError("");
     } catch (err) {
-      setEnvError(err instanceof Error ? err.message : t("telegram.saveFailed"));
+      setEnvError(
+        err instanceof Error ? err.message : t("telegram.saveFailed"),
+      );
       setEnvSaved("");
     }
   }
@@ -245,8 +327,11 @@ export function TelegramPage() {
     try {
       const response = (await api.updateEnforcementSettings({
         settings: Object.fromEntries(
-          TEMPLATE_FIELDS.map((field) => [field.key, templates[field.key] ?? ""])
-        )
+          TEMPLATE_FIELDS.map((field) => [
+            field.key,
+            templates[field.key] ?? "",
+          ]),
+        ),
       })) as EnforcementPayload;
       const normalized = normalizeTemplateDraft(response);
       setTemplates(normalized);
@@ -254,7 +339,9 @@ export function TelegramPage() {
       setTemplatesSaved(t("telegram.templatesSaved"));
       setTemplatesError("");
     } catch (err) {
-      setTemplatesError(err instanceof Error ? err.message : t("telegram.saveFailed"));
+      setTemplatesError(
+        err instanceof Error ? err.message : t("telegram.saveFailed"),
+      );
       setTemplatesSaved("");
     }
   }
@@ -268,7 +355,10 @@ export function TelegramPage() {
           <select
             value={settings[field.key]}
             onChange={(event) =>
-              setSettings((prev) => ({ ...prev, [field.key]: event.target.value }))
+              setSettings((prev) => ({
+                ...prev,
+                [field.key]: event.target.value,
+              }))
             }
           >
             <option value="true">{t("common.true")}</option>
@@ -280,7 +370,10 @@ export function TelegramPage() {
             step={field.step}
             value={settings[field.key]}
             onChange={(event) =>
-              setSettings((prev) => ({ ...prev, [field.key]: event.target.value }))
+              setSettings((prev) => ({
+                ...prev,
+                [field.key]: event.target.value,
+              }))
             }
           />
         )}
@@ -291,12 +384,17 @@ export function TelegramPage() {
   function renderEnvField(field: EnvFieldState) {
     const isOpen = openEnvField === field.key;
     return (
-      <div className={`settings-group env-accordion-item ${isOpen ? "is-open" : ""}`} key={field.key}>
+      <div
+        className={`settings-group env-accordion-item ${isOpen ? "is-open" : ""}`}
+        key={field.key}
+      >
         <button
           className="settings-group-summary env-accordion-trigger"
           type="button"
           aria-expanded={isOpen}
-          onClick={() => setOpenEnvField((prev) => (prev === field.key ? "" : field.key))}
+          onClick={() =>
+            setOpenEnvField((prev) => (prev === field.key ? "" : field.key))
+          }
         >
           <div className="env-accordion-copy">
             <h3>{field.key}</h3>
@@ -305,11 +403,17 @@ export function TelegramPage() {
             </p>
           </div>
           <div className="action-row env-accordion-meta">
-            <span className={field.present ? "tag status-resolved" : "tag severity-low"}>
+            <span
+              className={
+                field.present ? "tag status-resolved" : "tag severity-low"
+              }
+            >
               {field.present ? t("common.present") : t("common.missing")}
             </span>
             {field.restart_required ? (
-              <span className="tag severity-high">{t("common.restartRequired")}</span>
+              <span className="tag severity-high">
+                {t("common.restartRequired")}
+              </span>
             ) : null}
           </div>
         </button>
@@ -326,7 +430,10 @@ export function TelegramPage() {
                   placeholder={field.masked ? t("common.leaveBlankToKeep") : ""}
                   value={envDraft[field.key] ?? ""}
                   onChange={(event) =>
-                    setEnvDraft((prev) => ({ ...prev, [field.key]: event.target.value }))
+                    setEnvDraft((prev) => ({
+                      ...prev,
+                      [field.key]: event.target.value,
+                    }))
                   }
                 />
               </div>
@@ -341,11 +448,12 @@ export function TelegramPage() {
     <section className="page">
       <div className="page-header page-header-stack">
         <div>
-          <span className="eyebrow">{t("telegram.eyebrow")}</span>
           <h1>{t("telegram.title")}</h1>
         </div>
         <div className="action-row">
-          <span className={runtimeDirty ? "tag review-only" : "tag severity-low"}>
+          <span
+            className={runtimeDirty ? "tag review-only" : "tag severity-low"}
+          >
             {runtimeDirty ? t("common.unsavedChanges") : t("common.saved")}
           </span>
           <button onClick={saveRuntime} disabled={!data || !runtimeDirty}>
@@ -359,20 +467,32 @@ export function TelegramPage() {
 
       {data ? (
         <>
-            <div className="stats-grid">
-              <div className="stat-card">
-                <span>{t("telegram.cards.adminBot")}</span>
-                <strong>{data.capabilities.admin_bot_enabled ? t("common.on") : t("common.off")}</strong>
-              </div>
-              <div className="stat-card">
-                <span>{t("telegram.cards.userBot")}</span>
-                <strong>{data.capabilities.user_bot_enabled ? t("common.on") : t("common.off")}</strong>
-              </div>
-              <div className="stat-card">
-                <span>{t("telegram.cards.envFile")}</span>
-                <strong>{data.env_file_writable ? t("common.writable") : t("common.readOnly")}</strong>
-              </div>
+          <div className="stats-grid">
+            <div className="stat-card">
+              <span>{t("telegram.cards.adminBot")}</span>
+              <strong>
+                {data.capabilities.admin_bot_enabled
+                  ? t("common.on")
+                  : t("common.off")}
+              </strong>
             </div>
+            <div className="stat-card">
+              <span>{t("telegram.cards.userBot")}</span>
+              <strong>
+                {data.capabilities.user_bot_enabled
+                  ? t("common.on")
+                  : t("common.off")}
+              </strong>
+            </div>
+            <div className="stat-card">
+              <span>{t("telegram.cards.envFile")}</span>
+              <strong>
+                {data.env_file_writable
+                  ? t("common.writable")
+                  : t("common.readOnly")}
+              </strong>
+            </div>
+          </div>
 
           <div className="panel">
             <div className="panel-heading">
@@ -380,27 +500,37 @@ export function TelegramPage() {
               <p className="muted">{t("telegram.deliveryDescription")}</p>
             </div>
             <div className="form-grid">
-              {TELEGRAM_FIELDS.filter((field) => field.section === "delivery").map(renderTelegramField)}
+              {TELEGRAM_FIELDS.filter(
+                (field) => field.section === "delivery",
+              ).map(renderTelegramField)}
             </div>
           </div>
 
           <div className="panel">
             <div className="panel-heading">
               <h2>{t("telegram.adminNotificationsTitle")}</h2>
-              <p className="muted">{t("telegram.adminNotificationsDescription")}</p>
+              <p className="muted">
+                {t("telegram.adminNotificationsDescription")}
+              </p>
             </div>
             <div className="form-grid">
-              {TELEGRAM_FIELDS.filter((field) => field.section === "admin").map(renderTelegramField)}
+              {TELEGRAM_FIELDS.filter((field) => field.section === "admin").map(
+                renderTelegramField,
+              )}
             </div>
           </div>
 
           <div className="panel">
             <div className="panel-heading">
               <h2>{t("telegram.userNotificationsTitle")}</h2>
-              <p className="muted">{t("telegram.userNotificationsDescription")}</p>
+              <p className="muted">
+                {t("telegram.userNotificationsDescription")}
+              </p>
             </div>
             <div className="form-grid">
-              {TELEGRAM_FIELDS.filter((field) => field.section === "user").map(renderTelegramField)}
+              {TELEGRAM_FIELDS.filter((field) => field.section === "user").map(
+                renderTelegramField,
+              )}
             </div>
           </div>
 
@@ -412,12 +542,20 @@ export function TelegramPage() {
               </div>
               <div className="action-row">
                 <span className="tag severity-low">
-                  {t("telegram.envCount", { present: envPresentCount, total: envFieldCount })}
+                  {t("telegram.envCount", {
+                    present: envPresentCount,
+                    total: envFieldCount,
+                  })}
                 </span>
-                <span className={envDirty ? "tag review-only" : "tag severity-low"}>
+                <span
+                  className={envDirty ? "tag review-only" : "tag severity-low"}
+                >
                   {envDirty ? t("common.unsavedChanges") : t("common.saved")}
                 </span>
-                <button disabled={!envDirty || !data.env_file_writable} onClick={saveEnv}>
+                <button
+                  disabled={!envDirty || !data.env_file_writable}
+                  onClick={saveEnv}
+                >
                   {t("telegram.saveEnv")}
                 </button>
               </div>
@@ -445,31 +583,53 @@ export function TelegramPage() {
                 />
               </div>
               <div className="action-row">
-                <span className={templatesDirty ? "tag review-only" : "tag severity-low"}>
-                  {templatesDirty ? t("common.unsavedChanges") : t("common.saved")}
+                <span
+                  className={
+                    templatesDirty ? "tag review-only" : "tag severity-low"
+                  }
+                >
+                  {templatesDirty
+                    ? t("common.unsavedChanges")
+                    : t("common.saved")}
                 </span>
                 <button disabled={!templatesDirty} onClick={saveTemplates}>
                   {t("telegram.saveTemplates")}
                 </button>
               </div>
             </div>
-            {templatesError ? <div className="error-box">{templatesError}</div> : null}
-            {templatesSaved ? <div className="ok-box">{templatesSaved}</div> : null}
+            {templatesError ? (
+              <div className="error-box">{templatesError}</div>
+            ) : null}
+            {templatesSaved ? (
+              <div className="ok-box">{templatesSaved}</div>
+            ) : null}
             <div className="detail-grid">
               {(["user", "admin"] as const).map((audience) => (
                 <div className="settings-group" key={audience}>
-                  <h3>{audience === "user" ? t("telegram.userTemplates") : t("telegram.adminTemplates")}</h3>
+                  <h3>
+                    {audience === "user"
+                      ? t("telegram.userTemplates")
+                      : t("telegram.adminTemplates")}
+                  </h3>
                   <div className="settings-group-fields">
-                    {TEMPLATE_FIELDS.filter((field) => field.audience === audience).map((field) => {
+                    {TEMPLATE_FIELDS.filter(
+                      (field) => field.audience === audience,
+                    ).map((field) => {
                       const meta = templateMeta(field.key);
                       return (
                         <div className="rule-field" key={field.key}>
-                          <FieldLabel label={meta.label} description={meta.description} />
+                          <FieldLabel
+                            label={meta.label}
+                            description={meta.description}
+                          />
                           <textarea
                             className="note-box tall"
                             value={templates[field.key] || ""}
                             onChange={(event) =>
-                              setTemplates((prev) => ({ ...prev, [field.key]: event.target.value }))
+                              setTemplates((prev) => ({
+                                ...prev,
+                                [field.key]: event.target.value,
+                              }))
                             }
                           />
                         </div>

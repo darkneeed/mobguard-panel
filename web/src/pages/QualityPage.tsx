@@ -8,7 +8,7 @@ import {
   ResponsiveContainer,
   Tooltip,
   XAxis,
-  YAxis
+  YAxis,
 } from "recharts";
 
 import { api } from "../api/client";
@@ -120,42 +120,65 @@ export function QualityPage() {
       .catch((err: Error) => setError(err.message || t("quality.loadFailed")));
   }, [moduleId, t]);
 
-  const updatedBy = !data?.live_rules_updated_by || data.live_rules_updated_by === "bootstrap"
-    ? t("common.system")
-    : data.live_rules_updated_by;
-  const promotedProviderTypes = data?.learning.promoted.by_type.filter((item) =>
-    item.pattern_type === "provider" || item.pattern_type === "provider_service"
-  ) || [];
-  const legacyProviderTypes = data?.learning.legacy.by_type.filter((item) =>
-    item.pattern_type === "provider" || item.pattern_type === "provider_service"
-  ) || [];
+  const updatedBy =
+    !data?.live_rules_updated_by || data.live_rules_updated_by === "bootstrap"
+      ? t("common.system")
+      : data.live_rules_updated_by;
+  const promotedProviderTypes =
+    data?.learning.promoted.by_type.filter(
+      (item) =>
+        item.pattern_type === "provider" ||
+        item.pattern_type === "provider_service",
+    ) || [];
+  const legacyProviderTypes =
+    data?.learning.legacy.by_type.filter(
+      (item) =>
+        item.pattern_type === "provider" ||
+        item.pattern_type === "provider_service",
+    ) || [];
   const resolutionChartData = data
     ? [
-        { name: t("quality.cards.resolvedHome"), value: data.resolved_home, fill: "#0f766e" },
-        { name: t("quality.cards.resolvedMobile"), value: data.resolved_mobile, fill: "#155e75" },
-        { name: t("quality.cards.skipped"), value: data.skipped, fill: "#c77d1a" }
+        {
+          name: t("quality.cards.resolvedHome"),
+          value: data.resolved_home,
+          fill: "#0f766e",
+        },
+        {
+          name: t("quality.cards.resolvedMobile"),
+          value: data.resolved_mobile,
+          fill: "#155e75",
+        },
+        {
+          name: t("quality.cards.skipped"),
+          value: data.skipped,
+          fill: "#c77d1a",
+        },
       ]
     : [];
-  const noisyAsnData = data?.top_noisy_asns.slice(0, 6).map((item) => ({
-    name: item.asn_key,
-    value: item.cnt
-  })) || [];
-  const mixedProviderData = data?.mixed_providers.top_open_cases.slice(0, 6).map((item) => ({
-    name: item.provider_key,
-    open: item.open_cases,
-    conflict: item.conflict_cases
-  })) || [];
+  const noisyAsnData =
+    data?.top_noisy_asns.slice(0, 6).map((item) => ({
+      name: item.asn_key,
+      value: item.cnt,
+    })) || [];
+  const mixedProviderData =
+    data?.mixed_providers.top_open_cases.slice(0, 6).map((item) => ({
+      name: item.provider_key,
+      open: item.open_cases,
+      conflict: item.conflict_cases,
+    })) || [];
 
   return (
     <section className="page">
       <div className="page-header page-header-stack">
         <div>
-          <span className="eyebrow">{t("quality.eyebrow")}</span>
           <h1>{t("quality.title")}</h1>
           <p className="page-lede">{t("quality.description")}</p>
         </div>
         <div className="action-row">
-          <select value={moduleId} onChange={(event) => setModuleId(event.target.value)}>
+          <select
+            value={moduleId}
+            onChange={(event) => setModuleId(event.target.value)}
+          >
             <option value="">{t("quality.allModules")}</option>
             {(data?.modules || []).map((item) => (
               <option key={item.module_id} value={item.module_id}>
@@ -180,15 +203,44 @@ export function QualityPage() {
       {data ? (
         <>
           <div className="stats-grid">
-            <div className="stat-card"><span>{t("quality.cards.openCases")}</span><strong>{data.open_cases}</strong></div>
-            <div className="stat-card"><span>{t("quality.cards.totalCases")}</span><strong>{data.total_cases}</strong></div>
-            <div className="stat-card"><span>{t("quality.cards.resolvedHome")}</span><strong>{data.resolved_home}</strong></div>
-            <div className="stat-card"><span>{t("quality.cards.resolvedMobile")}</span><strong>{data.resolved_mobile}</strong></div>
-            <div className="stat-card"><span>{t("quality.cards.skipped")}</span><strong>{data.skipped}</strong></div>
-            <div className="stat-card"><span>{t("quality.cards.activePatterns")}</span><strong>{data.active_learning_patterns}</strong></div>
-            <div className="stat-card"><span>{t("quality.cards.activeSessions")}</span><strong>{data.active_sessions}</strong></div>
-            <div className="stat-card"><span>{t("quality.cards.mixedProviderCases")}</span><strong>{data.mixed_providers.open_cases}</strong></div>
-            <div className="stat-card"><span>{t("quality.cards.mixedConflictRate")}</span><strong>{Math.round(data.mixed_providers.conflict_rate * 100)}%</strong></div>
+            <div className="stat-card">
+              <span>{t("quality.cards.openCases")}</span>
+              <strong>{data.open_cases}</strong>
+            </div>
+            <div className="stat-card">
+              <span>{t("quality.cards.totalCases")}</span>
+              <strong>{data.total_cases}</strong>
+            </div>
+            <div className="stat-card">
+              <span>{t("quality.cards.resolvedHome")}</span>
+              <strong>{data.resolved_home}</strong>
+            </div>
+            <div className="stat-card">
+              <span>{t("quality.cards.resolvedMobile")}</span>
+              <strong>{data.resolved_mobile}</strong>
+            </div>
+            <div className="stat-card">
+              <span>{t("quality.cards.skipped")}</span>
+              <strong>{data.skipped}</strong>
+            </div>
+            <div className="stat-card">
+              <span>{t("quality.cards.activePatterns")}</span>
+              <strong>{data.active_learning_patterns}</strong>
+            </div>
+            <div className="stat-card">
+              <span>{t("quality.cards.activeSessions")}</span>
+              <strong>{data.active_sessions}</strong>
+            </div>
+            <div className="stat-card">
+              <span>{t("quality.cards.mixedProviderCases")}</span>
+              <strong>{data.mixed_providers.open_cases}</strong>
+            </div>
+            <div className="stat-card">
+              <span>{t("quality.cards.mixedConflictRate")}</span>
+              <strong>
+                {Math.round(data.mixed_providers.conflict_rate * 100)}%
+              </strong>
+            </div>
             <div className="stat-card">
               <span>{t("quality.cards.homeRatio")}</span>
               <strong>
@@ -207,8 +259,18 @@ export function QualityPage() {
             </div>
           </div>
           <div className="panel compact-toolbar compact-toolbar-meta">
-            <span>{t("quality.revision", { value: data.live_rules_revision })}</span>
-            <span>{t("quality.updated", { value: formatDisplayDateTime(data.live_rules_updated_at, t("common.notAvailable"), language) })}</span>
+            <span>
+              {t("quality.revision", { value: data.live_rules_revision })}
+            </span>
+            <span>
+              {t("quality.updated", {
+                value: formatDisplayDateTime(
+                  data.live_rules_updated_at,
+                  t("common.notAvailable"),
+                  language,
+                ),
+              })}
+            </span>
             <span>{t("quality.by", { value: updatedBy })}</span>
           </div>
           <div className="dashboard-grid">
@@ -219,7 +281,13 @@ export function QualityPage() {
               </div>
               <ResponsiveContainer width="100%" height={260}>
                 <PieChart>
-                  <Pie data={resolutionChartData} dataKey="value" nameKey="name" innerRadius={56} outerRadius={88}>
+                  <Pie
+                    data={resolutionChartData}
+                    dataKey="value"
+                    nameKey="name"
+                    innerRadius={56}
+                    outerRadius={88}
+                  >
                     {resolutionChartData.map((entry) => (
                       <Cell key={entry.name} fill={entry.fill} />
                     ))}
@@ -237,7 +305,11 @@ export function QualityPage() {
               <ResponsiveContainer width="100%" height={260}>
                 <BarChart data={noisyAsnData}>
                   <XAxis dataKey="name" tickLine={false} axisLine={false} />
-                  <YAxis allowDecimals={false} tickLine={false} axisLine={false} />
+                  <YAxis
+                    allowDecimals={false}
+                    tickLine={false}
+                    axisLine={false}
+                  />
                   <Tooltip />
                   <Bar dataKey="value" fill="#155e75" radius={[10, 10, 0, 0]} />
                 </BarChart>
@@ -247,15 +319,25 @@ export function QualityPage() {
             <div className="panel chart-panel">
               <div className="panel-heading">
                 <h2>{t("quality.topMixedProvidersTitle")}</h2>
-                <p className="muted">{t("quality.mixedProvidersDescription")}</p>
+                <p className="muted">
+                  {t("quality.mixedProvidersDescription")}
+                </p>
               </div>
               <ResponsiveContainer width="100%" height={260}>
                 <BarChart data={mixedProviderData}>
                   <XAxis dataKey="name" tickLine={false} axisLine={false} />
-                  <YAxis allowDecimals={false} tickLine={false} axisLine={false} />
+                  <YAxis
+                    allowDecimals={false}
+                    tickLine={false}
+                    axisLine={false}
+                  />
                   <Tooltip />
                   <Bar dataKey="open" fill="#0f766e" radius={[10, 10, 0, 0]} />
-                  <Bar dataKey="conflict" fill="#c77d1a" radius={[10, 10, 0, 0]} />
+                  <Bar
+                    dataKey="conflict"
+                    fill="#c77d1a"
+                    radius={[10, 10, 0, 0]}
+                  />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -270,11 +352,17 @@ export function QualityPage() {
               <div className="record-list">
                 <div className="record-item">
                   <div className="record-main">
-                    <span className="record-title">{data.asn_source.label}</span>
+                    <span className="record-title">
+                      {data.asn_source.label}
+                    </span>
                     <span className="tag">{data.asn_source.type}</span>
                   </div>
                   <div className="record-meta">
-                    <span>{data.asn_source.files.length > 0 ? data.asn_source.files.join(", ") : t("quality.noAsnSource")}</span>
+                    <span>
+                      {data.asn_source.files.length > 0
+                        ? data.asn_source.files.join(", ")
+                        : t("quality.noAsnSource")}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -286,16 +374,21 @@ export function QualityPage() {
               </div>
               <div className="record-list">
                 {data.learning.promoted.top_patterns.map((item) => (
-                  <div className="record-item" key={`${item.pattern_type}:${item.pattern_value}`}>
+                  <div
+                    className="record-item"
+                    key={`${item.pattern_type}:${item.pattern_value}`}
+                  >
                     <div className="record-main">
-                      <span className="record-title">{item.pattern_type}:{item.pattern_value}</span>
+                      <span className="record-title">
+                        {item.pattern_type}:{item.pattern_value}
+                      </span>
                       <span className="tag">{item.decision}</span>
                     </div>
                     <div className="record-meta">
                       {t("quality.topPatternDetails", {
                         decision: item.decision,
                         support: item.support,
-                        precision: `${Math.round(item.precision * 100)}%`
+                        precision: `${Math.round(item.precision * 100)}%`,
                       })}
                     </div>
                   </div>
@@ -327,7 +420,10 @@ export function QualityPage() {
               </div>
               <div className="stat-card">
                 <span>{t("quality.learningCards.asnMinPrecision")}</span>
-                <strong>{Math.round(data.learning.thresholds.asn_min_precision * 100)}%</strong>
+                <strong>
+                  {Math.round(data.learning.thresholds.asn_min_precision * 100)}
+                  %
+                </strong>
               </div>
               <div className="stat-card">
                 <span>{t("quality.learningCards.comboMinSupport")}</span>
@@ -335,55 +431,73 @@ export function QualityPage() {
               </div>
               <div className="stat-card">
                 <span>{t("quality.learningCards.comboMinPrecision")}</span>
-                <strong>{Math.round(data.learning.thresholds.combo_min_precision * 100)}%</strong>
+                <strong>
+                  {Math.round(
+                    data.learning.thresholds.combo_min_precision * 100,
+                  )}
+                  %
+                </strong>
               </div>
             </div>
           </div>
           <div className="detail-grid">
-          <div className="panel">
-            <div className="panel-heading">
-              <h2>{t("quality.promotedByTypeTitle")}</h2>
-              <p className="muted">{t("quality.learningStateTitle")}</p>
-            </div>
-            <div className="record-list">
-              {data.learning.promoted.by_type.length === 0 ? <div className="provider-empty"><span>{t("quality.noPromotedData")}</span></div> : null}
-              {data.learning.promoted.by_type.map((item) => (
-                <div className="record-item" key={item.pattern_type}>
-                  <div className="record-main">
-                    <span className="record-title">{item.pattern_type}</span>
-                    <span className="tag">{item.count}</span>
+            <div className="panel">
+              <div className="panel-heading">
+                <h2>{t("quality.promotedByTypeTitle")}</h2>
+                <p className="muted">{t("quality.learningStateTitle")}</p>
+              </div>
+              <div className="record-list">
+                {data.learning.promoted.by_type.length === 0 ? (
+                  <div className="provider-empty">
+                    <span>{t("quality.noPromotedData")}</span>
                   </div>
-                  <div className="record-meta">
-                    {t("quality.patternStats", {
-                      count: item.count,
-                      support: item.total_support,
-                      precision: `${Math.round(item.avg_precision * 100)}%`
-                    })}
+                ) : null}
+                {data.learning.promoted.by_type.map((item) => (
+                  <div className="record-item" key={item.pattern_type}>
+                    <div className="record-main">
+                      <span className="record-title">{item.pattern_type}</span>
+                      <span className="tag">{item.count}</span>
+                    </div>
+                    <div className="record-meta">
+                      {t("quality.patternStats", {
+                        count: item.count,
+                        support: item.total_support,
+                        precision: `${Math.round(item.avg_precision * 100)}%`,
+                      })}
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
-          </div>
-          <div className="panel">
-            <div className="panel-heading">
-              <h2>{t("quality.legacyByTypeTitle")}</h2>
-              <p className="muted">{t("quality.learningStateTitle")}</p>
-            </div>
-            <div className="record-list">
-              {data.learning.legacy.by_type.length === 0 ? <div className="provider-empty"><span>{t("quality.noLegacyData")}</span></div> : null}
-              {data.learning.legacy.by_type.map((item) => (
-                <div className="record-item" key={item.pattern_type}>
-                  <div className="record-main">
-                    <span className="record-title">{item.pattern_type}</span>
-                    <span className="tag">{item.count}</span>
+            <div className="panel">
+              <div className="panel-heading">
+                <h2>{t("quality.legacyByTypeTitle")}</h2>
+                <p className="muted">{t("quality.learningStateTitle")}</p>
+              </div>
+              <div className="record-list">
+                {data.learning.legacy.by_type.length === 0 ? (
+                  <div className="provider-empty">
+                    <span>{t("quality.noLegacyData")}</span>
                   </div>
-                  <div className="record-meta">
-                    <span>{t("quality.legacyStats", { count: item.count, confidence: item.total_confidence })}</span>
+                ) : null}
+                {data.learning.legacy.by_type.map((item) => (
+                  <div className="record-item" key={item.pattern_type}>
+                    <div className="record-main">
+                      <span className="record-title">{item.pattern_type}</span>
+                      <span className="tag">{item.count}</span>
+                    </div>
+                    <div className="record-meta">
+                      <span>
+                        {t("quality.legacyStats", {
+                          count: item.count,
+                          confidence: item.total_confidence,
+                        })}
+                      </span>
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
-          </div>
           </div>
           <div className="panel">
             <div className="panel-heading">
@@ -394,18 +508,27 @@ export function QualityPage() {
               <div className="panel">
                 <h3>{t("quality.providerLearning.promoted")}</h3>
                 <div className="record-list">
-                  {promotedProviderTypes.length === 0 ? <div className="provider-empty"><span>{t("quality.noPromotedData")}</span></div> : null}
+                  {promotedProviderTypes.length === 0 ? (
+                    <div className="provider-empty">
+                      <span>{t("quality.noPromotedData")}</span>
+                    </div>
+                  ) : null}
                   {promotedProviderTypes.map((item) => (
-                    <div className="record-item" key={`provider-${item.pattern_type}`}>
+                    <div
+                      className="record-item"
+                      key={`provider-${item.pattern_type}`}
+                    >
                       <div className="record-main">
-                        <span className="record-title">{item.pattern_type}</span>
+                        <span className="record-title">
+                          {item.pattern_type}
+                        </span>
                         <span className="tag">{item.count}</span>
                       </div>
                       <div className="record-meta">
                         {t("quality.patternStats", {
                           count: item.count,
                           support: item.total_support,
-                          precision: `${Math.round(item.avg_precision * 100)}%`
+                          precision: `${Math.round(item.avg_precision * 100)}%`,
                         })}
                       </div>
                     </div>
@@ -415,15 +538,29 @@ export function QualityPage() {
               <div className="panel">
                 <h3>{t("quality.providerLearning.legacy")}</h3>
                 <div className="record-list">
-                  {legacyProviderTypes.length === 0 ? <div className="provider-empty"><span>{t("quality.noLegacyData")}</span></div> : null}
+                  {legacyProviderTypes.length === 0 ? (
+                    <div className="provider-empty">
+                      <span>{t("quality.noLegacyData")}</span>
+                    </div>
+                  ) : null}
                   {legacyProviderTypes.map((item) => (
-                    <div className="record-item" key={`legacy-provider-${item.pattern_type}`}>
+                    <div
+                      className="record-item"
+                      key={`legacy-provider-${item.pattern_type}`}
+                    >
                       <div className="record-main">
-                        <span className="record-title">{item.pattern_type}</span>
+                        <span className="record-title">
+                          {item.pattern_type}
+                        </span>
                         <span className="tag">{item.count}</span>
                       </div>
                       <div className="record-meta">
-                        <span>{t("quality.legacyStats", { count: item.count, confidence: item.total_confidence })}</span>
+                        <span>
+                          {t("quality.legacyStats", {
+                            count: item.count,
+                            confidence: item.total_confidence,
+                          })}
+                        </span>
                       </div>
                     </div>
                   ))}
@@ -437,16 +574,35 @@ export function QualityPage() {
               <p className="muted">{t("quality.learningStateTitle")}</p>
             </div>
             <div className="record-list">
-              {data.learning.legacy.top_patterns.length === 0 ? <div className="provider-empty"><span>{t("quality.noLegacyPatterns")}</span></div> : null}
+              {data.learning.legacy.top_patterns.length === 0 ? (
+                <div className="provider-empty">
+                  <span>{t("quality.noLegacyPatterns")}</span>
+                </div>
+              ) : null}
               {data.learning.legacy.top_patterns.map((item) => (
-                <div className="record-item" key={`${item.pattern_type}:${item.pattern_value}:${item.decision}`}>
+                <div
+                  className="record-item"
+                  key={`${item.pattern_type}:${item.pattern_value}:${item.decision}`}
+                >
                   <div className="record-main">
-                    <span className="record-title">{item.pattern_type}:{item.pattern_value}</span>
+                    <span className="record-title">
+                      {item.pattern_type}:{item.pattern_value}
+                    </span>
                     <span className="tag">{item.decision}</span>
                   </div>
                   <div className="record-meta">
-                    <span>{t("quality.legacyConfidenceValue", { value: item.confidence })}</span>
-                    <span>{formatDisplayDateTime(item.timestamp, t("common.notAvailable"), language)}</span>
+                    <span>
+                      {t("quality.legacyConfidenceValue", {
+                        value: item.confidence,
+                      })}
+                    </span>
+                    <span>
+                      {formatDisplayDateTime(
+                        item.timestamp,
+                        t("common.notAvailable"),
+                        language,
+                      )}
+                    </span>
                   </div>
                 </div>
               ))}

@@ -129,9 +129,7 @@ export function ModulesPage({ session }: { session?: Session }) {
       setData(listPayload);
       setError("");
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : t("modules.loadFailed"),
-      );
+      setError(err instanceof Error ? err.message : t("modules.loadFailed"));
     }
   }
 
@@ -377,7 +375,6 @@ export function ModulesPage({ session }: { session?: Session }) {
     <section className="page">
       <div className="page-header page-header-stack">
         <div>
-          <span className="eyebrow">{t("modules.eyebrow")}</span>
           <h1>{t("modules.title")}</h1>
           <p className="page-lede">{t("modules.description")}</p>
         </div>

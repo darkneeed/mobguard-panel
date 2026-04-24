@@ -5,7 +5,11 @@ import { hasPermission } from "../app/permissions";
 import { prefetchRouteModule } from "../app/routeModules";
 import { api, OverviewMetricsResponse, Session } from "../api/client";
 import { useI18n } from "../localization";
-import { automationGuardrailLabels, automationModeLabel, automationModeReasonLabels } from "../shared/automationStatus";
+import {
+  automationGuardrailLabels,
+  automationModeLabel,
+  automationModeReasonLabels,
+} from "../shared/automationStatus";
 import { useVisiblePolling } from "../shared/useVisiblePolling";
 import { formatDisplayDateTime } from "../utils/datetime";
 
@@ -161,9 +165,23 @@ export function OverviewPage({ session }: { session?: Session }) {
     <section className="page">
       <div className="page-header page-header-stack">
         <div>
-          <span className="eyebrow">{t("overview.eyebrow")}</span>
           <h1>{t("overview.title")}</h1>
           <p className="page-lede">{t("overview.description")}</p>
+          <span className={`status-badge ${systemStatusClass}`}>
+            {health?.status || t("common.loading")}
+          </span>
+          <div className="overview-pipeline-grid">
+            {overviewStale ? (
+              <span className="tag severity-high">
+                {t("overview.snapshotStale")}
+              </span>
+            ) : null}
+            {pipelineStale ? (
+              <span className="tag severity-high">
+                {t("overview.pipeline.stale")}
+              </span>
+            ) : null}
+          </div>
         </div>
         <div className="dashboard-meta">
           <span className="muted">
@@ -175,19 +193,6 @@ export function OverviewPage({ session }: { session?: Session }) {
               ),
             })}
           </span>
-          <span className={`status-badge ${systemStatusClass}`}>
-            {health?.status || t("common.loading")}
-          </span>
-          {overviewStale ? (
-            <span className="tag severity-high">
-              {t("overview.snapshotStale")}
-            </span>
-          ) : null}
-          {pipelineStale ? (
-            <span className="tag severity-high">
-              {t("overview.pipeline.stale")}
-            </span>
-          ) : null}
         </div>
       </div>
 
@@ -209,13 +214,6 @@ export function OverviewPage({ session }: { session?: Session }) {
               <h2>{t("overview.attentionTitle")}</h2>
               <p className="muted">{t("overview.attentionDescription")}</p>
             </div>
-            <span
-              className={`tag ${pipelineStale || overviewStale ? "severity-high" : "status-resolved"}`}
-            >
-              {pipelineStale || overviewStale
-                ? t("overview.snapshotStale")
-                : health?.status || t("common.loading")}
-            </span>
           </div>
           <div className="stats-grid">
             <div className="stat-card">
@@ -250,52 +248,76 @@ export function OverviewPage({ session }: { session?: Session }) {
               </div>
             ))}
           </div>
-          <div className="hero-links overview-action-grid">
-            <Link
-              to="/queue"
-              className="hero-link"
-              onMouseEnter={() => prefetchRouteModule("/queue")}
-              onFocus={() => prefetchRouteModule("/queue")}
-            >
-              <span>{t("overview.quickLinks.queue")}</span>
-            </Link>
-            <Link
-              to="/quality"
-              className="hero-link"
-              onMouseEnter={() => prefetchRouteModule("/quality")}
-              onFocus={() => prefetchRouteModule("/quality")}
-            >
-              <span>{t("overview.quickLinks.quality")}</span>
-            </Link>
-            <Link
-              to="/rules/policy"
-              className="hero-link"
-              onMouseEnter={() => prefetchRouteModule("/rules/policy")}
-              onFocus={() => prefetchRouteModule("/rules/policy")}
-            >
-              <span>{t("overview.quickLinks.policy")}</span>
-            </Link>
-            {canReadData ? (
-              <Link
-                to="/data/console"
-                className="hero-link"
-                onMouseEnter={() => prefetchRouteModule("/data/console")}
-                onFocus={() => prefetchRouteModule("/data/console")}
-              >
-                <span>{t("overview.quickLinks.events")}</span>
-              </Link>
-            ) : null}
-            <Link
-              to="/data/exports"
-              className="hero-link"
-              onMouseEnter={() => prefetchRouteModule("/data/exports")}
-              onFocus={() => prefetchRouteModule("/data/exports")}
-            >
-              <span>{t("overview.quickLinks.exports")}</span>
-            </Link>
+          <div className="dashboard-grid overview-pipeline-grid">
+            <div className="metric-list">
+              <div className="metric-row">
+                <div className="record-main">
+                  <span className="record-title">
+                    {t("overview.pipeline.queueDepth")}
+                  </span>
+                  <span>{pipeline?.queue_depth ?? "—"}</span>
+                </div>
+                <div className="record-meta">
+                  {t("overview.pipeline.queueMeta", {
+                    queued: pipeline?.queued_count ?? 0,
+                    processing: pipeline?.processing_count ?? 0,
+                  })}
+                </div>
+              </div>
+              <div className="metric-row">
+                <div className="record-main">
+                  <span className="record-title">
+                    {t("overview.pipeline.failed")}
+                  </span>
+                  <span>{pipeline?.failed_count ?? "—"}</span>
+                </div>
+                <div className="record-meta">
+                  {t("overview.pipeline.pendingRemote", {
+                    count: pipeline?.enforcement_pending_count ?? 0,
+                  })}
+                </div>
+              </div>
+            </div>
+            <div className="metric-list">
+              <div className="metric-row">
+                <div className="record-main">
+                  <span className="record-title">
+                    {t("overview.pipeline.lag")}
+                  </span>
+                  <span>{formatAge(pipeline?.current_lag_seconds)}</span>
+                </div>
+                <div className="record-meta">
+                  {t("overview.pipeline.oldestQueued", {
+                    value: formatAge(pipeline?.oldest_queued_age_seconds),
+                  })}
+                </div>
+              </div>
+              <div className="metric-row">
+                <div className="record-main">
+                  <span className="record-title">
+                    {t("overview.pipeline.lastDrain")}
+                  </span>
+                  <span>
+                    {formatDisplayDateTime(
+                      pipeline?.last_successful_drain_at || "",
+                      t("common.notAvailable"),
+                      language,
+                    )}
+                  </span>
+                </div>
+                <div className="record-meta">
+                  {formatDisplayDateTime(
+                    pipeline?.snapshot_updated_at ||
+                      freshness?.pipeline_updated_at ||
+                      "",
+                    t("common.notAvailable"),
+                    language,
+                  )}
+                </div>
+              </div>
+            </div>
           </div>
         </div>
-
         <div className="panel">
           <div className="panel-heading panel-heading-row">
             <div>
@@ -385,7 +407,9 @@ export function OverviewPage({ session }: { session?: Session }) {
             </div>
             <div className="metric-row">
               <div className="record-main">
-                <span className="record-title">{t("overview.automation.modeTitle")}</span>
+                <span className="record-title">
+                  {t("overview.automation.modeTitle")}
+                </span>
                 <span>{automationModeLabel(t, automationStatus)}</span>
               </div>
               <div className="record-meta">
@@ -396,108 +420,15 @@ export function OverviewPage({ session }: { session?: Session }) {
             </div>
             <div className="metric-row">
               <div className="record-main">
-                <span className="record-title">{t("overview.automation.guardrailsTitle")}</span>
+                <span className="record-title">
+                  {t("overview.automation.guardrailsTitle")}
+                </span>
                 <span>{automationGuardrails.length}</span>
               </div>
               <div className="record-meta">
                 {automationGuardrails.length > 0
                   ? automationGuardrails.join(", ")
                   : t("overview.automation.noGuardrails")}
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="panel">
-        <div className="panel-heading panel-heading-row">
-          <div>
-            <h2>{t("overview.pipelineTitle")}</h2>
-            <p className="muted">{t("overview.pipelineDescription")}</p>
-          </div>
-          <div className="action-row">
-            <span
-              className={`tag ${pipelineStale ? "severity-high" : "review-only"}`}
-            >
-              {pipelineStale
-                ? t("overview.pipeline.stale")
-                : pipeline?.worker_status || t("common.notAvailable")}
-            </span>
-            <span className="muted">
-              {t("overview.pipeline.snapshotAge", {
-                value: formatAge(
-                  pipeline?.snapshot_age_seconds ??
-                    freshness?.pipeline_age_seconds,
-                ),
-              })}
-            </span>
-          </div>
-        </div>
-        <div className="dashboard-grid overview-pipeline-grid">
-          <div className="metric-list">
-            <div className="metric-row">
-              <div className="record-main">
-                <span className="record-title">
-                  {t("overview.pipeline.queueDepth")}
-                </span>
-                <span>{pipeline?.queue_depth ?? "—"}</span>
-              </div>
-              <div className="record-meta">
-                {t("overview.pipeline.queueMeta", {
-                  queued: pipeline?.queued_count ?? 0,
-                  processing: pipeline?.processing_count ?? 0,
-                })}
-              </div>
-            </div>
-            <div className="metric-row">
-              <div className="record-main">
-                <span className="record-title">
-                  {t("overview.pipeline.failed")}
-                </span>
-                <span>{pipeline?.failed_count ?? "—"}</span>
-              </div>
-              <div className="record-meta">
-                {t("overview.pipeline.pendingRemote", {
-                  count: pipeline?.enforcement_pending_count ?? 0,
-                })}
-              </div>
-            </div>
-          </div>
-          <div className="metric-list">
-            <div className="metric-row">
-              <div className="record-main">
-                <span className="record-title">
-                  {t("overview.pipeline.lag")}
-                </span>
-                <span>{formatAge(pipeline?.current_lag_seconds)}</span>
-              </div>
-              <div className="record-meta">
-                {t("overview.pipeline.oldestQueued", {
-                  value: formatAge(pipeline?.oldest_queued_age_seconds),
-                })}
-              </div>
-            </div>
-            <div className="metric-row">
-              <div className="record-main">
-                <span className="record-title">
-                  {t("overview.pipeline.lastDrain")}
-                </span>
-                <span>
-                  {formatDisplayDateTime(
-                    pipeline?.last_successful_drain_at || "",
-                    t("common.notAvailable"),
-                    language,
-                  )}
-                </span>
-              </div>
-              <div className="record-meta">
-                {formatDisplayDateTime(
-                  pipeline?.snapshot_updated_at ||
-                    freshness?.pipeline_updated_at ||
-                    "",
-                  t("common.notAvailable"),
-                  language,
-                )}
               </div>
             </div>
           </div>
@@ -565,14 +496,6 @@ export function OverviewPage({ session }: { session?: Session }) {
                           </strong>
                           <span>{item.mobile_cases}</span>
                         </div>
-                      </div>
-                      <div className="record-meta">
-                        {t("overview.mixedProvidersItem", {
-                          open: item.open_cases,
-                          conflict: item.conflict_cases,
-                          home: item.home_cases,
-                          mobile: item.mobile_cases,
-                        })}
                       </div>
                     </div>
                   ))
