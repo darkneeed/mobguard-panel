@@ -79,7 +79,7 @@ class ReviewRecheckTests(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
-    def test_recheck_reviews_auto_skips_cases_without_remaining_review_reason(self):
+    def test_recheck_reviews_auto_resolves_cases_without_remaining_review_reason(self):
         refreshed = DecisionBundle(
             ip="10.10.10.20",
             verdict="MOBILE",
@@ -129,11 +129,68 @@ class ReviewRecheckTests(unittest.TestCase):
 
         self.assertEqual(payload["summary"]["processed"], 1)
         self.assertEqual(payload["summary"]["closed"], 1)
-        self.assertEqual(payload["items"][0]["status"], "SKIPPED")
+        self.assertEqual(payload["items"][0]["status"], "RESOLVED")
         detail = self.store.get_review_case(1)
-        self.assertEqual(detail["status"], "SKIPPED")
+        self.assertEqual(detail["status"], "RESOLVED")
         self.assertEqual(detail["verdict"], "MOBILE")
         self.assertEqual(detail["latest_event"]["verdict"], "MOBILE")
+        self.assertEqual(self.store.get_ip_override(refreshed.ip), "MOBILE")
+
+    def test_recheck_reviews_auto_resolves_stationary_home_and_sets_ip_override(self):
+        refreshed = DecisionBundle(
+            ip="10.10.10.20",
+            verdict="HOME",
+            confidence_band="HIGH_HOME",
+            score=-35,
+            asn=12345,
+            isp="MTS Fiber",
+        )
+        refreshed.signal_flags["provider_evidence"] = {
+            "provider_key": "mts",
+            "provider_classification": "mixed",
+            "service_type_hint": "home",
+            "service_conflict": False,
+            "review_recommended": False,
+        }
+        refreshed.add_reason(
+            "behavior_history_home",
+            "behavior",
+            -25,
+            "soft",
+            "HOME",
+            "Stable same IP over time",
+            {"ip": "10.10.10.20", "sample_count": 5, "span_hours": 48},
+        )
+        refreshed.add_reason(
+            "behavior_lifetime",
+            "behavior",
+            -10,
+            "soft",
+            "HOME",
+            "Long session lifetime",
+            {"lifetime_hours": 48},
+        )
+
+        async def fake_analyze_event(*args, **kwargs):
+            return refreshed
+
+        with patch.object(review_service, "_analyze_event", side_effect=fake_analyze_event):
+            payload = asyncio.run(
+                review_service.recheck_reviews(
+                    self.container,
+                    {"limit": 10},
+                    "system",
+                    1001,
+                )
+            )
+
+        self.assertEqual(payload["summary"]["processed"], 1)
+        self.assertEqual(payload["summary"]["closed"], 1)
+        self.assertEqual(payload["items"][0]["status"], "RESOLVED")
+        detail = self.store.get_review_case(1)
+        self.assertEqual(detail["status"], "RESOLVED")
+        self.assertEqual(detail["verdict"], "HOME")
+        self.assertEqual(self.store.get_ip_override(refreshed.ip), "HOME")
 
     def test_provider_sensitive_recheck_skips_when_storage_is_busy(self):
         refreshed = DecisionBundle(

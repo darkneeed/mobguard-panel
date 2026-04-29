@@ -1634,6 +1634,9 @@ class PlatformStore:
                 "CREATE INDEX IF NOT EXISTS idx_review_cases_status ON review_cases(status, updated_at)"
             )
             conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_review_cases_status_updated_desc ON review_cases(status, updated_at DESC)"
+            )
+            conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_review_cases_subject_status ON review_cases(subject_key, status, updated_at DESC)"
             )
             conn.execute(
@@ -2840,25 +2843,26 @@ class PlatformStore:
         low_priority: bool = False,
     ) -> dict[str, Any]:
         quality = self._build_quality_metrics("", fast_read=fast_read, low_priority=low_priority)
-        latest_cases = self.review_admin.list_review_cases(
-            {
-                "status": "OPEN",
-                "page": 1,
-                "page_size": 6,
-                "sort": "updated_desc",
-            },
-            timeout=(
-                FAST_READ_SQLITE_TIMEOUT_SECONDS
-                if fast_read
-                else LOW_PRIORITY_SQLITE_TIMEOUT_SECONDS if low_priority else None
+        latest_cases = {
+            "items": self.review_admin.list_review_case_teasers(
+                status="OPEN",
+                limit=6,
+                timeout=(
+                    FAST_READ_SQLITE_TIMEOUT_SECONDS
+                    if fast_read
+                    else LOW_PRIORITY_SQLITE_TIMEOUT_SECONDS if low_priority else None
+                ),
+                busy_timeout_ms=(
+                    FAST_READ_SQLITE_BUSY_TIMEOUT_MS
+                    if fast_read
+                    else LOW_PRIORITY_SQLITE_BUSY_TIMEOUT_MS if low_priority else None
+                ),
             ),
-            busy_timeout_ms=(
-                FAST_READ_SQLITE_BUSY_TIMEOUT_MS
-                if fast_read
-                else LOW_PRIORITY_SQLITE_BUSY_TIMEOUT_MS if low_priority else None
-            ),
-            query_time_limit_ms=FAST_READ_SQLITE_QUERY_LIMIT_MS if fast_read else None,
-        )
+            "count": int(quality.get("open_cases") or 0),
+            "page": 1,
+            "page_size": 6,
+        }
+
         return {
             "health": self.get_health_snapshot(fast_read=fast_read, low_priority=low_priority),
             "quality": quality,

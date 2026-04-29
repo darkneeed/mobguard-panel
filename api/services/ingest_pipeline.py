@@ -21,6 +21,7 @@ from mobguard_platform.storage.sqlite import is_sqlite_busy_error, is_sqlite_int
 
 from ..context import APIContainer
 from .modules import _analyze_event, _build_batch_context, _remnawave_client, _resolve_remote_user
+from .telegram_notifier import emit_ingest_notifications
 
 
 logger = logging.getLogger(__name__)
@@ -530,7 +531,7 @@ async def _process_claimed_event(
         )
         conn.commit()
 
-    return {
+    result = {
         "status": "processed",
         "event_id": event_id,
         "review_case_id": review_case_id,
@@ -539,6 +540,15 @@ async def _process_claimed_event(
         "enforcement": enforcement,
         "event_uid": event_uid,
     }
+    await emit_ingest_notifications(
+        container,
+        user_data,
+        bundle,
+        str(payload.get("tag") or ""),
+        review_reason,
+        enforcement,
+    )
+    return result
 
 
 async def process_ingest_batch_once(

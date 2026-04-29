@@ -1,7 +1,12 @@
 import unittest
 
 from mobguard_platform.models import DecisionBundle
-from mobguard_platform.policy import derive_punitive_eligibility, should_warning_only
+from mobguard_platform.policy import (
+    derive_punitive_eligibility,
+    review_reason_for_bundle,
+    should_warning_only,
+    stationary_home_auto_resolved,
+)
 
 
 class PolicyGuardrailTests(unittest.TestCase):
@@ -20,6 +25,27 @@ class PolicyGuardrailTests(unittest.TestCase):
         bundle = DecisionBundle(ip="1.1.1.1", verdict="HOME", confidence_band="HIGH_HOME", score=-100)
         bundle.add_reason("datacenter", "datacenter", -100, "hard", "HOME", "datacenter detected")
         self.assertTrue(derive_punitive_eligibility(bundle))
+
+    def test_stationary_home_can_skip_manual_review(self):
+        bundle = DecisionBundle(ip="1.1.1.1", verdict="HOME", confidence_band="HIGH_HOME", score=-35)
+        bundle.add_reason(
+            "behavior_history_home",
+            "behavior",
+            -25,
+            "soft",
+            "HOME",
+            "stable same ip",
+        )
+        bundle.add_reason(
+            "behavior_lifetime",
+            "behavior",
+            -10,
+            "soft",
+            "HOME",
+            "long session",
+        )
+        self.assertTrue(stationary_home_auto_resolved(bundle))
+        self.assertIsNone(review_reason_for_bundle(bundle))
 
 
 if __name__ == "__main__":

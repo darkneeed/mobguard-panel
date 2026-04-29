@@ -31,7 +31,12 @@ from .panel_client import (
     get_traffic_cap_increment_gb,
     get_traffic_cap_threshold_gb,
 )
-from .policy import derive_punitive_eligibility, review_reason_for_bundle, should_warning_only
+from .policy import (
+    derive_punitive_eligibility,
+    review_reason_for_bundle,
+    should_warning_only,
+    stationary_home_auto_resolved,
+)
 from .runtime import (
     DetectionRules,
     LearningThresholds,
@@ -91,6 +96,7 @@ __all__ = [
     "restore_remote_restriction_state",
     "restore_remote_restriction_state_async",
     "review_reason_for_bundle",
+    "stationary_home_auto_resolved",
     "should_warning_only",
     "should_use_traffic_cap",
     "SQUAD_RESTRICTION_MODE",

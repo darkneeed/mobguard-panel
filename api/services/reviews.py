@@ -129,6 +129,47 @@ async def recheck_reviews(
     return await _recheck_case_ids(container, case_ids, actor, actor_tg_id)
 
 
+async def recheck_open_reviews(
+    container: Any,
+    actor: str,
+    actor_tg_id: int,
+    *,
+    skip_on_busy: bool = False,
+) -> dict[str, Any]:
+    revision = int(container.store.get_live_rules_state().get("revision") or 0)
+    case_ids: list[int] = []
+    page = 1
+    try:
+        while True:
+            listing = await asyncio.to_thread(
+                container.store.list_review_cases,
+                {
+                    "status": "OPEN",
+                    "page": page,
+                    "page_size": 100,
+                    "sort": "updated_desc",
+                    "view": "compact",
+                },
+            )
+            batch_ids = [int(item["id"]) for item in listing.get("items", [])]
+            case_ids.extend(batch_ids)
+            if not batch_ids or page * int(listing.get("page_size") or 100) >= int(listing.get("count") or 0):
+                break
+            page += 1
+    except sqlite3.OperationalError as exc:
+        if skip_on_busy and is_sqlite_busy_error(exc):
+            logger.info("Skipping open-review recheck because SQLite is busy during listing")
+            return _recheck_busy_payload(revision=revision)
+        raise
+    return await _recheck_case_ids(
+        container,
+        sorted(set(case_ids)),
+        actor,
+        actor_tg_id,
+        skip_on_busy=skip_on_busy,
+    )
+
+
 async def _recheck_case_ids(
     container: Any,
     case_ids: list[int],
@@ -203,7 +244,7 @@ async def _recheck_case_ids(
                 logger.info("Skipping review recheck because SQLite is busy at case_id=%s", case_id)
                 return _recheck_busy_payload(revision=revision, counts=changed_counts, items=items)
             raise
-        if updated["status"] == "SKIPPED":
+        if updated["status"] in {"SKIPPED", "RESOLVED"}:
             changed_counts["closed"] += 1
         else:
             changed_counts["open"] += 1
@@ -253,6 +294,32 @@ def provider_tuning_changed(payload: dict[str, Any]) -> bool:
             "provider_home_marker_penalty",
         )
     )
+
+
+def stationary_tuning_changed(payload: dict[str, Any]) -> bool:
+    if not isinstance(payload, dict):
+        return False
+    settings = payload.get("settings")
+    if not isinstance(settings, dict):
+        return False
+    return any(
+        key in settings
+        for key in (
+            "threshold_probable_home",
+            "threshold_home",
+            "history_lookback_days",
+            "history_min_gap_minutes",
+            "history_home_same_ip_min_records",
+            "history_home_same_ip_min_span_hours",
+            "history_home_penalty",
+            "lifetime_stationary_hours",
+            "score_stationary_penalty",
+        )
+    )
+
+
+def detection_recheck_needed(payload: dict[str, Any]) -> bool:
+    return provider_tuning_changed(payload) or stationary_tuning_changed(payload)
 
 
 async def recheck_provider_sensitive_reviews(

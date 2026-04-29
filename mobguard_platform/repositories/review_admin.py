@@ -694,19 +694,47 @@ class ReviewAdminRepository(SQLiteRepository):
         self,
         conn: sqlite3.Connection,
         case_ids: list[int],
+        *,
+        per_case_limit: int | None = None,
     ) -> dict[int, list[dict[str, Any]]]:
         if not case_ids:
             return {}
         placeholders = ", ".join("?" for _ in case_ids)
-        rows = conn.execute(
-            f"""
-            SELECT case_id, ip, hit_count, first_seen_at, last_seen_at, isp, asn
-            FROM review_case_ips
-            WHERE case_id IN ({placeholders})
-            ORDER BY last_seen_at DESC, ip ASC
-            """,
-            tuple(case_ids),
-        ).fetchall()
+        if per_case_limit is not None:
+            rows = conn.execute(
+                f"""
+                WITH ranked AS (
+                    SELECT case_id,
+                           ip,
+                           hit_count,
+                           first_seen_at,
+                           last_seen_at,
+                           isp,
+                           asn,
+                           ROW_NUMBER() OVER (
+                               PARTITION BY case_id
+                               ORDER BY last_seen_at DESC, ip ASC
+                           ) AS row_rank
+                    FROM review_case_ips
+                    WHERE case_id IN ({placeholders})
+                )
+                SELECT case_id, ip, hit_count, first_seen_at, last_seen_at, isp, asn
+                FROM ranked
+                WHERE row_rank <= ?
+                ORDER BY case_id ASC, last_seen_at DESC, ip ASC
+                """,
+                (*case_ids, max(int(per_case_limit), 1)),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                f"""
+                SELECT case_id, ip, hit_count, first_seen_at, last_seen_at, isp, asn
+                FROM review_case_ips
+                WHERE case_id IN ({placeholders})
+                ORDER BY last_seen_at DESC, ip ASC
+                """,
+                tuple(case_ids),
+            ).fetchall()
         inventory: dict[int, list[dict[str, Any]]] = {case_id: [] for case_id in case_ids}
         for row in rows:
             inventory.setdefault(int(row["case_id"]), []).append(dict(row))
@@ -770,6 +798,19 @@ class ReviewAdminRepository(SQLiteRepository):
         item["module_inventory"] = module_payload
         item["module_count"] = len(module_payload)
         return item
+
+    def _apply_compact_queue_payload(
+        self,
+        item: dict[str, Any],
+        *,
+        ip_inventory: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
+        payload = self._apply_inventory_payloads(item, ip_inventory=ip_inventory, module_inventory=None)
+        payload["module_inventory"] = []
+        payload["module_count"] = 0
+        payload["same_device_ip_history"] = []
+        payload["shared_account_suspected"] = False
+        return payload
 
     def _usage_profile_fields(
         self,
@@ -1273,7 +1314,8 @@ class ReviewAdminRepository(SQLiteRepository):
         hard_flags = _derive_hard_flags(bundle, usage_snapshot=usage_snapshot, hwid_context=hwid_context)
 
         with self.connect() as conn:
-            next_status = "OPEN" if review_reason else "SKIPPED"
+            auto_resolution = bundle.verdict if not review_reason and bundle.verdict in {"HOME", "MOBILE"} else ""
+            next_status = "OPEN" if review_reason else "RESOLVED" if auto_resolution else "SKIPPED"
             stored_review_reason = str(review_reason or case_row["review_reason"] or "unsure")
             conn.execute(
                 """
@@ -1374,7 +1416,31 @@ class ReviewAdminRepository(SQLiteRepository):
                     case_id,
                 ),
             )
-            if next_status == "SKIPPED":
+            if next_status == "RESOLVED":
+                expires_at = (datetime.utcnow() + timedelta(days=7)).replace(microsecond=0).isoformat()
+                conn.execute(
+                    """
+                    INSERT INTO review_resolutions (case_id, event_id, resolution, actor, actor_tg_id, note, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (case_id, event_id, auto_resolution, actor, actor_tg_id, note, event_created_at),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO exact_ip_overrides (ip, decision, source, actor, actor_tg_id, created_at, updated_at, expires_at)
+                    VALUES (?, ?, 'review_resolution', ?, ?, ?, ?, ?)
+                    ON CONFLICT(ip) DO UPDATE SET
+                        decision = excluded.decision,
+                        source = excluded.source,
+                        actor = excluded.actor,
+                        actor_tg_id = excluded.actor_tg_id,
+                        updated_at = excluded.updated_at,
+                        expires_at = excluded.expires_at
+                    """,
+                    (event_context["ip"], auto_resolution, actor, actor_tg_id, event_created_at, event_created_at, expires_at),
+                )
+                self._record_labels_for_resolution(conn, case_id, event_id, bundle, auto_resolution)
+            elif next_status == "SKIPPED":
                 conn.execute(
                     """
                     INSERT INTO review_resolutions (case_id, event_id, resolution, actor, actor_tg_id, note, created_at)
@@ -1416,6 +1482,8 @@ class ReviewAdminRepository(SQLiteRepository):
             )
             conn.commit()
 
+        if auto_resolution:
+            self.promote_learning_patterns()
         return self.get_review_case(case_id)
 
     def _hydrate_review_list_item(
@@ -1470,6 +1538,9 @@ class ReviewAdminRepository(SQLiteRepository):
         query_time_limit_ms: int | None = None,
     ) -> dict[str, Any]:
         filters = filters or {}
+        view = str(filters.get("view") or "full").strip().lower()
+        if view not in {"full", "compact"}:
+            raise ValueError("view must be 'full' or 'compact'")
         page = max(int(filters.get("page", 1) or 1), 1)
         page_size = min(max(int(filters.get("page_size", 25) or 25), 1), 100)
         sort = str(filters.get("sort", "updated_desc") or "updated_desc")
@@ -1582,27 +1653,37 @@ class ReviewAdminRepository(SQLiteRepository):
             rows = conn.execute(sql, [*params, page_size, (page - 1) * page_size]).fetchall()
             items = [self._hydrate_review_list_item(conn, row) for row in rows]
             case_ids = [int(item["id"]) for item in items]
-            ip_inventory = self._case_ip_inventory(conn, case_ids)
-            module_inventory = self._case_module_inventory(conn, case_ids)
-            items = [
-                self._apply_inventory_payloads(
-                    item,
-                    ip_inventory=ip_inventory.get(int(item["id"]), []),
-                    module_inventory=module_inventory.get(int(item["id"]), []),
+            compact_view = view == "compact"
+            ip_inventory = self._case_ip_inventory(conn, case_ids, per_case_limit=4 if compact_view else None)
+            if compact_view:
+                items = [
+                    self._apply_compact_queue_payload(
+                        item,
+                        ip_inventory=ip_inventory.get(int(item["id"]), []),
+                    )
+                    for item in items
+                ]
+            else:
+                module_inventory = self._case_module_inventory(conn, case_ids)
+                items = [
+                    self._apply_inventory_payloads(
+                        item,
+                        ip_inventory=ip_inventory.get(int(item["id"]), []),
+                        module_inventory=module_inventory.get(int(item["id"]), []),
+                    )
+                    for item in items
+                ]
+                same_device_history = self._batch_same_device_ip_history(
+                    conn,
+                    device_scope_keys=[clean_text(item.get("device_scope_key")) for item in items],
+                    limit=6,
                 )
-                for item in items
-            ]
-            same_device_history = self._batch_same_device_ip_history(
-                conn,
-                device_scope_keys=[clean_text(item.get("device_scope_key")) for item in items],
-                limit=6,
-            )
-            for item in items:
-                item["same_device_ip_history"] = same_device_history.get(
-                    clean_text(item.get("device_scope_key")),
-                    [],
-                )
-            self._shared_account_flags_for_items(conn, items)
+                for item in items:
+                    item["same_device_ip_history"] = same_device_history.get(
+                        clean_text(item.get("device_scope_key")),
+                        [],
+                    )
+                self._shared_account_flags_for_items(conn, items)
         return {
             "items": items,
             "count": total,

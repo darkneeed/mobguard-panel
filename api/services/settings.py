@@ -14,7 +14,7 @@ from mobguard_platform.runtime_admin_defaults import (
 
 from ..context import APIContainer
 from .automation_status import build_automation_status
-from .reviews import provider_tuning_changed, recheck_provider_sensitive_reviews, update_rules
+from .reviews import detection_recheck_needed, recheck_open_reviews, update_rules
 from .runtime_state import (
     ACCESS_ENV_FIELDS,
     ACCESS_LIST_KEYS,
@@ -61,8 +61,8 @@ def update_detection_settings(
         expected_revision=revision,
         expected_updated_at=updated_at,
     )
-    if provider_tuning_changed(payload):
-        asyncio.run(recheck_provider_sensitive_reviews(container, actor, actor_tg_id, skip_on_busy=True))
+    if detection_recheck_needed(payload):
+        asyncio.run(recheck_open_reviews(container, actor, actor_tg_id, skip_on_busy=True))
     return result
 
 

@@ -221,7 +221,61 @@ class StoreReviewFlowTests(unittest.TestCase):
         self.assertEqual(first_summary.id, second_summary.id)
         self.assertEqual(second_summary.repeat_count, 2)
 
-    def test_recheck_review_case_can_auto_skip_when_manual_review_is_no_longer_needed(self):
+    def test_compact_review_listing_skips_heavy_history_payloads(self):
+        user = {"uuid": "uuid-1", "username": "alice", "telegramId": "1001", "id": 42, "module_id": "node-a", "module_name": "Node A"}
+        bundle = DecisionBundle(
+            ip="10.10.10.17",
+            verdict="UNSURE",
+            confidence_band="UNSURE",
+            score=0,
+            asn=12345,
+            isp="ISP-A",
+        )
+
+        first_event = self.store.record_analysis_event(user, bundle.ip, "TAG", bundle)
+        self.store.ensure_review_case(user, bundle.ip, "TAG", bundle, first_event, "unsure")
+        second_bundle = DecisionBundle(
+            ip="10.10.10.18",
+            verdict="UNSURE",
+            confidence_band="UNSURE",
+            score=0,
+            asn=12345,
+            isp="ISP-B",
+        )
+        second_event = self.store.record_analysis_event(user, second_bundle.ip, "TAG", second_bundle)
+        self.store.ensure_review_case(user, second_bundle.ip, "TAG", second_bundle, second_event, "unsure")
+
+        listing = self.store.list_review_cases({"status": "OPEN", "view": "compact", "page": 1, "page_size": 25})
+
+        self.assertEqual(listing["count"], 2)
+        item = listing["items"][0]
+        self.assertTrue(item["ip_inventory"])
+        self.assertEqual(item["module_inventory"], [])
+        self.assertEqual(item["module_count"], 0)
+        self.assertEqual(item["same_device_ip_history"], [])
+        self.assertFalse(item["shared_account_suspected"])
+
+    def test_overview_uses_teasers_without_full_review_listing(self):
+        user = {"uuid": "uuid-1", "username": "alice", "telegramId": "1001", "id": 42}
+        bundle = DecisionBundle(
+            ip="10.10.10.19",
+            verdict="UNSURE",
+            confidence_band="UNSURE",
+            score=0,
+            asn=12345,
+            isp="ISP-A",
+        )
+        event_id = self.store.record_analysis_event(user, bundle.ip, "TAG", bundle)
+        self.store.ensure_review_case(user, bundle.ip, "TAG", bundle, event_id, "unsure")
+
+        with patch.object(self.store.review_admin, "list_review_cases", side_effect=AssertionError("full listing should not be used")):
+            overview = self.store.get_overview_metrics()
+
+        self.assertEqual(overview["quality"]["open_cases"], 1)
+        self.assertEqual(len(overview["latest_cases"]["items"]), 1)
+        self.assertEqual(overview["latest_cases"]["items"][0]["ip"], bundle.ip)
+
+    def test_recheck_review_case_can_auto_resolve_when_manual_review_is_no_longer_needed(self):
         user = {"uuid": "uuid-1", "username": "alice", "telegramId": "1001", "id": 42, "module_id": "node-a", "module_name": "Node A"}
         original_bundle = DecisionBundle(
             ip="10.10.10.12",
@@ -287,12 +341,13 @@ class StoreReviewFlowTests(unittest.TestCase):
             "auto recheck",
         )
 
-        self.assertEqual(updated["status"], "SKIPPED")
+        self.assertEqual(updated["status"], "RESOLVED")
         self.assertEqual(updated["verdict"], "MOBILE")
         self.assertEqual(updated["confidence_band"], "HIGH_MOBILE")
         self.assertEqual(updated["latest_event"]["verdict"], "MOBILE")
         self.assertIn("behavior_history_mobile", updated["reason_codes"])
-        self.assertEqual(updated["resolutions"][0]["resolution"], "SKIP")
+        self.assertEqual(updated["resolutions"][0]["resolution"], "MOBILE")
+        self.assertEqual(self.store.get_ip_override(refreshed_bundle.ip), "MOBILE")
 
     def test_live_rules_revision_conflict_is_rejected(self):
         state = self.store.get_live_rules_state()

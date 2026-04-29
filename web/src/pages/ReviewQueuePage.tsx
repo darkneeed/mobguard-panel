@@ -184,6 +184,10 @@ export function ReviewQueuePage({ session }: { session?: Session }) {
     () => ({ ...filters, q: debouncedQuery }),
     [filters, debouncedQuery],
   );
+  const requestFilters = useMemo(
+    () => ({ ...effectiveFilters, view: "compact" }),
+    [effectiveFilters],
+  );
   const queueSearch = useMemo(
     () => buildSearchParams(effectiveFilters),
     [effectiveFilters],
@@ -221,7 +225,7 @@ export function ReviewQueuePage({ session }: { session?: Session }) {
 
   async function load() {
     try {
-      const payload = await api.listReviews(effectiveFilters);
+      const payload = await api.listReviews(requestFilters);
       startTransition(() => {
         setList(payload);
         setError("");
@@ -236,7 +240,7 @@ export function ReviewQueuePage({ session }: { session?: Session }) {
     }
   }
 
-  useVisiblePolling(true, load, 15000, [effectiveFilters, t]);
+  useVisiblePolling(true, load, 15000, [requestFilters, t]);
 
   useEffect(() => {
     setSelectedIds((prev) =>
@@ -258,7 +262,7 @@ export function ReviewQueuePage({ session }: { session?: Session }) {
         resolution,
         "quick action from queue",
       );
-      const payload = await api.listReviews(effectiveFilters);
+      const payload = await api.listReviews(requestFilters);
       setList(payload);
       pushToast("success", t("reviewQueue.actions.saved"));
     } catch (err) {
@@ -284,7 +288,7 @@ export function ReviewQueuePage({ session }: { session?: Session }) {
           `bulk action from queue (${selectedIds.length})`,
         );
       }
-      const payload = await api.listReviews(effectiveFilters);
+      const payload = await api.listReviews(requestFilters);
       setList(payload);
       setSelectedIds([]);
       pushToast(
@@ -313,7 +317,7 @@ export function ReviewQueuePage({ session }: { session?: Session }) {
         module_id: filters.module_id || undefined,
         review_reason: filters.review_reason || undefined,
       });
-      const refreshed = await api.listReviews(effectiveFilters);
+      const refreshed = await api.listReviews(requestFilters);
       setList(refreshed);
       pushToast(
         "success",

@@ -38,6 +38,7 @@ def list_reviews(
     opened_to: Optional[str] = None,
     repeat_count_min: Optional[int] = None,
     repeat_count_max: Optional[int] = None,
+    view: str = Query(default="full"),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=25, ge=1, le=100),
     sort: str = Query(default="updated_desc"),
@@ -62,6 +63,7 @@ def list_reviews(
             "opened_to": opened_to,
             "repeat_count_min": repeat_count_min,
             "repeat_count_max": repeat_count_max,
+            "view": view,
             "page": page,
             "page_size": page_size,
             "sort": sort,
@@ -158,9 +160,9 @@ def put_rules(
         expected_revision=body.revision,
         expected_updated_at=body.updated_at,
     )
-    if review_service.provider_tuning_changed(body.rules):
+    if review_service.detection_recheck_needed(body.rules):
         asyncio.run(
-            review_service.recheck_provider_sensitive_reviews(
+            review_service.recheck_open_reviews(
                 container,
                 session.get("username") or session.get("first_name") or f"tg:{session['telegram_id']}",
                 session["telegram_id"],

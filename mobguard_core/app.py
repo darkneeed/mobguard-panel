@@ -44,9 +44,16 @@ from mobguard_platform.template_utils import render_optional_template
 from mobguard_platform.runtime_admin_defaults import (
     ENFORCEMENT_SETTINGS_DEFAULTS,
     ENFORCEMENT_TEMPLATE_DEFAULTS,
-    normalize_telegram_runtime_settings,
-    telegram_event_notifications_enabled,
-    telegram_notification_setting,
+)
+from mobguard_platform.telegram_runtime import (
+    admin_event_enabled as runtime_admin_event_enabled,
+    admin_notifications_enabled as runtime_admin_notifications_enabled,
+    escape_html as runtime_escape_html,
+    format_duration_text as runtime_format_duration_text,
+    render_telegram_template,
+    telegram_setting as runtime_telegram_setting,
+    user_event_enabled as runtime_user_event_enabled,
+    user_notifications_enabled as runtime_user_notifications_enabled,
 )
 from mobguard_platform.usage_profile import (
     build_usage_profile_admin_lines,
@@ -926,7 +933,7 @@ def enforcement_template(key: str) -> str:
 
 
 def telegram_setting(key: str) -> Any:
-    return normalize_telegram_runtime_settings(settings())[key]
+    return runtime_telegram_setting(settings(), key)
 
 
 def _violation_state_from_row(row: Any) -> Dict[str, Any]:
@@ -954,32 +961,32 @@ def main_bot_available() -> bool:
 
 
 def admin_notifications_enabled() -> bool:
-    return admin_bot_available() and telegram_notification_setting(
+    return runtime_admin_notifications_enabled(
         settings(),
-        "telegram_admin_notifications_enabled",
+        has_admin_bot=admin_bot_available(),
     )
 
 
 def user_notifications_enabled() -> bool:
-    return main_bot_available() and telegram_notification_setting(
+    return runtime_user_notifications_enabled(
         settings(),
-        "telegram_user_notifications_enabled",
+        has_user_bot=main_bot_available(),
     )
 
 
 def admin_event_notifications_enabled(event: str) -> bool:
-    return admin_bot_available() and telegram_event_notifications_enabled(
+    return runtime_admin_event_enabled(
         settings(),
-        "admin",
         event,
+        has_admin_bot=admin_bot_available(),
     )
 
 
 def user_event_notifications_enabled(event: str) -> bool:
-    return main_bot_available() and telegram_event_notifications_enabled(
+    return runtime_user_event_enabled(
         settings(),
-        "user",
         event,
+        has_user_bot=main_bot_available(),
     )
 
 
@@ -988,27 +995,22 @@ def admin_commands_enabled() -> bool:
 
 
 def format_duration_text(minutes: int) -> str:
-    if minutes % 10080 == 0:
-        weeks = minutes // 10080
-        return f"{weeks} нед." if weeks > 1 else "1 неделя"
-    if minutes % 1440 == 0:
-        days = minutes // 1440
-        return f"{days} дн." if days > 1 else "24 часа"
-    if minutes % 60 == 0:
-        hours = minutes // 60
-        return f"{hours} ч." if hours > 1 else "1 час"
-    return f"{minutes} мин."
+    return runtime_format_duration_text(minutes)
 
 
 def render_runtime_template(template_key: str, context: Dict[str, Any]) -> str:
-    return render_optional_template(enforcement_template(template_key), context, escape_html)
+    return render_telegram_template(settings(), template_key, context)
+
+
+def escape_html(text: str) -> str:
+    return runtime_escape_html(text)
 
 
 def admin_scenario_enabled(scenario: str) -> bool:
-    return admin_bot_available() and telegram_event_notifications_enabled(
+    return runtime_admin_event_enabled(
         settings(),
-        "admin",
         scenario,
+        has_admin_bot=admin_bot_available(),
     )
 
 
@@ -1106,9 +1108,6 @@ async def notify_error(error_msg: str):
             await bot.send_message(TG_ADMIN_CHAT_ID, msg, message_thread_id=TG_TOPIC_ID or None)
     except:
         pass  # Не можем отправить сообщение об ошибке
-
-def escape_html(text: str) -> str:
-    return str(text).replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
 
 async def send_unsure_notify(user: Dict, bundle: DecisionBundle, tag: str, review_reason: str):
     global UNSURE_NOTIFIED
