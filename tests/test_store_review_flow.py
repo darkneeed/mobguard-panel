@@ -483,6 +483,51 @@ class StoreReviewFlowTests(unittest.TestCase):
         self.assertEqual(filtered["items"][0]["system_id"], 42)
         self.assertEqual(filtered["items"][0]["opened_at"], "2026-04-01T10:00:00")
 
+    def test_list_review_cases_filters_by_activity_duration_hours(self):
+        user = {"uuid": "uuid-1", "username": "alice", "telegramId": "1001", "id": 42}
+        short_bundle = DecisionBundle(
+            ip="10.10.10.50",
+            verdict="UNSURE",
+            confidence_band="UNSURE",
+            score=0,
+            asn=12345,
+            isp="ISP-A",
+        )
+        long_bundle = DecisionBundle(
+            ip="10.10.10.51",
+            verdict="UNSURE",
+            confidence_band="UNSURE",
+            score=0,
+            asn=12345,
+            isp="ISP-B",
+        )
+
+        short_event = self.store.record_analysis_event(user, short_bundle.ip, "TAG", short_bundle)
+        short_case = self.store.ensure_review_case(user, short_bundle.ip, "TAG", short_bundle, short_event, "unsure")
+        long_event = self.store.record_analysis_event(user, long_bundle.ip, "TAG", long_bundle)
+        long_case = self.store.ensure_review_case(user, long_bundle.ip, "TAG", long_bundle, long_event, "unsure")
+
+        with self.store._connect() as conn:
+            conn.execute(
+                "UPDATE review_cases SET usage_profile_ongoing_duration_seconds = ?, usage_profile_ongoing_duration_text = ? WHERE id = ?",
+                (6 * 3600, "6h", short_case.id),
+            )
+            conn.execute(
+                "UPDATE review_cases SET usage_profile_ongoing_duration_seconds = ?, usage_profile_ongoing_duration_text = ? WHERE id = ?",
+                (18 * 3600, "18h", long_case.id),
+            )
+            conn.commit()
+
+        filtered = self.store.list_review_cases(
+            {
+                "activity_duration_max_hours": 12,
+                "status": "OPEN",
+            }
+        )
+
+        self.assertEqual(filtered["count"], 1)
+        self.assertEqual(filtered["items"][0]["id"], short_case.id)
+
     def test_list_review_cases_sorts_by_usage_priority(self):
         first_user = {"uuid": "uuid-1", "username": "alice", "telegramId": "1001", "id": 42}
         second_user = {"uuid": "uuid-2", "username": "bob", "telegramId": "2002", "id": 77}

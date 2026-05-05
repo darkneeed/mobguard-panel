@@ -14,7 +14,7 @@ from api.routers import modules as modules_router
 from api.schemas.modules import EventBatchRequest
 from api.services import ingest_pipeline
 from api.services import modules as module_service
-from mobguard_platform import AnalysisStore, PlatformStore
+from mobguard_platform import AnalysisStore, DecisionBundle, PlatformStore
 
 
 class ModuleProtocolTests(unittest.TestCase):
@@ -354,6 +354,95 @@ class ModuleProtocolTests(unittest.TestCase):
                 ("live-1",),
             ).fetchone()
         self.assertEqual(row["cnt"], 1)
+
+    def test_short_provider_conflict_cases_auto_resolve_on_ingest(self):
+        self.store.create_managed_module(
+            "node-auto",
+            "token-auto",
+            "encrypted-token-auto",
+            module_name="Node Auto",
+            metadata={"inbound_tags": ["SELFSTEAL_RU-YANDEX_TCP"]},
+        )
+        module_service.register_module(
+            self.container,
+            {
+                "module_id": "node-auto",
+                "module_name": "Node Auto",
+                "version": "1.0.0",
+                "protocol_version": "v1",
+            },
+            "token-auto",
+        )
+
+        asyncio.run(
+            module_service.ingest_module_events(
+                self.container,
+                {
+                    "module_id": "node-auto",
+                    "protocol_version": "v1",
+                    "items": [
+                        {
+                            "event_uid": "auto-review-1",
+                            "occurred_at": "2026-04-11T12:00:00",
+                            "ip": "1.2.3.44",
+                            "tag": "SELFSTEAL_RU-YANDEX_TCP",
+                            "uuid": "uuid-auto",
+                        }
+                    ],
+                },
+                "token-auto",
+            )
+        )
+
+        bundle = DecisionBundle(
+            ip="1.2.3.44",
+            verdict="UNSURE",
+            confidence_band="UNSURE",
+            score=15,
+            asn=12345,
+            isp="MTS",
+        )
+        bundle.signal_flags["provider_evidence"] = {
+            "provider_key": "mts",
+            "provider_classification": "mixed",
+            "service_type_hint": "unknown",
+            "service_conflict": False,
+            "review_recommended": True,
+        }
+
+        async def fake_resolve_user(_runtime, payload):
+            return {
+                "uuid": payload.get("uuid"),
+                "username": "alice",
+                "telegramId": "1001",
+                "id": 42,
+            }
+
+        async def fake_analyze_event(*args, **kwargs):
+            return bundle
+
+        runtime = SimpleNamespace(settings={}, exempt_ids=frozenset(), exempt_tg_ids=frozenset())
+
+        with patch.object(ingest_pipeline, "_build_batch_context", return_value=runtime), patch.object(
+            ingest_pipeline,
+            "_resolve_remote_user",
+            side_effect=fake_resolve_user,
+        ), patch.object(
+            ingest_pipeline,
+            "_analyze_event",
+            side_effect=fake_analyze_event,
+        ):
+            processed_result = asyncio.run(ingest_pipeline.process_ingest_batch_once(self.container))
+
+        self.assertEqual(processed_result["processed"], 1)
+        detail = self.store.get_review_case(1)
+        self.assertEqual(detail["status"], "RESOLVED")
+        self.assertEqual(detail["verdict"], "UNSURE")
+        self.assertEqual(detail["resolutions"][0]["resolution"], "MOBILE")
+        self.assertEqual(detail["resolutions"][0]["actor"], "system:auto-review")
+        self.assertIn("mobile_short_provider_conflict", detail["resolutions"][0]["note"])
+        self.assertIn("precision=0.991", detail["resolutions"][0]["note"])
+        self.assertEqual(self.store.get_ip_override("1.2.3.44"), "MOBILE")
 
     def test_event_batch_tolerates_none_runtime_settings_values(self):
         payload = json.loads(self.config_path.read_text(encoding="utf-8"))

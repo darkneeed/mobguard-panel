@@ -1547,6 +1547,8 @@ class ReviewAdminRepository(SQLiteRepository):
         sort_map = {
             "priority_desc": "usage_profile_priority DESC, updated_at DESC",
             "priority_asc": "usage_profile_priority ASC, updated_at DESC",
+            "activity_desc": "usage_profile_ongoing_duration_seconds DESC, updated_at DESC",
+            "activity_asc": "usage_profile_ongoing_duration_seconds ASC, updated_at DESC",
             "updated_desc": "updated_at DESC",
             "updated_asc": "updated_at ASC",
             "score_desc": "score DESC",
@@ -1632,6 +1634,12 @@ class ReviewAdminRepository(SQLiteRepository):
         if filters.get("opened_to"):
             clauses.append("opened_at <= ?")
             params.append(_parse_day_boundary(filters["opened_to"], end_of_day=True))
+        if filters.get("activity_duration_min_hours") not in (None, ""):
+            clauses.append("usage_profile_ongoing_duration_seconds IS NOT NULL AND usage_profile_ongoing_duration_seconds >= ?")
+            params.append(int(float(filters["activity_duration_min_hours"]) * 3600))
+        if filters.get("activity_duration_max_hours") not in (None, ""):
+            clauses.append("usage_profile_ongoing_duration_seconds IS NOT NULL AND usage_profile_ongoing_duration_seconds <= ?")
+            params.append(int(float(filters["activity_duration_max_hours"]) * 3600))
         if filters.get("q"):
             search = f"%{filters['q']}%"
             clauses.append(

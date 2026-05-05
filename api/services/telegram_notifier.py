@@ -250,6 +250,8 @@ async def _notify_review_case(
         return
 
     detail = await asyncio.to_thread(container.store.get_review_case, int(bundle.case_id))
+    if str(detail.get("status") or "").upper() != "OPEN":
+        return
     usage_profile = detail.get("usage_profile") or build_usage_profile_snapshot(
         container.store,
         _identity_payload(user),

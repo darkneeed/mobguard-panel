@@ -37,6 +37,8 @@ type ReviewFilters = {
   telegram_id: string;
   opened_from: string;
   opened_to: string;
+  activity_duration_min_hours: string;
+  activity_duration_max_hours: string;
   repeat_count_min: string;
   repeat_count_max: string;
   page: number;
@@ -59,6 +61,8 @@ const DEFAULT_FILTERS: ReviewFilters = {
   telegram_id: "",
   opened_from: "",
   opened_to: "",
+  activity_duration_min_hours: "",
+  activity_duration_max_hours: "",
   repeat_count_min: "",
   repeat_count_max: "",
   page: 1,
@@ -87,6 +91,10 @@ function normalizeFilters(searchParams: URLSearchParams): ReviewFilters {
     telegram_id: searchParams.get("telegram_id") ?? "",
     opened_from: searchParams.get("opened_from") ?? "",
     opened_to: searchParams.get("opened_to") ?? "",
+    activity_duration_min_hours:
+      searchParams.get("activity_duration_min_hours") ?? "",
+    activity_duration_max_hours:
+      searchParams.get("activity_duration_max_hours") ?? "",
     repeat_count_min: searchParams.get("repeat_count_min") ?? "",
     repeat_count_max: searchParams.get("repeat_count_max") ?? "",
     page: Number(searchParams.get("page") || DEFAULT_FILTERS.page),
@@ -314,8 +322,7 @@ export function ReviewQueuePage({ session }: { session?: Session }) {
           1,
           Math.min(list.items.length || filters.page_size, 100),
         ),
-        module_id: filters.module_id || undefined,
-        review_reason: filters.review_reason || undefined,
+        case_ids: visibleQueueIds,
       });
       const refreshed = await api.listReviews(requestFilters);
       setList(refreshed);
@@ -384,6 +391,8 @@ export function ReviewQueuePage({ session }: { session?: Session }) {
         filters.telegram_id,
         filters.opened_from,
         filters.opened_to,
+        filters.activity_duration_min_hours,
+        filters.activity_duration_max_hours,
         filters.repeat_count_min,
         filters.repeat_count_max,
       ].filter((value) => value !== "").length,
@@ -432,6 +441,17 @@ export function ReviewQueuePage({ session }: { session?: Session }) {
             ...DEFAULT_FILTERS,
             punitive_eligible: "true",
             status: "OPEN",
+            page_size: prev.page_size,
+          })),
+      },
+      {
+        key: "short-activity",
+        label: t("reviewQueue.presets.shortActivity"),
+        apply: () =>
+          setFilters((prev) => ({
+            ...DEFAULT_FILTERS,
+            status: "OPEN",
+            activity_duration_max_hours: "12",
             page_size: prev.page_size,
           })),
       },
@@ -572,7 +592,7 @@ export function ReviewQueuePage({ session }: { session?: Session }) {
             {canRecheck ? (
               <button
                 className="ghost small-button"
-                disabled={resolvingId !== null}
+                disabled={resolvingId !== null || visibleQueueIds.length === 0}
                 onClick={recheckVisible}
               >
                 {t("reviewQueue.actions.recheckVisible")}
@@ -610,7 +630,7 @@ export function ReviewQueuePage({ session }: { session?: Session }) {
       </div>
 
       {filtersOpen ? (
-        <div className="panel filters reveal-panel filter-drawer">
+        <div className="panel reveal-panel filter-drawer queue-filters-shell">
           <div className="queue-presets">
             {presets.map((preset) => (
               <button
@@ -622,228 +642,344 @@ export function ReviewQueuePage({ session }: { session?: Session }) {
               </button>
             ))}
           </div>
-          <input
-            placeholder={t("reviewQueue.filters.moduleId")}
-            value={String(filters.module_id ?? "")}
-            onChange={(event) =>
-              setFilters((prev) => ({
-                ...prev,
-                module_id: event.target.value,
-                page: 1,
-              }))
-            }
-          />
-          <input
-            placeholder={t("reviewQueue.filters.username")}
-            value={String(filters.username ?? "")}
-            onChange={(event) =>
-              setFilters((prev) => ({
-                ...prev,
-                username: event.target.value,
-                page: 1,
-              }))
-            }
-          />
-          <input
-            placeholder={t("reviewQueue.filters.systemId")}
-            value={String(filters.system_id ?? "")}
-            onChange={(event) =>
-              setFilters((prev) => ({
-                ...prev,
-                system_id: event.target.value,
-                page: 1,
-              }))
-            }
-          />
-          <input
-            placeholder={t("reviewQueue.filters.telegramId")}
-            value={String(filters.telegram_id ?? "")}
-            onChange={(event) =>
-              setFilters((prev) => ({
-                ...prev,
-                telegram_id: event.target.value,
-                page: 1,
-              }))
-            }
-          />
-          <input
-            type="date"
-            value={String(filters.opened_from ?? "")}
-            onChange={(event) =>
-              setFilters((prev) => ({
-                ...prev,
-                opened_from: event.target.value,
-                page: 1,
-              }))
-            }
-          />
-          <input
-            type="date"
-            value={String(filters.opened_to ?? "")}
-            onChange={(event) =>
-              setFilters((prev) => ({
-                ...prev,
-                opened_to: event.target.value,
-                page: 1,
-              }))
-            }
-          />
-          <input
-            type="number"
-            min={0}
-            placeholder={t("reviewQueue.filters.repeatMin")}
-            value={String(filters.repeat_count_min ?? "")}
-            onChange={(event) =>
-              setFilters((prev) => ({
-                ...prev,
-                repeat_count_min: event.target.value,
-                page: 1,
-              }))
-            }
-          />
-          <input
-            type="number"
-            min={0}
-            placeholder={t("reviewQueue.filters.repeatMax")}
-            value={String(filters.repeat_count_max ?? "")}
-            onChange={(event) =>
-              setFilters((prev) => ({
-                ...prev,
-                repeat_count_max: event.target.value,
-                page: 1,
-              }))
-            }
-          />
-          <select
-            value={filters.status}
-            onChange={(event) =>
-              setFilters((prev) => ({
-                ...prev,
-                status: event.target.value,
-                page: 1,
-              }))
-            }
-          >
-            <option value="OPEN">{t("reviewQueue.filters.statusOpen")}</option>
-            <option value="RESOLVED">
-              {t("reviewQueue.filters.statusResolved")}
-            </option>
-            <option value="SKIPPED">
-              {t("reviewQueue.filters.statusSkipped")}
-            </option>
-            <option value="">{t("reviewQueue.filters.allStatus")}</option>
-          </select>
-          <select
-            value={filters.confidence_band}
-            onChange={(event) =>
-              setFilters((prev) => ({
-                ...prev,
-                confidence_band: event.target.value,
-                page: 1,
-              }))
-            }
-          >
-            <option value="">{t("reviewQueue.filters.allConfidence")}</option>
-            <option value="UNSURE">
-              {t("reviewQueue.filters.confidenceUnsure")}
-            </option>
-            <option value="PROBABLE_HOME">
-              {t("reviewQueue.filters.confidenceProbableHome")}
-            </option>
-            <option value="HIGH_HOME">
-              {t("reviewQueue.filters.confidenceHighHome")}
-            </option>
-          </select>
-          <select
-            value={filters.review_reason}
-            onChange={(event) =>
-              setFilters((prev) => ({
-                ...prev,
-                review_reason: event.target.value,
-                page: 1,
-              }))
-            }
-          >
-            <option value="">{t("reviewQueue.filters.allReasons")}</option>
-            <option value="unsure">
-              {t("reviewQueue.filters.reasonUnsure")}
-            </option>
-            <option value="probable_home">
-              {t("reviewQueue.filters.reasonProbableHome")}
-            </option>
-            <option value="home_requires_review">
-              {t("reviewQueue.filters.reasonHomeRequiresReview")}
-            </option>
-            <option value="manual_review_mixed_home">
-              {t("reviewQueue.filters.reasonManualMixedHome")}
-            </option>
-            <option value="provider_conflict">
-              {t("reviewQueue.filters.reasonProviderConflict")}
-            </option>
-          </select>
-          <select
-            value={filters.severity}
-            onChange={(event) =>
-              setFilters((prev) => ({
-                ...prev,
-                severity: event.target.value,
-                page: 1,
-              }))
-            }
-          >
-            <option value="">{t("reviewQueue.filters.allSeverity")}</option>
-            <option value="critical">
-              {t("reviewQueue.filters.severityCritical")}
-            </option>
-            <option value="high">
-              {t("reviewQueue.filters.severityHigh")}
-            </option>
-            <option value="medium">
-              {t("reviewQueue.filters.severityMedium")}
-            </option>
-            <option value="low">{t("reviewQueue.filters.severityLow")}</option>
-          </select>
-          <select
-            value={filters.punitive_eligible}
-            onChange={(event) =>
-              setFilters((prev) => ({
-                ...prev,
-                punitive_eligible: event.target.value,
-                page: 1,
-              }))
-            }
-          >
-            <option value="">{t("reviewQueue.filters.punitiveAny")}</option>
-            <option value="true">
-              {t("reviewQueue.filters.punitiveOnly")}
-            </option>
-            <option value="false">{t("reviewQueue.filters.reviewOnly")}</option>
-          </select>
-          <select
-            value={filters.sort}
-            onChange={(event) =>
-              setFilters((prev) => ({ ...prev, sort: event.target.value }))
-            }
-          >
-            <option value="priority_desc">
-              {t("reviewQueue.filters.sortPriorityDesc")}
-            </option>
-            <option value="priority_asc">
-              {t("reviewQueue.filters.sortPriorityAsc")}
-            </option>
-            <option value="updated_desc">
-              {t("reviewQueue.filters.sortUpdatedDesc")}
-            </option>
-            <option value="score_desc">
-              {t("reviewQueue.filters.sortScoreDesc")}
-            </option>
-            <option value="repeat_desc">
-              {t("reviewQueue.filters.sortRepeatDesc")}
-            </option>
-            <option value="updated_asc">
-              {t("reviewQueue.filters.sortUpdatedAsc")}
-            </option>
-          </select>
+          <div className="queue-filter-sections">
+            <section className="queue-filter-section">
+              <div className="queue-filter-section-header">
+                <div>
+                  <h3>{t("reviewQueue.filters.sections.identity")}</h3>
+                  <p>{t("reviewQueue.filters.sections.identityHint")}</p>
+                </div>
+              </div>
+              <div className="queue-filter-grid">
+                <label className="queue-filter-field">
+                  <span>{t("reviewQueue.filters.moduleId")}</span>
+                  <input
+                    placeholder={t("reviewQueue.filters.moduleId")}
+                    value={String(filters.module_id ?? "")}
+                    onChange={(event) =>
+                      setFilters((prev) => ({
+                        ...prev,
+                        module_id: event.target.value,
+                        page: 1,
+                      }))
+                    }
+                  />
+                </label>
+                <label className="queue-filter-field">
+                  <span>{t("reviewQueue.filters.username")}</span>
+                  <input
+                    placeholder={t("reviewQueue.filters.username")}
+                    value={String(filters.username ?? "")}
+                    onChange={(event) =>
+                      setFilters((prev) => ({
+                        ...prev,
+                        username: event.target.value,
+                        page: 1,
+                      }))
+                    }
+                  />
+                </label>
+                <label className="queue-filter-field">
+                  <span>{t("reviewQueue.filters.systemId")}</span>
+                  <input
+                    placeholder={t("reviewQueue.filters.systemId")}
+                    value={String(filters.system_id ?? "")}
+                    onChange={(event) =>
+                      setFilters((prev) => ({
+                        ...prev,
+                        system_id: event.target.value,
+                        page: 1,
+                      }))
+                    }
+                  />
+                </label>
+                <label className="queue-filter-field">
+                  <span>{t("reviewQueue.filters.telegramId")}</span>
+                  <input
+                    placeholder={t("reviewQueue.filters.telegramId")}
+                    value={String(filters.telegram_id ?? "")}
+                    onChange={(event) =>
+                      setFilters((prev) => ({
+                        ...prev,
+                        telegram_id: event.target.value,
+                        page: 1,
+                      }))
+                    }
+                  />
+                </label>
+              </div>
+            </section>
+
+            <section className="queue-filter-section">
+              <div className="queue-filter-section-header">
+                <div>
+                  <h3>{t("reviewQueue.filters.sections.timing")}</h3>
+                  <p>{t("reviewQueue.filters.sections.timingHint")}</p>
+                </div>
+              </div>
+              <div className="queue-filter-grid">
+                <label className="queue-filter-field">
+                  <span>{t("reviewQueue.filters.openedFrom")}</span>
+                  <input
+                    type="date"
+                    value={String(filters.opened_from ?? "")}
+                    onChange={(event) =>
+                      setFilters((prev) => ({
+                        ...prev,
+                        opened_from: event.target.value,
+                        page: 1,
+                      }))
+                    }
+                  />
+                </label>
+                <label className="queue-filter-field">
+                  <span>{t("reviewQueue.filters.openedTo")}</span>
+                  <input
+                    type="date"
+                    value={String(filters.opened_to ?? "")}
+                    onChange={(event) =>
+                      setFilters((prev) => ({
+                        ...prev,
+                        opened_to: event.target.value,
+                        page: 1,
+                      }))
+                    }
+                  />
+                </label>
+                <label className="queue-filter-field">
+                  <span>{t("reviewQueue.filters.activityMinHours")}</span>
+                  <input
+                    type="number"
+                    min={0}
+                    step="0.5"
+                    placeholder={t("reviewQueue.filters.activityMinHours")}
+                    value={String(filters.activity_duration_min_hours ?? "")}
+                    onChange={(event) =>
+                      setFilters((prev) => ({
+                        ...prev,
+                        activity_duration_min_hours: event.target.value,
+                        page: 1,
+                      }))
+                    }
+                  />
+                </label>
+                <label className="queue-filter-field">
+                  <span>{t("reviewQueue.filters.activityMaxHours")}</span>
+                  <input
+                    type="number"
+                    min={0}
+                    step="0.5"
+                    placeholder={t("reviewQueue.filters.activityMaxHours")}
+                    value={String(filters.activity_duration_max_hours ?? "")}
+                    onChange={(event) =>
+                      setFilters((prev) => ({
+                        ...prev,
+                        activity_duration_max_hours: event.target.value,
+                        page: 1,
+                      }))
+                    }
+                  />
+                </label>
+                <label className="queue-filter-field">
+                  <span>{t("reviewQueue.filters.repeatMin")}</span>
+                  <input
+                    type="number"
+                    min={0}
+                    placeholder={t("reviewQueue.filters.repeatMin")}
+                    value={String(filters.repeat_count_min ?? "")}
+                    onChange={(event) =>
+                      setFilters((prev) => ({
+                        ...prev,
+                        repeat_count_min: event.target.value,
+                        page: 1,
+                      }))
+                    }
+                  />
+                </label>
+                <label className="queue-filter-field">
+                  <span>{t("reviewQueue.filters.repeatMax")}</span>
+                  <input
+                    type="number"
+                    min={0}
+                    placeholder={t("reviewQueue.filters.repeatMax")}
+                    value={String(filters.repeat_count_max ?? "")}
+                    onChange={(event) =>
+                      setFilters((prev) => ({
+                        ...prev,
+                        repeat_count_max: event.target.value,
+                        page: 1,
+                      }))
+                    }
+                  />
+                </label>
+              </div>
+            </section>
+
+            <section className="queue-filter-section">
+              <div className="queue-filter-section-header">
+                <div>
+                  <h3>{t("reviewQueue.filters.sections.decision")}</h3>
+                  <p>{t("reviewQueue.filters.sections.decisionHint")}</p>
+                </div>
+              </div>
+              <div className="queue-filter-grid">
+                <label className="queue-filter-field">
+                  <span>{t("reviewQueue.filters.allStatus")}</span>
+                  <select
+                    value={filters.status}
+                    onChange={(event) =>
+                      setFilters((prev) => ({
+                        ...prev,
+                        status: event.target.value,
+                        page: 1,
+                      }))
+                    }
+                  >
+                    <option value="OPEN">{t("reviewQueue.filters.statusOpen")}</option>
+                    <option value="RESOLVED">
+                      {t("reviewQueue.filters.statusResolved")}
+                    </option>
+                    <option value="SKIPPED">
+                      {t("reviewQueue.filters.statusSkipped")}
+                    </option>
+                    <option value="">{t("reviewQueue.filters.allStatus")}</option>
+                  </select>
+                </label>
+                <label className="queue-filter-field">
+                  <span>{t("reviewQueue.filters.allConfidence")}</span>
+                  <select
+                    value={filters.confidence_band}
+                    onChange={(event) =>
+                      setFilters((prev) => ({
+                        ...prev,
+                        confidence_band: event.target.value,
+                        page: 1,
+                      }))
+                    }
+                  >
+                    <option value="">{t("reviewQueue.filters.allConfidence")}</option>
+                    <option value="UNSURE">
+                      {t("reviewQueue.filters.confidenceUnsure")}
+                    </option>
+                    <option value="PROBABLE_HOME">
+                      {t("reviewQueue.filters.confidenceProbableHome")}
+                    </option>
+                    <option value="HIGH_HOME">
+                      {t("reviewQueue.filters.confidenceHighHome")}
+                    </option>
+                  </select>
+                </label>
+                <label className="queue-filter-field">
+                  <span>{t("reviewQueue.filters.allReasons")}</span>
+                  <select
+                    value={filters.review_reason}
+                    onChange={(event) =>
+                      setFilters((prev) => ({
+                        ...prev,
+                        review_reason: event.target.value,
+                        page: 1,
+                      }))
+                    }
+                  >
+                    <option value="">{t("reviewQueue.filters.allReasons")}</option>
+                    <option value="unsure">
+                      {t("reviewQueue.filters.reasonUnsure")}
+                    </option>
+                    <option value="probable_home">
+                      {t("reviewQueue.filters.reasonProbableHome")}
+                    </option>
+                    <option value="home_requires_review">
+                      {t("reviewQueue.filters.reasonHomeRequiresReview")}
+                    </option>
+                    <option value="manual_review_mixed_home">
+                      {t("reviewQueue.filters.reasonManualMixedHome")}
+                    </option>
+                    <option value="provider_conflict">
+                      {t("reviewQueue.filters.reasonProviderConflict")}
+                    </option>
+                  </select>
+                </label>
+                <label className="queue-filter-field">
+                  <span>{t("reviewQueue.filters.allSeverity")}</span>
+                  <select
+                    value={filters.severity}
+                    onChange={(event) =>
+                      setFilters((prev) => ({
+                        ...prev,
+                        severity: event.target.value,
+                        page: 1,
+                      }))
+                    }
+                  >
+                    <option value="">{t("reviewQueue.filters.allSeverity")}</option>
+                    <option value="critical">
+                      {t("reviewQueue.filters.severityCritical")}
+                    </option>
+                    <option value="high">
+                      {t("reviewQueue.filters.severityHigh")}
+                    </option>
+                    <option value="medium">
+                      {t("reviewQueue.filters.severityMedium")}
+                    </option>
+                    <option value="low">{t("reviewQueue.filters.severityLow")}</option>
+                  </select>
+                </label>
+                <label className="queue-filter-field">
+                  <span>{t("reviewQueue.filters.punitiveAny")}</span>
+                  <select
+                    value={filters.punitive_eligible}
+                    onChange={(event) =>
+                      setFilters((prev) => ({
+                        ...prev,
+                        punitive_eligible: event.target.value,
+                        page: 1,
+                      }))
+                    }
+                  >
+                    <option value="">{t("reviewQueue.filters.punitiveAny")}</option>
+                    <option value="true">
+                      {t("reviewQueue.filters.punitiveOnly")}
+                    </option>
+                    <option value="false">{t("reviewQueue.filters.reviewOnly")}</option>
+                  </select>
+                </label>
+                <label className="queue-filter-field">
+                  <span>{t("reviewQueue.filters.sortLabel")}</span>
+                  <select
+                    value={filters.sort}
+                    onChange={(event) =>
+                      setFilters((prev) => ({ ...prev, sort: event.target.value }))
+                    }
+                  >
+                    <option value="priority_desc">
+                      {t("reviewQueue.filters.sortPriorityDesc")}
+                    </option>
+                    <option value="priority_asc">
+                      {t("reviewQueue.filters.sortPriorityAsc")}
+                    </option>
+                    <option value="activity_desc">
+                      {t("reviewQueue.filters.sortActivityDesc")}
+                    </option>
+                    <option value="activity_asc">
+                      {t("reviewQueue.filters.sortActivityAsc")}
+                    </option>
+                    <option value="updated_desc">
+                      {t("reviewQueue.filters.sortUpdatedDesc")}
+                    </option>
+                    <option value="score_desc">
+                      {t("reviewQueue.filters.sortScoreDesc")}
+                    </option>
+                    <option value="repeat_desc">
+                      {t("reviewQueue.filters.sortRepeatDesc")}
+                    </option>
+                    <option value="updated_asc">
+                      {t("reviewQueue.filters.sortUpdatedAsc")}
+                    </option>
+                  </select>
+                </label>
+              </div>
+            </section>
+          </div>
         </div>
       ) : null}
 

@@ -21,6 +21,7 @@ from mobguard_platform.storage.sqlite import is_sqlite_busy_error, is_sqlite_int
 
 from ..context import APIContainer
 from .modules import _analyze_event, _build_batch_context, _remnawave_client, _resolve_remote_user
+from .review_auto_resolution import AUTO_REVIEW_ACTOR, match_review_auto_resolution
 from .telegram_notifier import emit_ingest_notifications
 
 
@@ -540,6 +541,32 @@ async def _process_claimed_event(
         "enforcement": enforcement,
         "event_uid": event_uid,
     }
+    if review_case_id:
+        review_detail = await asyncio.to_thread(container.store.get_review_case, int(review_case_id))
+        auto_review_match = match_review_auto_resolution(
+            opened_at=review_detail.get("opened_at"),
+            review_reason=review_reason,
+            provider_evidence=bundle.signal_flags.get("provider_evidence"),
+            reason_codes=bundle.reason_codes,
+            reasons=bundle.reasons,
+            ongoing_duration_seconds=review_detail.get("usage_profile_ongoing_duration_seconds"),
+        )
+        if auto_review_match is not None:
+            resolved_detail = await asyncio.to_thread(
+                container.store.resolve_review_case,
+                int(review_case_id),
+                auto_review_match.resolution,
+                AUTO_REVIEW_ACTOR,
+                None,
+                auto_review_match.build_note(),
+            )
+            result["auto_review"] = {
+                "rule_id": auto_review_match.rule_id,
+                "resolution": auto_review_match.resolution,
+                "precision": auto_review_match.precision,
+                "support": auto_review_match.support,
+                "status": resolved_detail.get("status"),
+            }
     await emit_ingest_notifications(
         container,
         user_data,

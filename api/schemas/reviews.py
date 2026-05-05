@@ -14,6 +14,7 @@ class ReviewRecheckRequest(BaseModel):
     limit: int = Field(default=100, ge=1, le=500)
     module_id: Optional[str] = None
     review_reason: Optional[str] = None
+    case_ids: list[int] = Field(default_factory=list, max_length=500)
 
 
 class RulesUpdateRequest(BaseModel):

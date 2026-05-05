@@ -13,6 +13,7 @@ from mobguard_platform.usage_profile import build_usage_profile_snapshot
 from mobguard_platform.storage.sqlite import is_sqlite_busy_error
 
 from .modules import _analyze_event, _build_batch_context
+from .review_auto_resolution import AUTO_REVIEW_ACTOR, match_review_auto_resolution
 from .runtime_state import enrich_panel_user_usage_context, panel_client
 
 
@@ -108,6 +109,19 @@ async def recheck_reviews(
     actor: str,
     actor_tg_id: int,
 ) -> dict[str, Any]:
+    case_ids = [
+        int(value)
+        for value in (filters.get("case_ids") or [])
+        if value not in (None, "")
+    ]
+    if case_ids:
+        return await _recheck_case_ids(
+            container,
+            sorted(set(case_ids))[:500],
+            actor,
+            actor_tg_id,
+        )
+
     try:
         limit = min(max(int(filters.get("limit", 100) or 100), 1), 500)
     except (TypeError, ValueError) as exc:
@@ -224,6 +238,19 @@ async def _recheck_case_ids(
                 persist_decision=False,
             )
             next_review_reason = review_reason_for_bundle(bundle)
+            auto_review_match = match_review_auto_resolution(
+                opened_at=detail.get("opened_at"),
+                review_reason=next_review_reason,
+                provider_evidence=bundle.signal_flags.get("provider_evidence"),
+                reason_codes=bundle.reason_codes,
+                reasons=bundle.reasons,
+                ongoing_duration_seconds=detail.get("usage_profile_ongoing_duration_seconds"),
+            )
+            recheck_review_reason = (
+                next_review_reason
+                if auto_review_match is None
+                else str(next_review_reason or "unsure")
+            )
             auto_note = (
                 f"auto recheck via live rules revision {revision}: "
                 f"{bundle.verdict}/{bundle.confidence_band} score={bundle.score}"
@@ -234,11 +261,20 @@ async def _recheck_case_ids(
                 str(detail.get("ip") or ""),
                 str(detail.get("tag") or ""),
                 bundle,
-                next_review_reason,
+                recheck_review_reason,
                 actor,
                 actor_tg_id,
                 auto_note,
             )
+            if auto_review_match is not None and updated["status"] == "OPEN":
+                updated = await asyncio.to_thread(
+                    container.store.resolve_review_case,
+                    int(case_id),
+                    auto_review_match.resolution,
+                    AUTO_REVIEW_ACTOR,
+                    None,
+                    auto_review_match.build_note(),
+                )
         except sqlite3.OperationalError as exc:
             if skip_on_busy and is_sqlite_busy_error(exc):
                 logger.info("Skipping review recheck because SQLite is busy at case_id=%s", case_id)
@@ -248,6 +284,8 @@ async def _recheck_case_ids(
             changed_counts["closed"] += 1
         else:
             changed_counts["open"] += 1
+        if auto_review_match is not None and updated["status"] == "RESOLVED":
+            changed_counts["auto_resolved"] += 1
         if str(detail.get("review_reason") or "") != str(updated.get("review_reason") or ""):
             changed_counts["reason_changed"] += 1
         if str(detail.get("verdict") or "") != str(updated.get("verdict") or ""):
@@ -276,6 +314,32 @@ async def _recheck_case_ids(
         "revision": revision,
         "count": len(items),
     }
+
+
+async def run_startup_auto_recheck(container: Any) -> dict[str, Any]:
+    try:
+        payload = await recheck_provider_sensitive_reviews(
+            container,
+            AUTO_REVIEW_ACTOR,
+            0,
+            skip_on_busy=True,
+        )
+        logger.info(
+            "Startup auto-recheck finished: count=%s summary=%s skipped=%s",
+            payload.get("count"),
+            payload.get("summary", {}),
+            bool(payload.get("skipped")),
+        )
+        return payload
+    except Exception:
+        logger.exception("Startup auto-recheck failed")
+        return {
+            "items": [],
+            "summary": {"failed": 1},
+            "revision": int(container.store.get_live_rules_state().get("revision") or 0),
+            "count": 0,
+            "failed": True,
+        }
 
 
 def provider_tuning_changed(payload: dict[str, Any]) -> bool:

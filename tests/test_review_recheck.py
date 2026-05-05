@@ -221,6 +221,63 @@ class ReviewRecheckTests(unittest.TestCase):
         self.assertEqual(payload["summary"]["skipped_busy"], 1)
         self.assertEqual(payload["count"], 0)
 
+    def test_recheck_auto_review_uses_machine_actor_and_mobile_resolution_note(self):
+        refreshed = DecisionBundle(
+            ip="10.10.10.20",
+            verdict="UNSURE",
+            confidence_band="UNSURE",
+            score=15,
+            asn=12345,
+            isp="MTS",
+        )
+        refreshed.signal_flags["provider_evidence"] = {
+            "provider_key": "mts",
+            "provider_classification": "mixed",
+            "service_type_hint": "unknown",
+            "service_conflict": False,
+            "review_recommended": True,
+        }
+
+        async def fake_analyze_event(*args, **kwargs):
+            return refreshed
+
+        with patch.object(review_service, "_analyze_event", side_effect=fake_analyze_event):
+            payload = asyncio.run(
+                review_service.recheck_reviews(
+                    self.container,
+                    {"limit": 10},
+                    "admin-user",
+                    1001,
+                )
+            )
+
+        self.assertEqual(payload["summary"]["processed"], 1)
+        self.assertEqual(payload["summary"]["auto_resolved"], 1)
+        detail = self.store.get_review_case(1)
+        self.assertEqual(detail["status"], "RESOLVED")
+        self.assertEqual(detail["verdict"], "UNSURE")
+        self.assertEqual(detail["resolutions"][0]["resolution"], "MOBILE")
+        self.assertEqual(detail["resolutions"][0]["actor"], "system:auto-review")
+        self.assertIn("mobile_short_provider_conflict", detail["resolutions"][0]["note"])
+        self.assertIn("support=114", detail["resolutions"][0]["note"])
+        self.assertEqual(self.store.get_ip_override(refreshed.ip), "MOBILE")
+
+    def test_startup_auto_recheck_uses_machine_actor(self):
+        with patch.object(
+            review_service,
+            "recheck_provider_sensitive_reviews",
+            new=AsyncMock(return_value={"count": 1, "summary": {"processed": 1}, "items": []}),
+        ) as mocked_recheck:
+            payload = asyncio.run(review_service.run_startup_auto_recheck(self.container))
+
+        self.assertEqual(payload["count"], 1)
+        mocked_recheck.assert_awaited_once_with(
+            self.container,
+            "system:auto-review",
+            0,
+            skip_on_busy=True,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

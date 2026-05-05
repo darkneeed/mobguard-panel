@@ -18,6 +18,7 @@ from .routers.reviews import router as reviews_router
 from .routers.settings import router as settings_router
 from .services.db_maintenance import db_maintenance_loop
 from .services.ingest_pipeline import enforcement_dispatcher_loop, ingest_worker_loop
+from .services.reviews import run_startup_auto_recheck
 from .services.telegram_notifier import TelegramNotifier
 
 
@@ -35,6 +36,7 @@ async def lifespan(app: FastAPI):
     maintenance_task = asyncio.create_task(db_maintenance_loop(app.state.container))
     ingest_worker_task = asyncio.create_task(ingest_worker_loop(app.state.container))
     enforcement_dispatcher_task = asyncio.create_task(enforcement_dispatcher_loop(app.state.container))
+    startup_auto_recheck_task = asyncio.create_task(run_startup_auto_recheck(app.state.container))
     try:
         yield
     finally:
@@ -42,12 +44,15 @@ async def lifespan(app: FastAPI):
         maintenance_task.cancel()
         ingest_worker_task.cancel()
         enforcement_dispatcher_task.cancel()
+        startup_auto_recheck_task.cancel()
         with suppress(asyncio.CancelledError):
             await maintenance_task
         with suppress(asyncio.CancelledError):
             await ingest_worker_task
         with suppress(asyncio.CancelledError):
             await enforcement_dispatcher_task
+        with suppress(asyncio.CancelledError):
+            await startup_auto_recheck_task
         await telegram_notifier.stop()
 
 
