@@ -424,6 +424,7 @@ async def _apply_enforcement_if_needed(
         or should_warning_only(bundle)
         or not bundle.punitive_eligible
     )
+    observe_only = bool(settings.get("dry_run", True)) or not client.enabled
     now = datetime.utcnow().replace(microsecond=0)
     row = await container.analysis_store.fetch_one(
         """
@@ -438,6 +439,13 @@ async def _apply_enforcement_if_needed(
 
     if warning_only:
         next_warning_count = warning_count + 1
+        if observe_only:
+            return {
+                "type": "warning",
+                "warning_count": next_warning_count,
+                "warning_only": True,
+                "dry_run": True,
+            }
         await container.analysis_store.execute(
             """
             INSERT INTO violations (
@@ -474,6 +482,14 @@ async def _apply_enforcement_if_needed(
     next_strike = max(strikes, 0) + 1
     duration = int(durations[min(next_strike - 1, len(durations) - 1)])
     restriction_state = build_auto_restriction_state(user_data, settings)
+    if observe_only:
+        return {
+            "type": "ban",
+            "strike": next_strike,
+            "ban_minutes": duration,
+            "remote_updated": False,
+            "dry_run": True,
+        }
     unban_time = now + timedelta(minutes=duration)
     await container.analysis_store.execute(
         """
@@ -521,15 +537,6 @@ async def _apply_enforcement_if_needed(
             now.isoformat(),
         ),
     )
-    if bool(settings.get("dry_run", True)) or not client.enabled:
-        return {
-            "type": "ban",
-            "strike": next_strike,
-            "ban_minutes": duration,
-            "remote_updated": False,
-            "dry_run": True,
-        }
-
     def _remote_apply() -> bool:
         if restriction_state["restriction_mode"] == "TRAFFIC_CAP":
             result = apply_remote_traffic_cap(

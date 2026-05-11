@@ -50,6 +50,15 @@ class ModuleProtocolTests(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
+    def _assert_no_persisted_enforcement_state(self):
+        with self.store._connect() as conn:
+            violation_count = conn.execute("SELECT COUNT(*) AS cnt FROM violations").fetchone()["cnt"]
+            violation_history_count = conn.execute("SELECT COUNT(*) AS cnt FROM violation_history").fetchone()["cnt"]
+            enforcement_job_count = conn.execute("SELECT COUNT(*) AS cnt FROM enforcement_jobs").fetchone()["cnt"]
+        self.assertEqual(violation_count, 0)
+        self.assertEqual(violation_history_count, 0)
+        self.assertEqual(enforcement_job_count, 0)
+
     def test_register_heartbeat_and_config_roundtrip(self):
         self.store.create_managed_module(
             "node-a",
@@ -155,6 +164,177 @@ class ModuleProtocolTests(unittest.TestCase):
         self.assertEqual(result["duplicates"], 1)
         self.assertEqual(result["queued"], 1)
         self.assertEqual(result["status"], "queued")
+
+    def test_plan_enforcement_tx_dry_run_warning_does_not_persist_warning_state(self):
+        bundle = DecisionBundle(
+            ip="1.2.3.4",
+            verdict="HOME",
+            confidence_band="PROBABLE_HOME",
+            score=-20,
+            isp="ISP",
+            punitive_eligible=True,
+        )
+        runtime = SimpleNamespace(
+            settings={
+                "dry_run": True,
+                "shadow_mode": False,
+                "warning_only_mode": False,
+                "ban_durations_minutes": [15, 60],
+            }
+        )
+
+        with self.store._connect() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            enforcement = ingest_pipeline._plan_enforcement_tx(
+                conn,
+                runtime,
+                {"uuid": "uuid-dry-warning"},
+                {"ip": "1.2.3.4", "tag": "SELFSTEAL_RU-YANDEX_TCP"},
+                bundle,
+                event_uid="dry-warning-1",
+                analysis_event_id=1,
+                review_case_id=None,
+            )
+            conn.commit()
+
+        self.assertEqual(
+            enforcement,
+            {
+                "type": "warning",
+                "warning_count": 1,
+                "warning_only": True,
+                "delivery_status": "applied",
+                "dry_run": True,
+            },
+        )
+        self._assert_no_persisted_enforcement_state()
+
+    def test_plan_enforcement_tx_dry_run_ban_does_not_persist_strike_state(self):
+        bundle = DecisionBundle(
+            ip="1.2.3.5",
+            verdict="HOME",
+            confidence_band="HIGH_HOME",
+            score=-120,
+            isp="ISP",
+            punitive_eligible=True,
+        )
+        runtime = SimpleNamespace(
+            settings={
+                "dry_run": True,
+                "shadow_mode": False,
+                "warning_only_mode": False,
+                "ban_durations_minutes": [15, 60],
+            }
+        )
+
+        with self.store._connect() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            enforcement = ingest_pipeline._plan_enforcement_tx(
+                conn,
+                runtime,
+                {"uuid": "uuid-dry-ban"},
+                {"ip": "1.2.3.5", "tag": "SELFSTEAL_RU-YANDEX_TCP"},
+                bundle,
+                event_uid="dry-ban-1",
+                analysis_event_id=1,
+                review_case_id=None,
+            )
+            conn.commit()
+
+        self.assertEqual(
+            enforcement,
+            {
+                "type": "ban",
+                "strike": 1,
+                "ban_minutes": 15,
+                "delivery_status": "applied",
+                "job_id": None,
+                "dry_run": True,
+                "warning_only": False,
+            },
+        )
+        self._assert_no_persisted_enforcement_state()
+
+    def test_apply_enforcement_if_needed_dry_run_warning_does_not_persist_warning_state(self):
+        bundle = DecisionBundle(
+            ip="1.2.3.6",
+            verdict="HOME",
+            confidence_band="PROBABLE_HOME",
+            score=-20,
+            isp="ISP",
+            punitive_eligible=True,
+        )
+        runtime = SimpleNamespace(
+            container=self.container,
+            remnawave_client=SimpleNamespace(enabled=True),
+            settings={
+                "dry_run": True,
+                "shadow_mode": False,
+                "warning_only_mode": False,
+                "ban_durations_minutes": [15, 60],
+            },
+        )
+
+        enforcement = asyncio.run(
+            module_service._apply_enforcement_if_needed(
+                runtime,
+                {"uuid": "uuid-module-dry-warning"},
+                {"ip": "1.2.3.6", "tag": "SELFSTEAL_RU-YANDEX_TCP"},
+                bundle,
+            )
+        )
+
+        self.assertEqual(
+            enforcement,
+            {
+                "type": "warning",
+                "warning_count": 1,
+                "warning_only": True,
+                "dry_run": True,
+            },
+        )
+        self._assert_no_persisted_enforcement_state()
+
+    def test_apply_enforcement_if_needed_dry_run_ban_does_not_persist_strike_state(self):
+        bundle = DecisionBundle(
+            ip="1.2.3.7",
+            verdict="HOME",
+            confidence_band="HIGH_HOME",
+            score=-120,
+            isp="ISP",
+            punitive_eligible=True,
+        )
+        runtime = SimpleNamespace(
+            container=self.container,
+            remnawave_client=SimpleNamespace(enabled=True),
+            settings={
+                "dry_run": True,
+                "shadow_mode": False,
+                "warning_only_mode": False,
+                "ban_durations_minutes": [15, 60],
+            },
+        )
+
+        enforcement = asyncio.run(
+            module_service._apply_enforcement_if_needed(
+                runtime,
+                {"uuid": "uuid-module-dry-ban"},
+                {"ip": "1.2.3.7", "tag": "SELFSTEAL_RU-YANDEX_TCP"},
+                bundle,
+            )
+        )
+
+        self.assertEqual(
+            enforcement,
+            {
+                "type": "ban",
+                "strike": 1,
+                "ban_minutes": 15,
+                "remote_updated": False,
+                "dry_run": True,
+            },
+        )
+        self._assert_no_persisted_enforcement_state()
 
     def test_event_batch_returns_503_when_storage_is_temporarily_busy(self):
         self.store.create_managed_module(

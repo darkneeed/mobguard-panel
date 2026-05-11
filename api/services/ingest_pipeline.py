@@ -209,6 +209,7 @@ def _plan_enforcement_tx(
         or should_warning_only(bundle)
         or not bundle.punitive_eligible
     )
+    dry_run = bool(settings.get("dry_run", True))
     now_dt = datetime.utcnow().replace(microsecond=0)
     now = now_dt.isoformat()
     violation_row = conn.execute(
@@ -224,6 +225,14 @@ def _plan_enforcement_tx(
 
     if warning_only:
         next_warning_count = warning_count + 1
+        if dry_run:
+            return {
+                "type": "warning",
+                "warning_count": next_warning_count,
+                "warning_only": True,
+                "delivery_status": "applied",
+                "dry_run": True,
+            }
         conn.execute(
             """
             INSERT INTO violations (
@@ -250,6 +259,7 @@ def _plan_enforcement_tx(
             "warning_count": next_warning_count,
             "warning_only": True,
             "delivery_status": "applied",
+            "dry_run": False,
         }
 
     durations = settings.get(
@@ -261,6 +271,16 @@ def _plan_enforcement_tx(
     next_strike = max(strikes, 0) + 1
     duration = int(durations[min(next_strike - 1, len(durations) - 1)])
     restriction_state = build_auto_restriction_state(user_data, settings)
+    if dry_run:
+        return {
+            "type": "ban",
+            "strike": next_strike,
+            "ban_minutes": duration,
+            "delivery_status": "applied",
+            "job_id": None,
+            "dry_run": True,
+            "warning_only": False,
+        }
     unban_time = (now_dt + timedelta(minutes=duration)).isoformat()
     conn.execute(
         """
@@ -309,7 +329,6 @@ def _plan_enforcement_tx(
         ),
     )
 
-    dry_run = bool(settings.get("dry_run", True))
     remote_change_required = bool(restriction_state.get("remote_change_required", True))
     delivery_status = "applied" if dry_run or not remote_change_required else "pending"
     job_id = 0
