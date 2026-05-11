@@ -7,7 +7,10 @@ from mobguard_platform import ReadSnapshotUnavailableError
 
 from ..dependencies import get_container, require_permission
 from ..permissions import PERMISSION_QUALITY_READ
-from ..services.automation_status import build_automation_status
+from ..services.automation_status import (
+    build_automation_status,
+    build_enforcement_summary,
+)
 
 
 router = APIRouter(prefix="/admin", tags=["metrics"])
@@ -30,6 +33,7 @@ def get_overview(
     try:
         payload = container.store.get_overview_metrics(fast_read=True)
         payload["automation_status"] = build_automation_status(container)
+        payload["enforcement"] = build_enforcement_summary(container)
         return payload
     except ReadSnapshotUnavailableError as exc:
         raise HTTPException(

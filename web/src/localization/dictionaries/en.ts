@@ -148,12 +148,19 @@ export const enDictionary: TranslationDictionary = {
       failedQueue: "The ingest pipeline has failures: {count}. Review retry and dead-letter pressure.",
       openCases: "There are {count} open review cases in the queue.",
       mixedConflicts: "Mixed providers produced {count} conflict-heavy cases.",
+      activeViolations: "There are {count} active warnings or restrictions right now.",
+      laggingConfigs: "{count} modules are not on the latest config revision.",
+      staleModules: "{count} modules have gone stale.",
       quiet: "No critical signals right now."
     },
     health: {
       core: "Scoring runtime",
       db: "Database",
       rules: "Live rules",
+      moduleConfig: "Module config rollout",
+      enforcement: "Active enforcement",
+      lastEnforcement: "Last enforcement event",
+      remoteDelivery: "Restriction delivery",
       embedded: "embedded",
       embeddedRuntime: "Embedded in the panel API process · updated {value}",
       updated: "Updated {value}",
@@ -162,6 +169,11 @@ export const enDictionary: TranslationDictionary = {
     cards: {
       openQueue: "Open queue",
       failedQueue: "Ingest failures",
+      activeViolations: "Active violations",
+      activeWarnings: "Active warnings",
+      activeBans: "Active bans",
+      currentConfigModules: "On current config",
+      laggingConfigModules: "Lagging configs",
       core: "Scoring runtime",
       embeddedValue: "embedded",
       ipinfo: "IPINFO token",
@@ -212,6 +224,18 @@ export const enDictionary: TranslationDictionary = {
       guardrailsTitle: "Active guardrails",
       noModeReasons: "No limiting flags are active",
       noGuardrails: "No extra guardrails are active"
+    },
+    enforcement: {
+      activeSummary:
+        "{violations} active restrictions · {warnings} warnings · {bans} bans",
+      configSummary:
+        "rev {revision} · {current} current · {lagging} lagging · {stale} stale",
+      lastWarning: "Last warning {value}",
+      lastBan: "Last ban {value}",
+      lastBanDuration: "{value} min",
+      never: "No recent restrictions recorded",
+      remoteSummary:
+        "{pending} pending apply · {failed} failed · worker {worker}"
     }
   },
   login: {
@@ -670,6 +694,7 @@ export const enDictionary: TranslationDictionary = {
     saveRules: "Save rules",
     rulesUpdated: "Rules updated",
     generalSaved: "General settings saved",
+    policySaved: "Detection policy saved",
     loadFailed: "Failed to load rules",
     saveFailed: "Save failed",
     revision: "Revision {value}",

@@ -3,7 +3,11 @@ import { Link } from "react-router-dom";
 
 import { hasPermission } from "../app/permissions";
 import { prefetchRouteModule } from "../app/routeModules";
-import { api, OverviewMetricsResponse, Session } from "../api/client";
+import {
+  api,
+  OverviewMetricsResponse,
+  Session,
+} from "../api/client";
 import { useI18n } from "../localization";
 import {
   automationGuardrailLabels,
@@ -79,6 +83,8 @@ export function OverviewPage({ session }: { session?: Session }) {
   const pipeline = data?.pipeline || null;
   const freshness = data?.freshness || null;
   const automationStatus = data?.automation_status || null;
+  const enforcement = data?.enforcement || null;
+  const moduleConfig = data?.module_config || null;
   const overviewStale = Boolean(
     (freshness?.overview_age_seconds ?? 0) > OVERVIEW_STALE_AFTER_SECONDS,
   );
@@ -155,11 +161,50 @@ export function OverviewPage({ session }: { session?: Session }) {
       }),
     );
   }
+  if ((enforcement?.active_total ?? 0) > 0) {
+    attentionItems.push(
+      t("overview.attentionItems.activeViolations", {
+        count: enforcement?.active_total ?? 0,
+      }),
+    );
+  }
+  if ((moduleConfig?.lagging_healthy_count ?? 0) > 0) {
+    attentionItems.push(
+      t("overview.attentionItems.laggingConfigs", {
+        count: moduleConfig?.lagging_healthy_count ?? 0,
+      }),
+    );
+  }
+  if ((moduleConfig?.stale_count ?? 0) > 0) {
+    attentionItems.push(
+      t("overview.attentionItems.staleModules", {
+        count: moduleConfig?.stale_count ?? 0,
+      }),
+    );
+  }
   if (!attentionItems.length) {
     attentionItems.push(t("overview.attentionItems.quiet"));
   }
   const automationModeReasons = automationModeReasonLabels(t, automationStatus);
   const automationGuardrails = automationGuardrailLabels(t, automationStatus);
+  const lastEventLabel =
+    enforcement?.last_event_type === "warning" && enforcement?.last_event_at
+      ? t("overview.enforcement.lastWarning", {
+          value: formatDisplayDateTime(
+            enforcement.last_event_at,
+            t("common.notAvailable"),
+            language,
+          ),
+        })
+      : enforcement?.last_event_type === "ban" && enforcement?.last_event_at
+        ? t("overview.enforcement.lastBan", {
+            value: formatDisplayDateTime(
+              enforcement.last_event_at,
+              t("common.notAvailable"),
+              language,
+            ),
+          })
+        : t("overview.enforcement.never");
 
   return (
     <section className="page">
@@ -231,18 +276,30 @@ export function OverviewPage({ session }: { session?: Session }) {
               <strong>{quality?.open_cases ?? queue?.count ?? "—"}</strong>
             </div>
             <div className="stat-card">
+              <span>{t("overview.cards.activeViolations")}</span>
+              <strong>{enforcement?.active_total ?? "—"}</strong>
+            </div>
+            <div className="stat-card">
+              <span>{t("overview.cards.activeWarnings")}</span>
+              <strong>{enforcement?.active_warning_count ?? "—"}</strong>
+            </div>
+            <div className="stat-card">
+              <span>{t("overview.cards.activeBans")}</span>
+              <strong>{enforcement?.active_ban_count ?? "—"}</strong>
+            </div>
+            <div className="stat-card">
+              <span>{t("overview.cards.currentConfigModules")}</span>
+              <strong>
+                {moduleConfig?.up_to_date_healthy_count ?? "—"}
+              </strong>
+            </div>
+            <div className="stat-card">
+              <span>{t("overview.cards.laggingConfigModules")}</span>
+              <strong>{moduleConfig?.lagging_healthy_count ?? "—"}</strong>
+            </div>
+            <div className="stat-card">
               <span>{t("overview.cards.failedQueue")}</span>
               <strong>{pipeline?.failed_count ?? "—"}</strong>
-            </div>
-            <div className="stat-card">
-              <span>{t("overview.cards.mixedConflicts")}</span>
-              <strong>{quality?.mixed_providers.conflict_cases ?? "—"}</strong>
-            </div>
-            <div className="stat-card">
-              <span>{t("overview.cards.promotedPatterns")}</span>
-              <strong>
-                {quality?.learning.promoted.active_patterns ?? "—"}
-              </strong>
             </div>
             <div className="stat-card">
               <span>{t("overview.cards.automationMode")}</span>
@@ -380,6 +437,74 @@ export function OverviewPage({ session }: { session?: Session }) {
               <div className="record-meta">
                 {t("overview.health.rulesBy", {
                   value: rulesOwner,
+                })}
+              </div>
+            </div>
+            <div className="metric-row">
+              <div className="record-main">
+                <span className="record-title">
+                  {t("overview.health.enforcement")}
+                </span>
+                <span>{enforcement?.active_total ?? "—"}</span>
+              </div>
+              <div className="record-meta">
+                {t("overview.enforcement.activeSummary", {
+                  violations: enforcement?.active_total ?? 0,
+                  warnings: enforcement?.active_warning_count ?? 0,
+                  bans: enforcement?.active_ban_count ?? 0,
+                })}
+              </div>
+            </div>
+            <div className="metric-row">
+              <div className="record-main">
+                <span className="record-title">
+                  {t("overview.health.moduleConfig")}
+                </span>
+                <span>
+                  {t("rules.revision", {
+                    value: moduleConfig?.desired_revision ?? "—",
+                  })}
+                </span>
+              </div>
+              <div className="record-meta">
+                {t("overview.enforcement.configSummary", {
+                  revision: moduleConfig?.desired_revision ?? "—",
+                  current: moduleConfig?.up_to_date_healthy_count ?? 0,
+                  lagging: moduleConfig?.lagging_healthy_count ?? 0,
+                  stale: moduleConfig?.stale_count ?? 0,
+                })}
+              </div>
+            </div>
+            <div className="metric-row">
+              <div className="record-main">
+                <span className="record-title">
+                  {t("overview.health.lastEnforcement")}
+                </span>
+                <span>{lastEventLabel}</span>
+              </div>
+              <div className="record-meta">
+                {enforcement?.last_event_type === "ban" &&
+                enforcement.last_ban_duration_minutes
+                  ? t("overview.enforcement.lastBanDuration", {
+                      value: enforcement.last_ban_duration_minutes,
+                    })
+                  : automationModeReasons.length > 0
+                    ? automationModeReasons.join(", ")
+                    : t("overview.automation.noModeReasons")}
+              </div>
+            </div>
+            <div className="metric-row">
+              <div className="record-main">
+                <span className="record-title">
+                  {t("overview.health.remoteDelivery")}
+                </span>
+                <span>{pipeline?.worker_status ?? t("common.notAvailable")}</span>
+              </div>
+              <div className="record-meta">
+                {t("overview.enforcement.remoteSummary", {
+                  pending: pipeline?.enforcement_pending_count ?? 0,
+                  failed: pipeline?.enforcement_failed_count ?? 0,
+                  worker: pipeline?.worker_status ?? t("common.notAvailable"),
                 })}
               </div>
             </div>

@@ -157,12 +157,21 @@ export const ruDictionary: TranslationDictionary = {
         "В конвейере обработки есть ошибки: {count}. Нужно проверить повторы и dead-letter.",
       openCases: "В очереди ревью сейчас {count} открытых кейсов.",
       mixedConflicts: "Смешанные провайдеры дали {count} конфликтных кейсов.",
+      activeViolations:
+        "Сейчас активно {count} ограничений или предупреждений.",
+      laggingConfigs:
+        "{count} модулей работают не на актуальной ревизии конфига.",
+      staleModules: "{count} модулей давно не отчитывались.",
       quiet: "Критичных сигналов сейчас нет.",
     },
     health: {
       core: "Модуль скоринга",
       db: "База данных",
       rules: "Живые правила",
+      moduleConfig: "Ревизия конфигов модулей",
+      enforcement: "Активные ограничения",
+      lastEnforcement: "Последнее действие",
+      remoteDelivery: "Доставка ограничений",
       embedded: "встроен",
       embeddedRuntime: "Встроен в API панели · обновлено {value}",
       updated: "Обновлено {value}",
@@ -171,6 +180,11 @@ export const ruDictionary: TranslationDictionary = {
     cards: {
       openQueue: "Открытая очередь",
       failedQueue: "Ошибки обработки",
+      activeViolations: "Активные нарушения",
+      activeWarnings: "Активные предупреждения",
+      activeBans: "Активные баны",
+      currentConfigModules: "На актуальном конфиге",
+      laggingConfigModules: "Отстают по конфигу",
       core: "Модуль скоринга",
       embeddedValue: "встроен",
       ipinfo: "Токен IPINFO",
@@ -224,6 +238,18 @@ export const ruDictionary: TranslationDictionary = {
       guardrailsTitle: "Активные guardrail’ы",
       noModeReasons: "Нет флагов, ограничивающих режим",
       noGuardrails: "Дополнительные guardrail’ы не включены",
+    },
+    enforcement: {
+      activeSummary:
+        "{violations} активных ограничений · {warnings} предупреждений · {bans} банов",
+      configSummary:
+        "rev {revision} · {current} на актуальной · {lagging} отстают · {stale} неактивны",
+      lastWarning: "Последний warning {value}",
+      lastBan: "Последний ban {value}",
+      lastBanDuration: "{value} мин",
+      never: "Система пока не зафиксировала ограничений",
+      remoteSummary:
+        "{pending} ждут применения · {failed} с ошибкой · воркер {worker}",
     },
   },
   login: {
@@ -708,6 +734,7 @@ export const ruDictionary: TranslationDictionary = {
     saveRules: "Сохранить правила",
     rulesUpdated: "Правила обновлены",
     generalSaved: "Общие настройки сохранены",
+    policySaved: "Политика детекта сохранена",
     loadFailed: "Не удалось загрузить правила",
     saveFailed: "Не удалось сохранить изменения",
     revision: "Ревизия {value}",

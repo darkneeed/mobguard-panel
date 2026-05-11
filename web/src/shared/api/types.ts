@@ -450,6 +450,29 @@ export type SnapshotFreshness = {
   pipeline_age_seconds?: number;
 };
 
+export type OverviewModuleConfigSummary = {
+  desired_revision: number;
+  total_count: number;
+  healthy_count: number;
+  stale_count: number;
+  up_to_date_count: number;
+  lagging_count: number;
+  up_to_date_healthy_count: number;
+  lagging_healthy_count: number;
+  stale_after_seconds?: number;
+};
+
+export type OverviewEnforcementSummary = {
+  active_total: number;
+  active_warning_count: number;
+  active_ban_count: number;
+  last_warning_at?: string | null;
+  last_ban_at?: string | null;
+  last_ban_duration_minutes?: number | null;
+  last_event_type?: "warning" | "ban" | null;
+  last_event_at?: string | null;
+};
+
 export type OverviewMetricsResponse = {
   health: HealthSnapshot;
   quality: Record<string, unknown>;
@@ -457,6 +480,8 @@ export type OverviewMetricsResponse = {
   pipeline: PipelineStatus;
   freshness: SnapshotFreshness;
   automation_status?: AutomationStatus;
+  module_config?: OverviewModuleConfigSummary;
+  enforcement?: OverviewEnforcementSummary;
 };
 
 export type ViolationsResponse = {

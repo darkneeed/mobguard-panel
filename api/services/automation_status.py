@@ -62,3 +62,79 @@ def build_automation_status(container: APIContainer) -> dict[str, Any]:
         "mode_reasons": mode_reasons,
         "flags": flags,
     }
+
+
+def build_enforcement_summary(container: APIContainer) -> dict[str, Any]:
+    store = getattr(container, "store", None)
+    if store is None:
+        return {
+            "active_total": 0,
+            "active_warning_count": 0,
+            "active_ban_count": 0,
+            "last_warning_at": None,
+            "last_ban_at": None,
+            "last_ban_duration_minutes": None,
+            "last_event_type": None,
+            "last_event_at": None,
+        }
+
+    with store._connect() as conn:
+        if not store._table_exists(conn, "violations"):
+            return {
+                "active_total": 0,
+                "active_warning_count": 0,
+                "active_ban_count": 0,
+                "last_warning_at": None,
+                "last_ban_at": None,
+                "last_ban_duration_minutes": None,
+                "last_event_type": None,
+                "last_event_at": None,
+            }
+
+        active = conn.execute(
+            """
+            SELECT
+                COUNT(*) AS active_total,
+                COALESCE(SUM(CASE WHEN warning_time IS NOT NULL THEN 1 ELSE 0 END), 0) AS active_warning_count,
+                COALESCE(SUM(CASE WHEN unban_time IS NOT NULL AND unban_time > datetime('now') THEN 1 ELSE 0 END), 0)
+                    AS active_ban_count,
+                MAX(CASE WHEN warning_time IS NOT NULL THEN warning_time END) AS last_warning_at
+            FROM violations
+            """
+        ).fetchone()
+
+        last_ban_row = None
+        if store._table_exists(conn, "violation_history"):
+            last_ban_row = conn.execute(
+                """
+                SELECT timestamp, punishment_duration
+                FROM violation_history
+                ORDER BY timestamp DESC
+                LIMIT 1
+                """
+            ).fetchone()
+
+    last_warning_at = str(active["last_warning_at"] or "").strip() or None
+    last_ban_at = str(last_ban_row["timestamp"] or "").strip() if last_ban_row else None
+    last_ban_at = last_ban_at or None
+    last_event_type = None
+    last_event_at = None
+    if last_warning_at and (not last_ban_at or last_warning_at >= last_ban_at):
+        last_event_type = "warning"
+        last_event_at = last_warning_at
+    elif last_ban_at:
+        last_event_type = "ban"
+        last_event_at = last_ban_at
+
+    return {
+        "active_total": int(active["active_total"] or 0),
+        "active_warning_count": int(active["active_warning_count"] or 0),
+        "active_ban_count": int(active["active_ban_count"] or 0),
+        "last_warning_at": last_warning_at,
+        "last_ban_at": last_ban_at,
+        "last_ban_duration_minutes": (
+            int(last_ban_row["punishment_duration"] or 0) if last_ban_row else None
+        ),
+        "last_event_type": last_event_type,
+        "last_event_at": last_event_at,
+    }

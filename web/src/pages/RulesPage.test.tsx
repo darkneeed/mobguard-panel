@@ -128,7 +128,7 @@ describe("RulesPage retention settings", () => {
     expect(screen.getByText(/dry-run remote actions/)).toBeInTheDocument();
   });
 
-  it("saves combined automation controls from the general section", async () => {
+  it("saves automation controls and moved policy settings from the general section", async () => {
     const detectionPayload = buildRulesPayload();
     vi.mocked(api.getDetectionSettings).mockResolvedValue({
       ...detectionPayload,
@@ -186,13 +186,13 @@ describe("RulesPage retention settings", () => {
       },
       automation_status: {
         mode: "observe",
-        mode_reasons: ["shadow_mode"],
+        mode_reasons: [],
         flags: {
           dry_run: false,
           warning_only_mode: false,
           manual_review_mixed_home_enabled: false,
           manual_ban_approval_enabled: false,
-          shadow_mode: true,
+          shadow_mode: false,
           auto_enforce_requires_hard_or_multi_signal: true,
           provider_conflict_review_only: false,
         },
@@ -219,24 +219,6 @@ describe("RulesPage retention settings", () => {
       "false",
     );
 
-    const shadowField = within(automationPanel as HTMLElement)
-      .getByText("Shadow mode")
-      .closest(".rule-field");
-    expect(shadowField).not.toBeNull();
-    await userEvent.selectOptions(
-      within(shadowField as HTMLElement).getByRole("combobox"),
-      "true",
-    );
-
-    const probableHomeField = within(automationPanel as HTMLElement)
-      .getByText("Probable home = warning only")
-      .closest(".rule-field");
-    expect(probableHomeField).not.toBeNull();
-    await userEvent.selectOptions(
-      within(probableHomeField as HTMLElement).getByRole("combobox"),
-      "true",
-    );
-
     await userEvent.click(
       within(automationPanel as HTMLElement).getByRole("button", {
         name: "Save automation controls",
@@ -245,9 +227,9 @@ describe("RulesPage retention settings", () => {
 
     await waitFor(() => {
       expect(api.updateEnforcementSettings).toHaveBeenCalled();
-      expect(api.updateDetectionSettings).toHaveBeenCalled();
     });
 
+    expect(api.updateDetectionSettings).not.toHaveBeenCalled();
     expect(
       vi.mocked(api.updateEnforcementSettings).mock.calls.at(-1)?.[0],
     ).toEqual({
@@ -259,6 +241,44 @@ describe("RulesPage retention settings", () => {
       },
     });
     expect(
+      await within(automationPanel as HTMLElement).findByText(
+        "Automation controls saved",
+      ),
+    ).toBeInTheDocument();
+
+    const policyPanel = screen
+      .getByText("Detection policy")
+      .closest(".panel");
+    expect(policyPanel).not.toBeNull();
+
+    const shadowField = within(policyPanel as HTMLElement)
+      .getByText("Shadow mode")
+      .closest(".rule-field");
+    expect(shadowField).not.toBeNull();
+    await userEvent.selectOptions(
+      within(shadowField as HTMLElement).getByRole("combobox"),
+      "true",
+    );
+
+    const probableHomeField = within(policyPanel as HTMLElement)
+      .getByText("Probable home = warning only")
+      .closest(".rule-field");
+    expect(probableHomeField).not.toBeNull();
+    await userEvent.selectOptions(
+      within(probableHomeField as HTMLElement).getByRole("combobox"),
+      "true",
+    );
+
+    await userEvent.click(
+      within(policyPanel as HTMLElement).getByRole("button", {
+        name: "Save rules",
+      }),
+    );
+
+    await waitFor(() => {
+      expect(api.updateDetectionSettings).toHaveBeenCalled();
+    });
+    expect(
       vi.mocked(api.updateDetectionSettings).mock.calls.at(-1)?.[0],
     ).toEqual({
       rules: {
@@ -267,14 +287,16 @@ describe("RulesPage retention settings", () => {
           probable_home_warning_only: true,
           auto_enforce_requires_hard_or_multi_signal: true,
           provider_conflict_review_only: false,
+          review_ui_base_url: "https://mobguard.example.com",
+          live_rules_refresh_seconds: 1,
         },
       },
       revision: 7,
       updated_at: "2026-04-21T10:00:00Z",
     });
     expect(
-      await within(automationPanel as HTMLElement).findByText(
-        "Automation controls saved",
+      await within(policyPanel as HTMLElement).findByText(
+        "Detection policy saved",
       ),
     ).toBeInTheDocument();
   });

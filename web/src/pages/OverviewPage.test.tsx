@@ -135,6 +135,27 @@ describe("OverviewPage", () => {
         overview_age_seconds: 3,
         pipeline_updated_at: "2026-04-12T03:25:01Z",
         pipeline_age_seconds: 2
+      },
+      module_config: {
+        desired_revision: 7,
+        total_count: 3,
+        healthy_count: 2,
+        stale_count: 1,
+        up_to_date_count: 2,
+        lagging_count: 1,
+        up_to_date_healthy_count: 1,
+        lagging_healthy_count: 1,
+        stale_after_seconds: 180
+      },
+      enforcement: {
+        active_total: 3,
+        active_warning_count: 2,
+        active_ban_count: 1,
+        last_warning_at: "2026-04-12T03:20:00Z",
+        last_ban_at: "2026-04-12T03:18:00Z",
+        last_ban_duration_minutes: 60,
+        last_event_type: "warning",
+        last_event_at: "2026-04-12T03:20:00Z"
       }
     });
 
@@ -143,6 +164,8 @@ describe("OverviewPage", () => {
     expect(await screen.findByText("provider_conflict")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /alpha/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Open console" })).toHaveAttribute("href", "/data/console");
+    expect(screen.getByText("Active violations")).toBeInTheDocument();
+    expect(screen.getByText("On current config")).toBeInTheDocument();
     expect(api.getOverview).toHaveBeenCalledTimes(1);
   });
 
@@ -263,6 +286,27 @@ describe("OverviewPage", () => {
           overview_age_seconds: 3,
           pipeline_updated_at: "2026-04-12T03:25:01Z",
           pipeline_age_seconds: 2
+        },
+        module_config: {
+          desired_revision: 7,
+          total_count: 3,
+          healthy_count: 2,
+          stale_count: 1,
+          up_to_date_count: 2,
+          lagging_count: 1,
+          up_to_date_healthy_count: 1,
+          lagging_healthy_count: 1,
+          stale_after_seconds: 180
+        },
+        enforcement: {
+          active_total: 3,
+          active_warning_count: 2,
+          active_ban_count: 1,
+          last_warning_at: "2026-04-12T03:20:00Z",
+          last_ban_at: "2026-04-12T03:18:00Z",
+          last_ban_duration_minutes: 60,
+          last_event_type: "warning",
+          last_event_at: "2026-04-12T03:20:00Z"
         }
       })
       .mockRejectedValueOnce(new Error("temporary refresh failure"));

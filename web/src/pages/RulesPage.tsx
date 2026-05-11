@@ -79,13 +79,6 @@ const AUTOMATION_GENERAL_FIELD_SET = new Set<string>(
   AUTOMATION_GENERAL_FIELD_KEYS,
 );
 
-const AUTOMATION_POLICY_FIELD_KEYS = new Set([
-  "shadow_mode",
-  "probable_home_warning_only",
-  "auto_enforce_requires_hard_or_multi_signal",
-  "provider_conflict_review_only",
-]);
-
 const GENERAL_RUNTIME_FIELDS = GENERAL_SETTINGS_FIELDS.filter(
   (field) => !AUTOMATION_GENERAL_FIELD_SET.has(field.key),
 );
@@ -94,8 +87,8 @@ const AUTOMATION_GENERAL_FIELDS = GENERAL_SETTINGS_FIELDS.filter((field) =>
   AUTOMATION_GENERAL_FIELD_SET.has(field.key),
 );
 
-const AUTOMATION_POLICY_FIELDS = RULE_SETTING_FIELDS.filter((field) =>
-  AUTOMATION_POLICY_FIELD_KEYS.has(field.key),
+const POLICY_FIELDS = RULE_SETTING_FIELDS.filter(
+  (field) => field.sectionKey === "policy",
 );
 
 const LIST_SECTIONS = Array.from(
@@ -110,7 +103,6 @@ const RULES_SECTIONS = [
   "thresholds",
   "lists",
   "providers",
-  "policy",
   "learning",
   "retention",
 ] as const;
@@ -153,6 +145,8 @@ export function RulesPage() {
   const [generalSaved, setGeneralSaved] = useState("");
   const [automationError, setAutomationError] = useState("");
   const [automationSaved, setAutomationSaved] = useState("");
+  const [policyError, setPolicyError] = useState("");
+  const [policySaved, setPolicySaved] = useState("");
   const [serverAutomationStatus, setServerAutomationStatus] =
     useState<AutomationStatus | null>(null);
 
@@ -210,11 +204,11 @@ export function RulesPage() {
   const automationGeneralDirty = AUTOMATION_GENERAL_FIELD_KEYS.some(
     (key) => (generalDraft?.[key] ?? "") !== (savedGeneralDraft?.[key] ?? ""),
   );
-  const automationPolicyDirty = AUTOMATION_POLICY_FIELDS.some(
+  const policyDirty = POLICY_FIELDS.some(
     (field) =>
       draft?.settings?.[field.key] !== savedDraft?.settings?.[field.key],
   );
-  const automationDirty = automationGeneralDirty || automationPolicyDirty;
+  const automationDirty = automationGeneralDirty;
   const previewAutomationStatus = useMemo(
     () =>
       deriveAutomationStatus({
@@ -484,6 +478,7 @@ export function RulesPage() {
     }));
     setSaved("");
     setAutomationSaved("");
+    setPolicySaved("");
   }
 
   function updateGeneralField(key: string, value: string) {
@@ -575,34 +570,9 @@ export function RulesPage() {
   }
 
   async function saveAutomationControls() {
-    if (!draft || !state || !generalDraft) return;
+    if (!generalDraft) return;
     try {
-      let nextState = state;
-      let nextDraft = draft;
-      let nextGeneralDraft = generalDraft;
       let nextAutomationStatus = serverAutomationStatus;
-
-      if (automationPolicyDirty) {
-        const detectionResponse = (await api.updateDetectionSettings({
-          rules: {
-            settings: Object.fromEntries(
-              AUTOMATION_POLICY_FIELDS.map((field) => [
-                field.key,
-                serializeSettingField(field, draft.settings?.[field.key]),
-              ]),
-            ),
-          },
-          revision: nextState.revision,
-          updated_at: nextState.updated_at,
-        })) as RulesState;
-        const normalizedRules = normalizeRulesDraft(detectionResponse.rules);
-        nextState = detectionResponse;
-        nextDraft = normalizedRules;
-        setState(detectionResponse);
-        setDraft(normalizedRules);
-        setSavedDraft(normalizedRules);
-      }
-
       if (automationGeneralDirty) {
         const enforcementResponse = (await api.updateEnforcementSettings({
           settings: serializeGeneralSettings(
@@ -614,27 +584,9 @@ export function RulesPage() {
           enforcementResponse.settings,
           GENERAL_SETTINGS_FIELDS,
         );
-        nextGeneralDraft = normalizedGeneral;
         nextAutomationStatus = enforcementResponse.automation_status ?? null;
         setGeneralDraft(normalizedGeneral);
         setSavedGeneralDraft(normalizedGeneral);
-      }
-
-      if (!automationGeneralDirty && automationPolicyDirty) {
-        nextAutomationStatus = deriveAutomationStatus({
-          dry_run: nextGeneralDraft.dry_run === "true",
-          warning_only_mode: nextGeneralDraft.warning_only_mode === "true",
-          manual_review_mixed_home_enabled:
-            nextGeneralDraft.manual_review_mixed_home_enabled === "true",
-          manual_ban_approval_enabled:
-            nextGeneralDraft.manual_ban_approval_enabled === "true",
-          shadow_mode: nextDraft.settings?.shadow_mode === true,
-          auto_enforce_requires_hard_or_multi_signal:
-            nextDraft.settings?.auto_enforce_requires_hard_or_multi_signal ===
-            true,
-          provider_conflict_review_only:
-            nextDraft.settings?.provider_conflict_review_only === true,
-        });
       }
 
       setServerAutomationStatus(nextAutomationStatus ?? null);
@@ -649,8 +601,36 @@ export function RulesPage() {
     }
   }
 
+  async function savePolicySettings() {
+    if (!draft || !state) return;
+    try {
+      const detectionResponse = (await api.updateDetectionSettings({
+        rules: {
+          settings: Object.fromEntries(
+            POLICY_FIELDS.map((field) => [
+              field.key,
+              serializeSettingField(field, draft.settings?.[field.key]),
+            ]),
+          ),
+        },
+        revision: state.revision,
+        updated_at: state.updated_at,
+      })) as RulesState;
+      const normalizedRules = normalizeRulesDraft(detectionResponse.rules);
+      setState(detectionResponse);
+      setDraft(normalizedRules);
+      setSavedDraft(normalizedRules);
+      setPolicyError("");
+      setPolicySaved(t("rules.policySaved"));
+      setSaved("");
+    } catch (err) {
+      setPolicyError(err instanceof Error ? err.message : t("rules.saveFailed"));
+      setPolicySaved("");
+    }
+  }
+
   function renderAutomationControlsPanel() {
-    if (!draft || !generalDraft) return null;
+    if (!generalDraft) return null;
     return (
       <div className="panel">
         <div className="panel-heading panel-heading-row">
@@ -687,7 +667,33 @@ export function RulesPage() {
               </div>
             );
           })}
-          {AUTOMATION_POLICY_FIELDS.map((field) => {
+        </div>
+      </div>
+    );
+  }
+
+  function renderPolicyPanel() {
+    if (!draft) return null;
+    return (
+      <div className="panel">
+        <div className="panel-heading panel-heading-row">
+          <div>
+            <h2>{t("rules.sectionTitles.policy")}</h2>
+            <p className="muted">{t("rules.sectionDescriptions.policy")}</p>
+          </div>
+          <div className="action-row">
+            <span className={policyDirty ? "tag review-only" : "tag severity-low"}>
+              {policyDirty ? t("common.unsavedChanges") : t("common.saved")}
+            </span>
+            <button disabled={!policyDirty} onClick={savePolicySettings}>
+              {t("rules.saveRules")}
+            </button>
+          </div>
+        </div>
+        {policyError ? <div className="error-box">{policyError}</div> : null}
+        {policySaved ? <div className="ok-box">{policySaved}</div> : null}
+        <div className="form-grid compact-form-grid">
+          {POLICY_FIELDS.map((field) => {
             const meta = settingFieldMeta(field);
             return (
               <div className="rule-field compact-rule-field" key={field.key}>
@@ -696,15 +702,32 @@ export function RulesPage() {
                   description={meta.description}
                   recommendation={meta.recommendation}
                 />
-                <select
-                  value={getSettingInputValue(field, draft.settings?.[field.key])}
-                  onChange={(event) =>
-                    updateSettingField(field, event.target.value)
-                  }
-                >
-                  <option value="true">{t("common.true")}</option>
-                  <option value="false">{t("common.false")}</option>
-                </select>
+                {field.inputType === "boolean" ? (
+                  <select
+                    value={getSettingInputValue(
+                      field,
+                      draft.settings?.[field.key],
+                    )}
+                    onChange={(event) =>
+                      updateSettingField(field, event.target.value)
+                    }
+                  >
+                    <option value="true">{t("common.true")}</option>
+                    <option value="false">{t("common.false")}</option>
+                  </select>
+                ) : (
+                  <input
+                    type={field.inputType === "number" ? "number" : "text"}
+                    step={field.step}
+                    value={getSettingInputValue(
+                      field,
+                      draft.settings?.[field.key],
+                    )}
+                    onChange={(event) =>
+                      updateSettingField(field, event.target.value)
+                    }
+                  />
+                )}
               </div>
             );
           })}
@@ -1068,6 +1091,7 @@ export function RulesPage() {
         <>
           {renderGeneralSaveBar()}
           {renderAutomationControlsPanel()}
+          {renderPolicyPanel()}
           {renderAutomationStatusPanel()}
           {renderGeneralPanel()}
         </>
@@ -1083,13 +1107,6 @@ export function RulesPage() {
               t("rules.sectionTitles.thresholds"),
               t("rules.sectionDescriptions.thresholds"),
               ["thresholds", "scores", "behavior"],
-            )
-          : null}
-        {activeSection === "policy"
-          ? renderSettingPanel(
-              t("rules.sectionTitles.policy"),
-              t("rules.sectionDescriptions.policy"),
-              ["policy"],
             )
           : null}
         {activeSection === "learning"

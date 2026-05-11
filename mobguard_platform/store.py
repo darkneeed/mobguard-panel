@@ -2863,10 +2863,59 @@ class PlatformStore:
             "page_size": 6,
         }
 
+        rules_settings = self.get_live_rules_state(skip_db_mirror=True)["rules"].get("settings", {})
+        stale_after_seconds = max(
+            int(rules_settings.get("module_heartbeat_interval_seconds", 30)) * 4,
+            180,
+        )
+        desired_revision = int(quality.get("live_rules_revision") or 0)
+        module_rows = [dict(item) for item in quality.get("modules", []) if isinstance(item, dict)]
+        healthy_count = 0
+        stale_count = 0
+        up_to_date_count = 0
+        lagging_count = 0
+        up_to_date_healthy_count = 0
+        lagging_healthy_count = 0
+        now_dt = datetime.utcnow().replace(microsecond=0)
+        for module in module_rows:
+            last_seen_raw = str(module.get("last_seen_at") or "").strip()
+            try:
+                last_seen = datetime.fromisoformat(last_seen_raw) if last_seen_raw else None
+            except ValueError:
+                last_seen = None
+            healthy = bool(
+                last_seen is not None
+                and max(int((now_dt - last_seen).total_seconds()), 0) <= stale_after_seconds
+            )
+            if healthy:
+                healthy_count += 1
+            else:
+                stale_count += 1
+            up_to_date = int(module.get("config_revision_applied") or 0) == desired_revision
+            if up_to_date:
+                up_to_date_count += 1
+                if healthy:
+                    up_to_date_healthy_count += 1
+            else:
+                lagging_count += 1
+                if healthy:
+                    lagging_healthy_count += 1
+
         return {
             "health": self.get_health_snapshot(fast_read=fast_read, low_priority=low_priority),
             "quality": quality,
             "latest_cases": latest_cases,
+            "module_config": {
+                "desired_revision": desired_revision,
+                "total_count": len(module_rows),
+                "healthy_count": healthy_count,
+                "stale_count": stale_count,
+                "up_to_date_count": up_to_date_count,
+                "lagging_count": lagging_count,
+                "up_to_date_healthy_count": up_to_date_healthy_count,
+                "lagging_healthy_count": lagging_healthy_count,
+                "stale_after_seconds": stale_after_seconds,
+            },
         }
 
     def refresh_overview_snapshot(
