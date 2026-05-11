@@ -680,6 +680,12 @@ export const enDictionary: TranslationDictionary = {
       description: "Runtime escalation and access switching controls.",
       save: "Save general settings"
     },
+    automationControls: {
+      title: "Automation controls",
+      description: "The runtime and detection switches that decide observe, warning-only, or full enforcement behavior.",
+      save: "Save automation controls",
+      saved: "Automation controls saved"
+    },
     sectionTitles: {
       thresholds: "Thresholds, scores, and behavior",
       policy: "Detection policy",

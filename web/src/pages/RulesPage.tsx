@@ -1,7 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
-import { api, EnforcementSettingsResponse, RulesState } from "../api/client";
+import {
+  api,
+  EnforcementSettingsResponse,
+  RulesState,
+} from "../api/client";
+import type { AutomationStatus } from "../api/client";
 import { FieldLabel } from "../components/FieldLabel";
 import {
   getSettingInputValue,
@@ -64,6 +69,35 @@ const GENERAL_SETTINGS_FIELDS: GeneralSettingField[] = [
   { key: "traffic_cap_threshold_gb", inputType: "number" },
 ];
 
+const AUTOMATION_GENERAL_FIELD_KEYS = [
+  "warning_only_mode",
+  "manual_review_mixed_home_enabled",
+  "manual_ban_approval_enabled",
+  "dry_run",
+] as const;
+const AUTOMATION_GENERAL_FIELD_SET = new Set<string>(
+  AUTOMATION_GENERAL_FIELD_KEYS,
+);
+
+const AUTOMATION_POLICY_FIELD_KEYS = new Set([
+  "shadow_mode",
+  "probable_home_warning_only",
+  "auto_enforce_requires_hard_or_multi_signal",
+  "provider_conflict_review_only",
+]);
+
+const GENERAL_RUNTIME_FIELDS = GENERAL_SETTINGS_FIELDS.filter(
+  (field) => !AUTOMATION_GENERAL_FIELD_SET.has(field.key),
+);
+
+const AUTOMATION_GENERAL_FIELDS = GENERAL_SETTINGS_FIELDS.filter((field) =>
+  AUTOMATION_GENERAL_FIELD_SET.has(field.key),
+);
+
+const AUTOMATION_POLICY_FIELDS = RULE_SETTING_FIELDS.filter((field) =>
+  AUTOMATION_POLICY_FIELD_KEYS.has(field.key),
+);
+
 const LIST_SECTIONS = Array.from(
   new Set(
     RULE_LIST_FIELDS.filter((field) => field.sectionKey !== "access").map(
@@ -117,23 +151,10 @@ export function RulesPage() {
   > | null>(null);
   const [generalError, setGeneralError] = useState("");
   const [generalSaved, setGeneralSaved] = useState("");
-  const automationStatus = useMemo(
-    () =>
-      deriveAutomationStatus({
-        dry_run: generalDraft?.dry_run === "true",
-        warning_only_mode: generalDraft?.warning_only_mode === "true",
-        manual_review_mixed_home_enabled:
-          generalDraft?.manual_review_mixed_home_enabled === "true",
-        manual_ban_approval_enabled:
-          generalDraft?.manual_ban_approval_enabled === "true",
-        shadow_mode: draft?.settings?.shadow_mode === true,
-        auto_enforce_requires_hard_or_multi_signal:
-          draft?.settings?.auto_enforce_requires_hard_or_multi_signal === true,
-        provider_conflict_review_only:
-          draft?.settings?.provider_conflict_review_only === true,
-      }),
-    [draft, generalDraft],
-  );
+  const [automationError, setAutomationError] = useState("");
+  const [automationSaved, setAutomationSaved] = useState("");
+  const [serverAutomationStatus, setServerAutomationStatus] =
+    useState<AutomationStatus | null>(null);
 
   useEffect(() => {
     if (section && RULES_SECTIONS.includes(section as RulesSection)) {
@@ -167,6 +188,7 @@ export function RulesPage() {
         setSavedDraft(normalizedRules);
         setGeneralDraft(normalizedGeneral);
         setSavedGeneralDraft(normalizedGeneral);
+        setServerAutomationStatus(typedEnforcement.automation_status ?? null);
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : t("rules.loadFailed"));
@@ -181,8 +203,39 @@ export function RulesPage() {
   }, [t]);
 
   const dirty = JSON.stringify(draft) !== JSON.stringify(savedDraft);
-  const generalDirty =
-    JSON.stringify(generalDraft) !== JSON.stringify(savedGeneralDraft);
+  const generalDirty = GENERAL_RUNTIME_FIELDS.some(
+    (field) =>
+      (generalDraft?.[field.key] ?? "") !== (savedGeneralDraft?.[field.key] ?? ""),
+  );
+  const automationGeneralDirty = AUTOMATION_GENERAL_FIELD_KEYS.some(
+    (key) => (generalDraft?.[key] ?? "") !== (savedGeneralDraft?.[key] ?? ""),
+  );
+  const automationPolicyDirty = AUTOMATION_POLICY_FIELDS.some(
+    (field) =>
+      draft?.settings?.[field.key] !== savedDraft?.settings?.[field.key],
+  );
+  const automationDirty = automationGeneralDirty || automationPolicyDirty;
+  const previewAutomationStatus = useMemo(
+    () =>
+      deriveAutomationStatus({
+        dry_run: generalDraft?.dry_run === "true",
+        warning_only_mode: generalDraft?.warning_only_mode === "true",
+        manual_review_mixed_home_enabled:
+          generalDraft?.manual_review_mixed_home_enabled === "true",
+        manual_ban_approval_enabled:
+          generalDraft?.manual_ban_approval_enabled === "true",
+        shadow_mode: draft?.settings?.shadow_mode === true,
+        auto_enforce_requires_hard_or_multi_signal:
+          draft?.settings?.auto_enforce_requires_hard_or_multi_signal === true,
+        provider_conflict_review_only:
+          draft?.settings?.provider_conflict_review_only === true,
+      }),
+    [draft, generalDraft],
+  );
+  const automationStatus =
+    automationDirty || !serverAutomationStatus
+      ? previewAutomationStatus
+      : serverAutomationStatus;
   const updatedBy =
     !state?.updated_by || state.updated_by === "bootstrap"
       ? t("common.system")
@@ -268,9 +321,12 @@ export function RulesPage() {
     return parsed;
   }
 
-  function serializeGeneralSettings(draftValues: Record<string, string>) {
+  function serializeGeneralSettings(
+    draftValues: Record<string, string>,
+    fields: GeneralSettingField[] = GENERAL_SETTINGS_FIELDS,
+  ) {
     const payload: Record<string, unknown> = {};
-    for (const field of GENERAL_SETTINGS_FIELDS) {
+    for (const field of fields) {
       const rawValue = draftValues[field.key] ?? "";
       const label = generalFieldMeta(field.key).label;
       if (field.inputType === "boolean") {
@@ -390,7 +446,7 @@ export function RulesPage() {
     if (!generalDraft) return;
     try {
       const response = (await api.updateEnforcementSettings({
-        settings: serializeGeneralSettings(generalDraft),
+        settings: serializeGeneralSettings(generalDraft, GENERAL_RUNTIME_FIELDS),
       })) as EnforcementSettingsResponse;
       const normalized = normalizeGeneralSettingsDraft(
         response.settings,
@@ -400,6 +456,7 @@ export function RulesPage() {
       setSavedGeneralDraft(normalized);
       setGeneralError("");
       setGeneralSaved(t("rules.generalSaved"));
+      setServerAutomationStatus(response.automation_status ?? null);
     } catch (err) {
       setGeneralError(
         err instanceof Error ? err.message : t("rules.saveFailed"),
@@ -426,6 +483,7 @@ export function RulesPage() {
       },
     }));
     setSaved("");
+    setAutomationSaved("");
   }
 
   function updateGeneralField(key: string, value: string) {
@@ -434,6 +492,7 @@ export function RulesPage() {
       [key]: value,
     }));
     setGeneralSaved("");
+    setAutomationSaved("");
   }
 
   function updateProviderProfile(
@@ -515,6 +574,145 @@ export function RulesPage() {
     );
   }
 
+  async function saveAutomationControls() {
+    if (!draft || !state || !generalDraft) return;
+    try {
+      let nextState = state;
+      let nextDraft = draft;
+      let nextGeneralDraft = generalDraft;
+      let nextAutomationStatus = serverAutomationStatus;
+
+      if (automationPolicyDirty) {
+        const detectionResponse = (await api.updateDetectionSettings({
+          rules: {
+            settings: Object.fromEntries(
+              AUTOMATION_POLICY_FIELDS.map((field) => [
+                field.key,
+                serializeSettingField(field, draft.settings?.[field.key]),
+              ]),
+            ),
+          },
+          revision: nextState.revision,
+          updated_at: nextState.updated_at,
+        })) as RulesState;
+        const normalizedRules = normalizeRulesDraft(detectionResponse.rules);
+        nextState = detectionResponse;
+        nextDraft = normalizedRules;
+        setState(detectionResponse);
+        setDraft(normalizedRules);
+        setSavedDraft(normalizedRules);
+      }
+
+      if (automationGeneralDirty) {
+        const enforcementResponse = (await api.updateEnforcementSettings({
+          settings: serializeGeneralSettings(
+            generalDraft,
+            AUTOMATION_GENERAL_FIELDS,
+          ),
+        })) as EnforcementSettingsResponse;
+        const normalizedGeneral = normalizeGeneralSettingsDraft(
+          enforcementResponse.settings,
+          GENERAL_SETTINGS_FIELDS,
+        );
+        nextGeneralDraft = normalizedGeneral;
+        nextAutomationStatus = enforcementResponse.automation_status ?? null;
+        setGeneralDraft(normalizedGeneral);
+        setSavedGeneralDraft(normalizedGeneral);
+      }
+
+      if (!automationGeneralDirty && automationPolicyDirty) {
+        nextAutomationStatus = deriveAutomationStatus({
+          dry_run: nextGeneralDraft.dry_run === "true",
+          warning_only_mode: nextGeneralDraft.warning_only_mode === "true",
+          manual_review_mixed_home_enabled:
+            nextGeneralDraft.manual_review_mixed_home_enabled === "true",
+          manual_ban_approval_enabled:
+            nextGeneralDraft.manual_ban_approval_enabled === "true",
+          shadow_mode: nextDraft.settings?.shadow_mode === true,
+          auto_enforce_requires_hard_or_multi_signal:
+            nextDraft.settings?.auto_enforce_requires_hard_or_multi_signal ===
+            true,
+          provider_conflict_review_only:
+            nextDraft.settings?.provider_conflict_review_only === true,
+        });
+      }
+
+      setServerAutomationStatus(nextAutomationStatus ?? null);
+      setAutomationError("");
+      setAutomationSaved(t("rules.automationControls.saved"));
+      setError("");
+    } catch (err) {
+      setAutomationError(
+        err instanceof Error ? err.message : t("rules.saveFailed"),
+      );
+      setAutomationSaved("");
+    }
+  }
+
+  function renderAutomationControlsPanel() {
+    if (!draft || !generalDraft) return null;
+    return (
+      <div className="panel">
+        <div className="panel-heading panel-heading-row">
+          <div>
+            <h2>{t("rules.automationControls.title")}</h2>
+            <p className="muted">{t("rules.automationControls.description")}</p>
+          </div>
+          <div className="action-row">
+            <span
+              className={automationDirty ? "tag review-only" : "tag severity-low"}
+            >
+              {automationDirty ? t("common.unsavedChanges") : t("common.saved")}
+            </span>
+            <button disabled={!automationDirty} onClick={saveAutomationControls}>
+              {t("rules.automationControls.save")}
+            </button>
+          </div>
+        </div>
+        {automationError ? <div className="error-box">{automationError}</div> : null}
+        {automationSaved ? <div className="ok-box">{automationSaved}</div> : null}
+        <div className="form-grid compact-form-grid">
+          {AUTOMATION_GENERAL_FIELD_KEYS.map((key) => {
+            const meta = generalFieldMeta(key);
+            return (
+              <div className="rule-field compact-rule-field" key={key}>
+                <FieldLabel label={meta.label} description={meta.description} />
+                <select
+                  value={generalDraft[key] || "false"}
+                  onChange={(event) => updateGeneralField(key, event.target.value)}
+                >
+                  <option value="true">{t("common.true")}</option>
+                  <option value="false">{t("common.false")}</option>
+                </select>
+              </div>
+            );
+          })}
+          {AUTOMATION_POLICY_FIELDS.map((field) => {
+            const meta = settingFieldMeta(field);
+            return (
+              <div className="rule-field compact-rule-field" key={field.key}>
+                <FieldLabel
+                  label={meta.label}
+                  description={meta.description}
+                  recommendation={meta.recommendation}
+                />
+                <select
+                  value={getSettingInputValue(field, draft.settings?.[field.key])}
+                  onChange={(event) =>
+                    updateSettingField(field, event.target.value)
+                  }
+                >
+                  <option value="true">{t("common.true")}</option>
+                  <option value="false">{t("common.false")}</option>
+                </select>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
   function renderSettingPanel(
     title: string,
     description: string,
@@ -584,7 +782,7 @@ export function RulesPage() {
         {generalError ? <div className="error-box">{generalError}</div> : null}
         {generalSaved ? <div className="ok-box">{generalSaved}</div> : null}
         <div className="form-grid compact-form-grid">
-          {GENERAL_SETTINGS_FIELDS.map((field) => {
+          {GENERAL_RUNTIME_FIELDS.map((field) => {
             const meta = generalFieldMeta(field.key);
             return (
               <div
@@ -869,6 +1067,7 @@ export function RulesPage() {
       return (
         <>
           {renderGeneralSaveBar()}
+          {renderAutomationControlsPanel()}
           {renderAutomationStatusPanel()}
           {renderGeneralPanel()}
         </>

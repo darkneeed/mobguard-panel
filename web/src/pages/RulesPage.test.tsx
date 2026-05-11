@@ -1,6 +1,6 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { cleanup, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { api } from "../api/client";
 import { RULE_LIST_FIELDS, RULE_SETTING_FIELDS } from "../rulesMeta";
@@ -15,6 +15,14 @@ vi.mock("../api/client", () => ({
     updateEnforcementSettings: vi.fn()
   }
 }));
+
+beforeEach(() => {
+  vi.resetAllMocks();
+});
+
+afterEach(() => {
+  cleanup();
+});
 
 function buildRulesPayload() {
   const settings = Object.fromEntries(
@@ -118,5 +126,156 @@ describe("RulesPage retention settings", () => {
     expect(await screen.findByText("Automation status")).toBeInTheDocument();
     expect(screen.getByText("Observe only")).toBeInTheDocument();
     expect(screen.getByText(/dry-run remote actions/)).toBeInTheDocument();
+  });
+
+  it("saves combined automation controls from the general section", async () => {
+    const detectionPayload = buildRulesPayload();
+    vi.mocked(api.getDetectionSettings).mockResolvedValue({
+      ...detectionPayload,
+      rules: {
+        ...detectionPayload.rules,
+        settings: {
+          ...(detectionPayload.rules.settings as Record<string, unknown>),
+          shadow_mode: false,
+          probable_home_warning_only: false,
+          auto_enforce_requires_hard_or_multi_signal: true,
+          provider_conflict_review_only: false,
+        },
+      },
+    });
+    vi.mocked(api.getEnforcementSettings).mockResolvedValue({
+      settings: {
+        dry_run: true,
+        warning_only_mode: false,
+        manual_review_mixed_home_enabled: false,
+        manual_ban_approval_enabled: false,
+      },
+      automation_status: {
+        mode: "observe",
+        mode_reasons: ["dry_run"],
+        flags: {
+          dry_run: true,
+          warning_only_mode: false,
+          manual_review_mixed_home_enabled: false,
+          manual_ban_approval_enabled: false,
+          shadow_mode: false,
+          auto_enforce_requires_hard_or_multi_signal: true,
+          provider_conflict_review_only: false,
+        },
+      },
+    });
+    vi.mocked(api.updateDetectionSettings).mockResolvedValue({
+      ...detectionPayload,
+      rules: {
+        ...detectionPayload.rules,
+        settings: {
+          ...(detectionPayload.rules.settings as Record<string, unknown>),
+          shadow_mode: true,
+          probable_home_warning_only: true,
+          auto_enforce_requires_hard_or_multi_signal: true,
+          provider_conflict_review_only: false,
+        },
+      },
+    });
+    vi.mocked(api.updateEnforcementSettings).mockResolvedValue({
+      settings: {
+        dry_run: false,
+        warning_only_mode: false,
+        manual_review_mixed_home_enabled: false,
+        manual_ban_approval_enabled: false,
+      },
+      automation_status: {
+        mode: "observe",
+        mode_reasons: ["shadow_mode"],
+        flags: {
+          dry_run: false,
+          warning_only_mode: false,
+          manual_review_mixed_home_enabled: false,
+          manual_ban_approval_enabled: false,
+          shadow_mode: true,
+          auto_enforce_requires_hard_or_multi_signal: true,
+          provider_conflict_review_only: false,
+        },
+      },
+    });
+
+    renderWithProviders(<RulesPage />, {
+      route: "/rules/general",
+      path: "/rules/:section",
+    });
+
+    const automationHeadings = await screen.findAllByText(
+      "Automation controls",
+    );
+    const automationPanel = automationHeadings.at(-1)?.closest(".panel");
+    expect(automationPanel).not.toBeNull();
+
+    const dryRunField = within(automationPanel as HTMLElement)
+      .getByText("Dry run")
+      .closest(".rule-field");
+    expect(dryRunField).not.toBeNull();
+    await userEvent.selectOptions(
+      within(dryRunField as HTMLElement).getByRole("combobox"),
+      "false",
+    );
+
+    const shadowField = within(automationPanel as HTMLElement)
+      .getByText("Shadow mode")
+      .closest(".rule-field");
+    expect(shadowField).not.toBeNull();
+    await userEvent.selectOptions(
+      within(shadowField as HTMLElement).getByRole("combobox"),
+      "true",
+    );
+
+    const probableHomeField = within(automationPanel as HTMLElement)
+      .getByText("Probable home = warning only")
+      .closest(".rule-field");
+    expect(probableHomeField).not.toBeNull();
+    await userEvent.selectOptions(
+      within(probableHomeField as HTMLElement).getByRole("combobox"),
+      "true",
+    );
+
+    await userEvent.click(
+      within(automationPanel as HTMLElement).getByRole("button", {
+        name: "Save automation controls",
+      }),
+    );
+
+    await waitFor(() => {
+      expect(api.updateEnforcementSettings).toHaveBeenCalled();
+      expect(api.updateDetectionSettings).toHaveBeenCalled();
+    });
+
+    expect(
+      vi.mocked(api.updateEnforcementSettings).mock.calls.at(-1)?.[0],
+    ).toEqual({
+      settings: {
+        dry_run: false,
+        warning_only_mode: false,
+        manual_review_mixed_home_enabled: false,
+        manual_ban_approval_enabled: false,
+      },
+    });
+    expect(
+      vi.mocked(api.updateDetectionSettings).mock.calls.at(-1)?.[0],
+    ).toEqual({
+      rules: {
+        settings: {
+          shadow_mode: true,
+          probable_home_warning_only: true,
+          auto_enforce_requires_hard_or_multi_signal: true,
+          provider_conflict_review_only: false,
+        },
+      },
+      revision: 7,
+      updated_at: "2026-04-21T10:00:00Z",
+    });
+    expect(
+      await within(automationPanel as HTMLElement).findByText(
+        "Automation controls saved",
+      ),
+    ).toBeInTheDocument();
   });
 });

@@ -719,6 +719,13 @@ export const ruDictionary: TranslationDictionary = {
         "Параметры эскалации runtime и переключения уровней доступа.",
       save: "Сохранить общие настройки",
     },
+    automationControls: {
+      title: "Переключатели автоматизации",
+      description:
+        "Runtime- и detection-флаги, которые определяют режим наблюдения, предупреждений или ограничений.",
+      save: "Сохранить переключатели",
+      saved: "Переключатели автоматизации сохранены",
+    },
     sectionTitles: {
       thresholds: "Пороги, скоринг и поведение",
       policy: "Политика детекта",
