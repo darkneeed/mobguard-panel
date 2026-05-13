@@ -94,6 +94,34 @@ class TelegramNotifier:
         )
         return True
 
+    async def notify_admin_force(
+        self,
+        text: str,
+        *,
+        chat_id_override: str | None = None,
+        topic_id_override: int | None = None,
+        dedupe_key: str | None = None,
+    ) -> bool:
+        raw_settings = self._settings()
+        env_values = self._env_values()
+        token = str(env_values.get("TG_ADMIN_BOT_TOKEN") or "").strip()
+        chat_id = str(chat_id_override or raw_settings.get("tg_admin_chat_id") or "").strip()
+        if not token or not chat_id:
+            return False
+        if dedupe_key and self._is_deduped(f"admin-force:{dedupe_key}"):
+            return False
+        await self._queue.put(
+            _QueuedTelegramMessage(
+                token=token,
+                chat_id=chat_id,
+                text=text,
+                topic_id=topic_id_override
+                if topic_id_override is not None
+                else _coerce_topic_id(raw_settings.get("tg_topic_id")),
+            )
+        )
+        return True
+
     async def notify_user(
         self,
         telegram_id: int,

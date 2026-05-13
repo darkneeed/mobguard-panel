@@ -7,6 +7,7 @@ from fastapi import HTTPException
 
 from mobguard_platform.runtime import get_env_file_status, update_env_file
 from mobguard_platform.runtime_admin_defaults import (
+    build_applied_runtime_notification,
     ENFORCEMENT_SETTINGS_DEFAULTS,
     ENFORCEMENT_TEMPLATE_DEFAULTS,
     normalize_telegram_runtime_settings,
@@ -35,6 +36,47 @@ ACCESS_RUNTIME_SETTINGS_DEFAULTS = {
 }
 
 
+def _runtime_settings(container: APIContainer) -> dict[str, Any]:
+    runtime_config = load_runtime_config(container)
+    settings = runtime_config.get("settings", {})
+    return dict(settings) if isinstance(settings, dict) else {}
+
+
+def _core_runs_embedded(container: APIContainer) -> bool:
+    if not hasattr(container.store, "get_service_heartbeat"):
+        return True
+    heartbeat = container.store.get_service_heartbeat("mobguard-core")
+    return str(heartbeat.get("status") or "") == "missing"
+
+
+def _notify_applied_runtime_change_if_embedded(
+    container: APIContainer,
+    previous_settings: dict[str, Any],
+    current_settings: dict[str, Any],
+) -> None:
+    notifier = getattr(container, "telegram_notifier", None)
+    if notifier is None or not _core_runs_embedded(container):
+        return
+    notice = build_applied_runtime_notification(previous_settings, current_settings)
+    if not notice:
+        return
+    if notice.get("force_send") and hasattr(notifier, "notify_admin_force"):
+        asyncio.run(
+            notifier.notify_admin_force(
+                str(notice["message"]),
+                dedupe_key="embedded-config-applied-force",
+            )
+        )
+        return
+    if notice.get("admin_notifications_enabled"):
+        asyncio.run(
+            notifier.notify_admin(
+                str(notice["message"]),
+                dedupe_key="embedded-config-applied",
+            )
+        )
+
+
 def get_detection_settings(container: APIContainer) -> dict[str, Any]:
     state = container.store.get_live_rules_state()
     return {
@@ -53,6 +95,7 @@ def update_detection_settings(
     revision: int | None,
     updated_at: str | None,
 ) -> dict[str, Any]:
+    previous_settings = _runtime_settings(container)
     result = update_rules(
         container.store,
         payload,
@@ -63,6 +106,11 @@ def update_detection_settings(
     )
     if detection_recheck_needed(payload):
         asyncio.run(recheck_provider_sensitive_reviews(container, actor, actor_tg_id, skip_on_busy=True))
+    _notify_applied_runtime_change_if_embedded(
+        container,
+        previous_settings,
+        _runtime_settings(container),
+    )
     return result
 
 
@@ -151,6 +199,7 @@ def get_telegram_settings(container: APIContainer) -> dict[str, Any]:
 
 
 def update_telegram_settings(container: APIContainer, payload: dict[str, Any]) -> dict[str, Any]:
+    previous_settings = _runtime_settings(container)
     settings_updates = {
         key: payload.get("settings", {}).get(key)
         for key in TELEGRAM_CONFIG_KEYS
@@ -164,6 +213,11 @@ def update_telegram_settings(container: APIContainer, payload: dict[str, Any]) -
             update_env_file(str(container.runtime.env_path), env_updates)
         except ValueError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
+    _notify_applied_runtime_change_if_embedded(
+        container,
+        previous_settings,
+        _runtime_settings(container),
+    )
     return get_telegram_settings(container)
 
 
@@ -185,6 +239,7 @@ def get_enforcement_settings(container: APIContainer) -> dict[str, Any]:
 
 
 def update_enforcement_settings(container: APIContainer, payload: dict[str, Any]) -> dict[str, Any]:
+    previous_settings = _runtime_settings(container)
     settings_updates = {
         key: payload.get("settings", {}).get(key)
         for key in ENFORCEMENT_CONFIG_KEYS
@@ -192,4 +247,9 @@ def update_enforcement_settings(container: APIContainer, payload: dict[str, Any]
     }
     if settings_updates:
         write_runtime_settings(container, settings_updates, remove_keys=["warning_timeout"])
+    _notify_applied_runtime_change_if_embedded(
+        container,
+        previous_settings,
+        _runtime_settings(container),
+    )
     return get_enforcement_settings(container)

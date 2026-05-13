@@ -12,6 +12,20 @@ from api.services import settings as settings_service
 from mobguard_platform.runtime import load_runtime_context
 
 
+class RecordingNotifier:
+    def __init__(self):
+        self.admin_calls: list[tuple[str, dict]] = []
+        self.force_calls: list[tuple[str, dict]] = []
+
+    async def notify_admin(self, text: str, **kwargs):
+        self.admin_calls.append((text, kwargs))
+        return True
+
+    async def notify_admin_force(self, text: str, **kwargs):
+        self.force_calls.append((text, kwargs))
+        return True
+
+
 class APISettingsTests(unittest.TestCase):
     def setUp(self):
         self.temp_dir = tempfile.mkdtemp(prefix="mobguard-api-settings-")
@@ -228,6 +242,66 @@ class APISettingsTests(unittest.TestCase):
         self.assertEqual(payload["revision"], 2)
         mocked_update_rules.assert_called_once()
         mocked_recheck.assert_called_once_with(container, "admin", 1001, skip_on_busy=True)
+
+    def test_update_telegram_settings_sends_applied_notification_in_embedded_mode(self):
+        previous = os.environ.get("MOBGUARD_ENV_FILE")
+        os.environ["MOBGUARD_ENV_FILE"] = str(self.root / ".env")
+        try:
+            runtime = load_runtime_context(self.root, str(self.runtime_dir))
+        finally:
+            if previous is None:
+                os.environ.pop("MOBGUARD_ENV_FILE", None)
+            else:
+                os.environ["MOBGUARD_ENV_FILE"] = previous
+
+        notifier = RecordingNotifier()
+
+        class DummyStore:
+            def sync_runtime_config(self, config):
+                self.synced = config
+
+            def get_service_heartbeat(self, service_name, stale_after_seconds=60):
+                return {"status": "missing"}
+
+        container = SimpleNamespace(runtime=runtime, store=DummyStore(), telegram_notifier=notifier)
+
+        settings_service.update_telegram_settings(
+            container,
+            {"settings": {"telegram_user_notifications_enabled": False}},
+        )
+
+        self.assertEqual(len(notifier.admin_calls), 1)
+        self.assertIn("Конфиг применён", notifier.admin_calls[0][0])
+
+    def test_update_telegram_settings_force_notifies_when_admin_notifications_turn_off_in_embedded_mode(self):
+        previous = os.environ.get("MOBGUARD_ENV_FILE")
+        os.environ["MOBGUARD_ENV_FILE"] = str(self.root / ".env")
+        try:
+            runtime = load_runtime_context(self.root, str(self.runtime_dir))
+        finally:
+            if previous is None:
+                os.environ.pop("MOBGUARD_ENV_FILE", None)
+            else:
+                os.environ["MOBGUARD_ENV_FILE"] = previous
+
+        notifier = RecordingNotifier()
+
+        class DummyStore:
+            def sync_runtime_config(self, config):
+                self.synced = config
+
+            def get_service_heartbeat(self, service_name, stale_after_seconds=60):
+                return {"status": "missing"}
+
+        container = SimpleNamespace(runtime=runtime, store=DummyStore(), telegram_notifier=notifier)
+
+        settings_service.update_telegram_settings(
+            container,
+            {"settings": {"telegram_admin_notifications_enabled": False}},
+        )
+
+        self.assertEqual(len(notifier.force_calls), 1)
+        self.assertIn("Уведомления администраторам", notifier.force_calls[0][0])
 
 
 if __name__ == "__main__":
