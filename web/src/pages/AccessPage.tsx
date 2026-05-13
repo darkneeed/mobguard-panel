@@ -146,9 +146,7 @@ export function AccessPage({
           ]),
         ),
       };
-      const response = (await api.updateAccessSettings(
-        payload,
-      )) as AccessPayload;
+      const response = await api.updateAccessSettings(payload);
       setData(response);
       const normalizedLists = Object.fromEntries(
         ACCESS_FIELDS.map((field) => [
@@ -171,12 +169,12 @@ export function AccessPage({
   async function saveBranding() {
     if (!data) return;
     try {
-      const response = (await api.updateAccessSettings({
+      const response = await api.updateAccessSettings({
         settings: {
           panel_name: brandingDraft.panel_name.trim(),
           panel_logo_url: brandingDraft.panel_logo_url.trim(),
         },
-      })) as AccessPayload;
+      });
       setData(response);
       setBrandingDraft(response.settings);
       setSavedBranding(response.settings);
@@ -194,9 +192,9 @@ export function AccessPage({
     const envUpdates = buildEnvUpdates(data.env, envDraft);
     if (Object.keys(envUpdates).length === 0) return;
     try {
-      const response = (await api.updateAccessSettings({
+      const response = await api.updateAccessSettings({
         env: envUpdates,
-      })) as AccessPayload;
+      });
       setData(response);
       setEnvDraft(buildInitialEnvDraft(response.env));
       setEnvSaved(t("access.envSaved"));

@@ -204,16 +204,16 @@ describe("RulesPage retention settings", () => {
       path: "/rules/:section",
     });
 
-    const automationHeadings = await screen.findAllByText(
-      "Operating mode",
-    );
-    const automationPanel = automationHeadings.at(-1)?.closest(".panel");
+    const automationHeadings = await screen.findAllByText("Operating mode");
+    const automationHeading = automationHeadings[automationHeadings.length - 1];
+    const automationPanel = automationHeading.closest(".panel");
     expect(automationPanel).not.toBeNull();
 
-    const workModeField = within(automationPanel as HTMLElement)
-      .getAllByText("Operating mode")
-      .at(-1)
-      .closest(".rule-field");
+    const workModeLabels = within(automationPanel as HTMLElement).getAllByText(
+      "Operating mode",
+    );
+    const workModeField =
+      workModeLabels[workModeLabels.length - 1].closest(".rule-field");
     expect(workModeField).not.toBeNull();
     await userEvent.selectOptions(
       within(workModeField as HTMLElement).getByRole("combobox"),
