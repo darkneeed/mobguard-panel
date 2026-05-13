@@ -5,19 +5,19 @@ export const ruDictionary: TranslationDictionary = {
     loading: "Загрузка…",
     loadingLabel: "Загрузка",
     loadingSession: "Загружаю сессию…",
-    notAvailable: "N/A",
+    notAvailable: "недоступно",
     admin: "Администратор",
-    system: "system",
+    system: "Система",
     yes: "да",
     no: "нет",
-    true: "true",
-    false: "false",
+    true: "да",
+    false: "нет",
     saved: "сохранено",
     unsavedChanges: "есть несохранённые изменения",
     configured: "Настроено",
     disabled: "Отключено",
-    on: "ON",
-    off: "OFF",
+    on: "ВКЛ",
+    off: "ВЫКЛ",
     showHint: "Показать подсказку",
     fieldHintLabel: "Подсказка для поля {field}",
     present: "задано",
@@ -34,8 +34,8 @@ export const ruDictionary: TranslationDictionary = {
     restartRequired: "нужен перезапуск",
     close: "Закрыть",
     deviceSources: {
-      panelUser: "Remnawave HWID",
-      event: "access log",
+      panelUser: "Инвентарь HWID Remnawave",
+      event: "журнал доступа",
     },
     scopeLabels: {
       deviceField: "Устройство",
@@ -121,8 +121,8 @@ export const ruDictionary: TranslationDictionary = {
     },
     language: {
       label: "Язык",
-      ru: "rus",
-      en: "eng",
+      ru: "Русский",
+      en: "Английский",
     },
     logout: "Выйти",
   },
@@ -144,7 +144,7 @@ export const ruDictionary: TranslationDictionary = {
       "База, модуль скоринга, живые правила и базовые сигналы времени выполнения.",
     healthTitle: "Состояние панели",
     healthDescription:
-      "Ключевые operational-сигналы: активные ограничения, доставка удалённых действий и текущий режим реакции.",
+      "Ключевые рабочие сигналы: активные ограничения, доставка удалённых действий и текущий режим реакции.",
     pipelineTitle: "Состояние конвейера обработки",
     pipelineDescription:
       "Очередь, лаг воркера и отложенные удалённые задачи применения. Только здесь, на главном экране.",
@@ -154,7 +154,7 @@ export const ruDictionary: TranslationDictionary = {
       pipelineStale:
         "Снимок конвейера обработки устарел. Возможна задержка в отображении очереди.",
       failedQueue:
-        "В конвейере обработки есть ошибки: {count}. Нужно проверить повторы и dead-letter.",
+        "В конвейере обработки есть ошибки: {count}. Нужно проверить повторы и очередь ошибок.",
       openCases: "В очереди ревью сейчас {count} открытых кейсов.",
       mixedConflicts: "Смешанные провайдеры дали {count} конфликтных кейсов.",
       activeViolations:
@@ -191,7 +191,7 @@ export const ruDictionary: TranslationDictionary = {
       embeddedValue: "встроен",
       ipinfo: "Токен IPINFO",
       adminSessions: "Админ-сессии",
-      scoreZeroRatio: "Доля score=0 (24 ч)",
+      scoreZeroRatio: "Доля событий с score=0 (24 ч)",
       asnMissingRatio: "Доля случаев без ASN (24 ч)",
       mixedConflicts: "Конфликты смешанных провайдеров",
       promotedPatterns: "Продвинутые паттерны",
@@ -208,16 +208,16 @@ export const ruDictionary: TranslationDictionary = {
     mixedProvidersDescription:
       "Провайдеры, которые чаще всего приводят к ручному ревью и конфликтам.",
     mixedProvidersItem:
-      "{open} открыто · {conflict} конфликтов · {home} HOME · {mobile} MOBILE",
+      "{open} открыто · {conflict} конфликтов · {home} домашний доступ · {mobile} мобильный доступ",
     mixedProvidersMetrics: {
       open: "Открыто",
       conflicts: "Конфликты",
-      home: "HOME",
-      mobile: "MOBILE",
+      home: "Домашний доступ",
+      mobile: "Мобильный доступ",
     },
-    emptyMixedProviders: "Сейчас нет проблемных mixed-провайдеров.",
-    noisyAsnTitle: "Шумные ASN",
-    noisyAsnDescription: "ASN, дающие наибольшую нагрузку на модерацию.",
+    emptyMixedProviders: "Сейчас нет проблемных смешанных провайдеров.",
+    noisyAsnTitle: "Самые шумные ASN",
+    noisyAsnDescription: "ASN, создающие наибольшую нагрузку на модерацию.",
     noisyAsnItem: "{count} кейсов ревью",
     emptyNoisyAsn: "Данных по шумным ASN пока нет.",
     latestCasesTitle: "Последние кейсы очереди",
@@ -227,7 +227,7 @@ export const ruDictionary: TranslationDictionary = {
     pipeline: {
       queueDepth: "Глубина очереди",
       queueMeta: "{queued} в очереди · {processing} обрабатывается",
-      failed: "Dead-letter / ошибки",
+      failed: "Ошибки очереди",
       pendingRemote: "{count} удалённых задач ждут отправки",
       lag: "Текущий лаг",
       oldestQueued: "Самая старая запись в очереди {value}",
@@ -237,17 +237,17 @@ export const ruDictionary: TranslationDictionary = {
     },
     automation: {
       modeTitle: "Режим автоматики",
-      guardrailsTitle: "Активные guardrail’ы",
+      guardrailsTitle: "Активные ограничители",
       noModeReasons: "Нет флагов, ограничивающих режим",
-      noGuardrails: "Дополнительные guardrail’ы не включены",
+      noGuardrails: "Дополнительные ограничители не включены",
     },
     enforcement: {
       activeSummary:
         "{violations} активных ограничений · {warnings} предупреждений · {bans} банов",
       configSummary:
         "rev {revision} · {current} на актуальной · {lagging} отстают · {stale} неактивны",
-      lastWarning: "Последний warning {value}",
-      lastBan: "Последний ban {value}",
+      lastWarning: "Последнее предупреждение {value}",
+      lastBan: "Последнее ограничение {value}",
       lastBanDuration: "{value} мин",
       never: "Система пока не зафиксировала ограничений",
       remoteSummary:
@@ -329,7 +329,7 @@ export const ruDictionary: TranslationDictionary = {
       },
       moduleId: "ID модуля",
       username: "Имя пользователя",
-      systemId: "System ID",
+      systemId: "Системный ID",
       telegramId: "Telegram ID",
       openedFrom: "Открыт с",
       openedTo: "Открыт до",
@@ -337,24 +337,24 @@ export const ruDictionary: TranslationDictionary = {
       activityMaxHours: "Активность до, ч",
       repeatMin: "Минимум повторов",
       repeatMax: "Максимум повторов",
-      statusOpen: "OPEN",
-      statusResolved: "RESOLVED",
-      statusSkipped: "SKIPPED",
+      statusOpen: "Открыт",
+      statusResolved: "Закрыт",
+      statusSkipped: "Пропущен",
       allStatus: "Любой статус",
-      confidenceUnsure: "UNSURE",
-      confidenceProbableHome: "PROBABLE_HOME",
-      confidenceHighHome: "HIGH_HOME",
+      confidenceUnsure: "Неуверенно",
+      confidenceProbableHome: "Вероятно домашний",
+      confidenceHighHome: "Точно домашний",
       allConfidence: "Любая уверенность",
-      reasonUnsure: "unsure",
-      reasonProbableHome: "probable_home",
-      reasonHomeRequiresReview: "home_requires_review",
-      reasonManualMixedHome: "manual_review_mixed_home",
-      reasonProviderConflict: "provider_conflict",
+      reasonUnsure: "Недостаточно сигналов",
+      reasonProbableHome: "Вероятный домашний доступ",
+      reasonHomeRequiresReview: "Домашний доступ требует проверки",
+      reasonManualMixedHome: "Смешанный домашний кейс",
+      reasonProviderConflict: "Конфликт провайдера",
       allReasons: "Все причины",
-      severityCritical: "critical",
-      severityHigh: "high",
-      severityMedium: "medium",
-      severityLow: "low",
+      severityCritical: "Критично",
+      severityHigh: "Высокий",
+      severityMedium: "Средний",
+      severityLow: "Низкий",
       allSeverity: "Любая срочность",
       punitiveAny: "Любой режим санкций",
       punitiveOnly: "Только с санкцией",
@@ -378,7 +378,7 @@ export const ruDictionary: TranslationDictionary = {
       module: "Модуль",
       inbound: "Инбаунд",
       device: "Устройство",
-      system: "System ID",
+      system: "Системный ID",
       telegram: "TG",
       uuid: "UUID",
     },
@@ -409,13 +409,13 @@ export const ruDictionary: TranslationDictionary = {
       option: "{value}",
     },
     actions: {
-      mobile: "MOBILE",
-      home: "HOME",
+      mobile: "Мобильный доступ",
+      home: "Домашний доступ",
       skip: "Пропустить",
       openCase: "Открыть кейс",
       openEvents: "Консоль",
-      bulkMobile: "Перевести выбранные в MOBILE",
-      bulkHome: "Перевести выбранные в HOME",
+      bulkMobile: "Пометить выбранные как мобильные",
+      bulkHome: "Пометить выбранные как домашние",
       bulkSkip: "Пропустить выбранные",
       recheckVisible: "Перепроверить видимые",
       recheckDone: "Перепроверено {count} кейсов очереди",
@@ -436,9 +436,9 @@ export const ruDictionary: TranslationDictionary = {
     reviewReasons: {
       provider_conflict: "Конфликт провайдера",
       unsure: "Недостаточно сигналов",
-      probable_home: "Вероятный HOME",
-      home_requires_review: "HOME требует review",
-      manual_review_mixed_home: "Mixed HOME review",
+      probable_home: "Вероятный домашний доступ",
+      home_requires_review: "Домашний доступ требует проверки",
+      manual_review_mixed_home: "Смешанный домашний кейс",
     },
   },
   decisions: {
@@ -450,33 +450,33 @@ export const ruDictionary: TranslationDictionary = {
     loadFailed: "Не удалось загрузить автоматические решения",
     filtersTitle: "Фильтры",
     filtersDescription:
-      "Фильтрация по решению, модулю, провайдеру, источнику и состоянию enforcement.",
+      "Фильтрация по решению, модулю, провайдеру, источнику и состоянию применения.",
     listTitle: "Автоматические решения",
     listDescription: "Последние решения",
     empty: "Для текущих фильтров автоматических решений нет",
     filters: {
-      search: "Поиск по IP / провайдеру / inbound / устройству",
+      search: "Поиск по IP / провайдеру / инбаунду / устройству",
       moduleId: "ID модуля",
       provider: "Провайдер",
-      anyVerdict: "Любой verdict",
+      anyVerdict: "Любой вердикт",
       anySource: "Любой источник",
-      anyEnforcement: "Любой enforcement",
+      anyEnforcement: "Любое применение",
     },
     meta: {
       module: "Модуль {value}",
-      inbound: "Inbound {value}",
+      inbound: "Инбаунд {value}",
       provider: "Провайдер {value}",
       source: "Источник {value}",
       scope: "Контекст {value}",
-      enforcement: "Enforcement {value}",
+      enforcement: "Применение {value}",
     },
     sources: {
-      rule_engine: "Rule engine",
+      rule_engine: "Правила детекта",
       cache: "Кэш",
-      manual_override: "Ручной override",
+      manual_override: "Ручное переопределение",
     },
     enforcement: {
-      none: "Без удалённого enforcement",
+      none: "Без удалённого применения",
       attempts: "попыток {count}",
       status: {
         pending: "Ожидает",
@@ -484,8 +484,8 @@ export const ruDictionary: TranslationDictionary = {
         failed: "Ошибка",
       },
       jobType: {
-        access_state: "Access squad",
-        traffic_cap: "Traffic cap",
+        access_state: "Переключение доступа",
+        traffic_cap: "Ограничение трафика",
       },
     },
     pagination: {
@@ -521,11 +521,11 @@ export const ruDictionary: TranslationDictionary = {
     saveFailed: "Не удалось сохранить модуль",
     pendingInstall: "ожидает установку",
     stale: "устарел",
-    freshnessTitle: "Heartbeat",
+    freshnessTitle: "Пульс модуля",
     freshnessHint:
-      "Модуль считается устаревшим, если heartbeat не приходит дольше {value}.",
-    lastHeartbeatAge: "Возраст heartbeat",
-    staleWindow: "Окно heartbeat",
+      "Модуль считается устаревшим, если сигнал активности не приходит дольше {value}.",
+    lastHeartbeatAge: "Возраст последнего сигнала",
+    staleWindow: "Окно устаревания",
     inboundTags: "INBOUND-теги",
     lastSeen: "Последний heartbeat",
     appliedRevision: "Применённая ревизия",
@@ -541,14 +541,14 @@ export const ruDictionary: TranslationDictionary = {
     healthStatus: "Состояние",
     lastValidationAt: "Последняя валидация",
     spoolDepth: "Глубина буфера",
-    accessLogExists: "Файл access log найден",
+    accessLogExists: "Файл журнала доступа найден",
     healthEmpty:
       "Создайте или откройте модуль, чтобы увидеть его текущее состояние.",
     installTitle: "Установка модуля",
     installDescription:
-      "Скопируйте сгенерированный compose, раскройте токен и при необходимости измените ACCESS_LOG_PATH локально, если у ноды нестандартный путь к логу.",
+      "Скопируйте сгенерированный compose, раскройте токен и при необходимости измените `ACCESS_LOG_PATH` локально, если у ноды нестандартный путь к логу.",
     installPreviewEmpty:
-      "Создайте или откройте модуль, чтобы увидеть сгенерированный docker-compose.yml",
+      "Создайте или откройте модуль, чтобы увидеть сгенерированный `docker-compose.yml`.",
     revealToken: "Показать токен",
     tokenRevealSuccess: "Токен модуля раскрыт",
     tokenRevealFailed: "Не удалось раскрыть токен модуля",
@@ -560,22 +560,22 @@ export const ruDictionary: TranslationDictionary = {
     tokenValue: "Раскрытый токен",
     copyToken: "Скопировать токен",
     tokenCopied: "Токен скопирован в буфер",
-    copyCompose: "Скопировать compose",
-    composeCopied: "docker-compose.yml скопирован в буфер",
+    copyCompose: "Скопировать compose-файл",
+    composeCopied: "`docker-compose.yml` скопирован в буфер",
     copyFailed: "Не удалось скопировать в буфер",
     installSteps: {
       clone:
         "Склонируйте репозиторий модуля на целевую ноду и откройте его корень.",
       compose: "Замените локальный docker-compose.yml на compose preview ниже.",
       token:
-        "Раскройте token в панели и замените MODULE_TOKEN=__PASTE_TOKEN__ перед запуском",
+        "Раскройте токен в панели и замените `MODULE_TOKEN=__PASTE_TOKEN__` перед запуском",
       start:
-        "Запустите docker compose up -d && docker compose logs -f и дождитесь перехода модуля в online",
+        "Запустите `docker compose up -d && docker compose logs -f` и дождитесь перехода модуля в состояние «онлайн».",
     },
     health: {
-      ok: "ok",
-      warn: "warn",
-      error: "error",
+      ok: "Норма",
+      warn: "Предупреждение",
+      error: "Ошибка",
     },
     freshness: {
       ok: "Обновлено",
@@ -594,26 +594,26 @@ export const ruDictionary: TranslationDictionary = {
       error: "Ошибка",
       stale: "Давно не обновлялись",
       queueDepth: "Глубина очереди",
-      failedQueue: "Dead-letter",
+      failedQueue: "Ошибки очереди",
     },
-    pipelineTitle: "Ingest-пайплайн",
+    pipelineTitle: "Конвейер приёма данных",
     pipelineDescription:
-      "Нагрузка очереди и статус фоновых воркеров для общего SQLite-пайплайна.",
+      "Нагрузка очереди и статус фоновых воркеров для общего конвейера на SQLite.",
     pipeline: {
       queueDepth: "Глубина очереди",
-      pendingRemote: "Ожидают remote-задачи",
+      pendingRemote: "Ожидают удалённые задачи",
       lag: "Текущий лаг",
-      lastDrain: "Последний полный drain",
-      snapshotAge: "Возраст snapshot {value}",
-      snapshotAgeLabel: "Свежесть snapshot",
-      stale: "устаревший snapshot",
+      lastDrain: "Последний полный проход",
+      snapshotAge: "Возраст снимка {value}",
+      snapshotAgeLabel: "Свежесть снимка",
+      stale: "снимок устарел",
     },
   },
   reviewDetail: {
     eyebrow: "Детали кейса",
     title: "Кейс ревью #{caseId}",
     description:
-      "Evidence, связанная история и sticky-зона решения для быстрой модерации.",
+      "Сигналы, связанная история и закреплённая зона решения для быстрой модерации.",
     loading: "Загрузка…",
     backToQueue: "Назад в очередь",
     queuePosition: "Очередь {current}/{total}",
@@ -637,7 +637,7 @@ export const ruDictionary: TranslationDictionary = {
     },
     fields: {
       username: "Имя пользователя",
-      systemId: "System ID",
+      systemId: "Системный ID",
       telegramId: "Telegram ID",
       uuid: "UUID",
       ip: "IP",
@@ -650,7 +650,7 @@ export const ruDictionary: TranslationDictionary = {
       opened: "Открыт",
       updated: "Обновлён",
       isp: "Провайдер",
-      reviewUrl: "URL ревью",
+      reviewUrl: "Ссылка на ревью",
     },
     history: {
       empty: "Решений пока нет",
@@ -661,35 +661,35 @@ export const ruDictionary: TranslationDictionary = {
     },
     resolution: {
       placeholder: "Комментарий для аудита",
-      mobile: "Mark MOBILE",
-      home: "Mark HOME",
-      skip: "Skip",
+      mobile: "Пометить как мобильный доступ",
+      home: "Пометить как домашний доступ",
+      skip: "Пропустить",
       saved: "Решение по кейсу сохранено",
     },
     summaryHint:
-      "Быстрые идентификаторы и контекст ревью без провала в raw payload.",
+      "Быстрые идентификаторы и контекст ревью без перехода к сырому payload.",
     resolutionHint:
       "Эта заметка попадёт в audit trail вместе с решением для IP {ip}.",
     copyIp: "Скопировать IP",
     copyUuid: "Скопировать UUID",
     copyTelegram: "Скопировать Telegram ID",
-    openReviewUrl: "Открыть review URL",
+    openReviewUrl: "Открыть ссылку на ревью",
     providerEvidence: {
-      conflict: "Конфликт service markers",
-      clear: "Прямого конфликта markers нет",
-      reviewFirst: "Нужен review-first",
+      conflict: "Конфликт маркеров сервиса",
+      clear: "Прямого конфликта маркеров нет",
+      reviewFirst: "Нужна ручная проверка перед действием",
       autoReady: "Сигналов уже хватает для автоматики",
       homeSources: "Поддерживающие HOME-источники",
       mobileSources: "Поддерживающие MOBILE-источники",
       matchedAliases: "Совпавшие алиасы",
-      mobileMarkers: "Совпавшие mobile markers",
-      homeMarkers: "Совпавшие home markers",
+      mobileMarkers: "Совпавшие мобильные маркеры",
+      homeMarkers: "Совпавшие домашние маркеры",
     },
     sharedAccess: {
       signals: "Сигналы: {value}",
     },
     usageProfile: {
-      empty: "Данных usage-profile пока нет",
+      empty: "Данных по профилю использования пока нет",
       summary: "Снапшот",
       counts: "Счётчики",
       countsValue:
@@ -699,10 +699,10 @@ export const ruDictionary: TranslationDictionary = {
         "Если доступен HWID-инвентарь Remnawave, он уже подмешан в этот список.",
       osFamilies: "Семейства ОС",
       nodes: "Распределение по нодам",
-      softReasons: "Soft reasons",
+      softReasons: "Мягкие причины",
       geo: "Геоистория",
       travel: "Аномалии перемещения",
-      countryJumpOnly: "только country jump",
+      countryJumpOnly: "только скачок по стране",
       topIps: "Топ недавних IP",
       topProviders: "Топ провайдеров",
       recentLocations: "Недавние локации",
@@ -715,8 +715,8 @@ export const ruDictionary: TranslationDictionary = {
       provider_conflict: "Конфликт провайдера",
       unsure: "Недостаточно сигналов",
       probable_home: "Вероятный HOME",
-      home_requires_review: "HOME требует review",
-      manual_review_mixed_home: "Mixed HOME review",
+      home_requires_review: "Домашний доступ требует проверки",
+      manual_review_mixed_home: "Смешанный домашний кейс",
     },
     ipInventory: {
       summary: "{count} срабатываний · {isp} · AS{asn}",
@@ -725,13 +725,13 @@ export const ruDictionary: TranslationDictionary = {
       lastSeen: "Последнее появление {value}",
     },
     moduleInventory: {
-      moduleId: "Module ID {value}",
+      moduleId: "ID модуля {value}",
       firstSeen: "Первое появление {value}",
       lastSeen: "Последнее появление {value}",
     },
   },
   rules: {
-    eyebrow: "Live Rules",
+    eyebrow: "Живые правила",
     title: "Настройки и правила детекта",
     saveRules: "Сохранить правила",
     rulesUpdated: "Правила обновлены",
@@ -772,27 +772,27 @@ export const ruDictionary: TranslationDictionary = {
     sectionTitles: {
       thresholds: "Пороги, скоринг и поведение",
       policy: "Политика детекта",
-      learning: "Контроль learning",
-      retention: "Ретеншн базы данных",
+      learning: "Контроль обучения",
+      retention: "Сроки хранения данных",
     },
     sectionDescriptions: {
       general:
-        "Runtime-wide параметры эскалации, предупреждений и переключения доступа в отдельной вкладке.",
+        "Общие параметры эскалации, предупреждений и переключения доступа в отдельной вкладке.",
       thresholds:
         "Пороговые значения, веса скоринга и окна поведенческих сигналов в одном месте.",
       lists:
-        "ASN- и keyword-списки, формирующие первичное доказательство и исключения.",
+        "Списки ASN и ключевых слов, формирующие первичные сигналы и исключения.",
       providers:
-        "Алиасы, markers и операторские подсказки для review-first сценариев.",
+        "Алиасы, маркеры и подсказки по операторам для сценариев с ручной проверкой.",
       policy:
-        "Живая policy-логика детекта плюс enforcement-настройки переключения доступа.",
-      learning: "Пороги, при которых runtime-learning становится доверенным.",
+        "Живая логика детекта и настройки применения ограничений.",
+      learning: "Пороги, при которых обучение начинает считаться надёжным.",
       retention:
-        "Окна хранения, которые ограничивают рост SQLite, не удаляя активные review-состояния.",
+        "Периоды хранения, которые ограничивают рост SQLite, не удаляя активные кейсы ревью.",
     },
     providerProfiles: {
       description:
-        "Профили операторов с alias и service markers для осторожного review-first скоринга.",
+        "Профили операторов с алиасами и маркерами услуг для осторожного скоринга с ручной проверкой.",
       add: "Добавить профиль оператора",
       remove: "Удалить профиль",
       empty: "Профили операторов пока не настроены.",
@@ -811,25 +811,25 @@ export const ruDictionary: TranslationDictionary = {
         key: {
           label: "Ключ профиля",
           description:
-            "Стабильный идентификатор для learning labels и quality-метрик.",
+            "Стабильный идентификатор для меток обучения и метрик качества.",
         },
         classification: {
           label: "Классификация",
           description:
-            "Смешанные профили остаются в review-first режиме, пока их не подтвердит второй независимый фактор.",
+            "Смешанные профили остаются в режиме ручной проверки, пока их не подтвердит второй независимый фактор.",
         },
         aliases: {
           label: "Алиасы",
           description:
-            "Имена оператора, бренды, PTR-фрагменты и org-алиасы для поиска в ISP/hostname.",
+            "Имена оператора, бренды, PTR-фрагменты и алиасы организации для поиска в ISP и hostname.",
         },
         mobile_markers: {
-          label: "Мобильные service markers",
+          label: "Мобильные маркеры услуг",
           description:
             "Маркеры услуг, указывающие на мобильную сторону оператора.",
         },
         home_markers: {
-          label: "Домашние service markers",
+          label: "Домашние маркеры услуг",
           description:
             "Маркеры услуг, указывающие на фиксированную/домашнюю сторону оператора.",
         },
@@ -845,10 +845,10 @@ export const ruDictionary: TranslationDictionary = {
       title: "Автоматические решения",
       description: "Текущие решения принимаются на основе настроек и обучения",
       modeLabel: "Эффективный режим",
-      modeReasonsLabel: "Почему активен именно он",
-      guardrailsLabel: "Какие guardrail’ы включены",
+      modeReasonsLabel: "Почему активен именно этот режим",
+      guardrailsLabel: "Какие ограничители включены",
       noModeReasons: "Флагов, ограничивающих режим, нет",
-      noGuardrails: "Дополнительные guardrail’ы не активны",
+      noGuardrails: "Дополнительные ограничители не активны",
     },
     invalidNumber: "{field}: некорректное число",
     invalidValue: "{field}: некорректное значение '{value}'",
@@ -860,17 +860,17 @@ export const ruDictionary: TranslationDictionary = {
       enforce: "Ограничения",
     },
     reasons: {
-      dry_run: "dry-run не даёт делать remote actions",
-      shadow_mode: "shadow mode блокирует жёсткие действия",
+      dry_run: "режим dry-run не даёт выполнять удалённые действия",
+      shadow_mode: "теневой режим блокирует жёсткие действия",
       warning_only_mode: "эскалация ограничена предупреждениями",
     },
     flags: {
       auto_enforce_requires_hard_or_multi_signal:
-        "Нужен hard или multi-signal для auto-enforce",
+        "Для авто-применения нужен сильный или многосигнальный признак",
       provider_conflict_review_only:
-        "Конфликты mixed-провайдеров остаются только в review",
+        "Конфликты смешанных провайдеров остаются только в ручной проверке",
       manual_review_mixed_home_enabled:
-        "Mixed HOME-кейсы требуют ручного review",
+        "Смешанные домашние кейсы требуют ручной проверки",
       manual_ban_approval_enabled: "Ограничения требуют ручного одобрения",
     },
   },
@@ -970,18 +970,18 @@ export const ruDictionary: TranslationDictionary = {
       "Локальные резервные учётки живут в `.env`, а секреты меняются только явной заменой.",
     envCount: "{present} из {total} задано",
     ownerSecurity: {
-      title: "Безопасность owner",
+      title: "Безопасность владельцев",
       description:
-        "Серверное состояние owner TOTP. Отключение снимает проверку для всех owner identity сразу.",
+        "Серверное состояние TOTP для владельцев. Отключение снимает проверку сразу для всех учётных записей владельца.",
       enabled: "OTP включён",
       disabled: "OTP отключён",
-      statusLabel: "Статус OTP",
-      ownerCountLabel: "Owner identity",
-      enabledCountLabel: "С TOTP",
-      pendingLabel: "Ожидающие challenge",
-      disableAction: "Отключить OTP для всех owner",
+      statusLabel: "Статус одноразовых кодов",
+      ownerCountLabel: "Учётных записей владельца",
+      enabledCountLabel: "С включённым TOTP",
+      pendingLabel: "Ожидают подтверждения",
+      disableAction: "Отключить OTP для всех владельцев",
       disabling: "Отключаю…",
-      disableSaved: "OTP для всех owner отключён",
+      disableSaved: "OTP для всех владельцев отключён",
     },
   },
   data: {
@@ -1043,7 +1043,7 @@ export const ruDictionary: TranslationDictionary = {
       calibrationExportReady: "Архив калибровки сформирован",
     },
     users: {
-      searchPlaceholder: "Поиск по uuid / system id / telegram id / username",
+      searchPlaceholder: "Поиск по UUID / system ID / Telegram ID / имени пользователя",
       search: "Искать",
       searching: "Ищу…",
       panelMatch: "Совпадение в панели: {value}",
@@ -1051,11 +1051,11 @@ export const ruDictionary: TranslationDictionary = {
       telegramLabel: "tg:{value}",
       cardTitle: "Карточка пользователя",
       exportHint:
-        "Соберите структурированную export-карточку для калибровки или ручного разбора.",
-      buildExport: "Собрать export-карточку",
+        "Соберите структурированную экспортную карточку для калибровки или ручного разбора.",
+      buildExport: "Собрать экспортную карточку",
       generatingExport: "Генерирую…",
       downloadExport: "Скачать JSON",
-      exportPreviewTitle: "Предпросмотр export-карточки",
+      exportPreviewTitle: "Предпросмотр экспортной карточки",
       exportGeneratedAt: "Сгенерировано {value}",
       actionsTitle: "Действия с пользователем",
       analysisTitle: "Недавний анализ и признаки провайдера",
@@ -1072,7 +1072,7 @@ export const ruDictionary: TranslationDictionary = {
       usageProfileSignals: "Мягкие причины",
       usageProfileGeo: "Геоистория",
       usageProfileTravel: "Аномалии перемещения",
-      usageProfileCountryJumpOnly: "только country jump",
+      usageProfileCountryJumpOnly: "только скачок по стране",
       usageProfileTopIps: "Топ недавних IP",
       usageProfileTopProviders: "Топ провайдеров",
       openCasesTitle: "Открытые / недавние кейсы ревью",
@@ -1090,19 +1090,19 @@ export const ruDictionary: TranslationDictionary = {
         ipHistory: "История IP",
       },
       exportSections: {
-        identity: "Identity",
-        flags: "Flags",
-        panel: "Panel user",
-        reviewCases: "Review cases",
-        analysisEvents: "Analysis events",
-        history: "History",
-        activeTrackers: "Active trackers",
-        ipHistory: "IP history",
+        identity: "Идентификаторы",
+        flags: "Флаги",
+        panel: "Данные панели",
+        reviewCases: "Кейсы ревью",
+        analysisEvents: "События анализа",
+        history: "История",
+        activeTrackers: "Активные трекеры",
+        ipHistory: "История IP",
       },
       fields: {
         username: "Имя пользователя",
         uuid: "UUID",
-        systemId: "System ID",
+        systemId: "Системный ID",
         telegramId: "Telegram ID",
         panelStatus: "Статус в панели",
         panelSquads: "Активные группы",
@@ -1110,7 +1110,7 @@ export const ruDictionary: TranslationDictionary = {
         trafficLimitStrategy: "Стратегия лимита",
         usedTrafficBytes: "Текущий потраченный трафик",
         lifetimeUsedTrafficBytes: "Трафик за всё время",
-        exemptSystemId: "Исключённый System ID",
+        exemptSystemId: "Исключённый системный ID",
         exemptTelegramId: "Исключённый Telegram ID",
         activeBan: "Активное ограничение",
         activeWarning: "Активное предупреждение",
@@ -1172,18 +1172,18 @@ export const ruDictionary: TranslationDictionary = {
       save: "Сохранить запись кэша",
     },
     learning: {
-      promotedActiveTitle: "Активные promoted patterns",
-      promotedStatsTitle: "Статистика promoted",
-      legacyTitle: "Legacy learning",
-      providerActiveTitle: "Promoted provider patterns",
-      providerServiceActiveTitle: "Promoted provider service patterns",
-      providerLegacyTitle: "Legacy provider patterns",
-      empty: "Provider-specific learning пока пуст",
-      support: "support {value}",
-      precision: "precision {value}",
-      total: "total {value}",
-      confidence: "confidence {value}",
-      plusOneConfidence: "+1 confidence",
+      promotedActiveTitle: "Активные продвинутые паттерны",
+      promotedStatsTitle: "Статистика продвинутых паттернов",
+      legacyTitle: "Наследуемое обучение",
+      providerActiveTitle: "Продвинутые паттерны провайдеров",
+      providerServiceActiveTitle: "Продвинутые сервисные паттерны провайдеров",
+      providerLegacyTitle: "Наследуемые паттерны провайдеров",
+      empty: "Обучение по провайдерам пока пусто",
+      support: "поддержка {value}",
+      precision: "точность {value}",
+      total: "всего {value}",
+      confidence: "уверенность {value}",
+      plusOneConfidence: "+1 к уверенности",
       delete: "Удалить",
     },
     audit: {
@@ -1295,15 +1295,15 @@ export const ruDictionary: TranslationDictionary = {
       noManifest: "Предварительный просмотр готовности пока недоступен",
       datasetReady: "Датасет структурно пригоден для анализа",
       datasetNotReady:
-        "Датасет пока непригоден для надёжной provider-калибровки",
-      tuningReady: "По этой выгрузке уже можно начинать provider tuning",
-      tuningNotReady: "Provider tuning пока заблокирован покрытием или support",
+        "Датасет пока непригоден для надёжной калибровки по провайдерам",
+      tuningReady: "По этой выгрузке уже можно начинать настройку по провайдерам",
+      tuningNotReady: "Настройка по провайдерам пока заблокирована покрытием или поддержкой",
       blockersTitle: "Блокеры readiness",
       noBlockers: "Критичных blockers сейчас нет",
       checksTitle: "Текущие readiness checks",
       warningsTitle: "Предупреждения readiness-проверки",
       notReadyToast:
-        "Calibration archive сформирован, но readiness checks не пройдены",
+        "Калибровочный архив сформирован, но проверки готовности не пройдены",
       filterSnapshot: "Применённые фильтры",
       coverageSnapshot: "Снимок покрытия",
       filters: {
@@ -1315,44 +1315,44 @@ export const ruDictionary: TranslationDictionary = {
         includeUnknown: "Включать unknown в агрегаты",
       },
       status: {
-        resolvedOnly: "Только resolved",
-        openOnly: "Только open",
+        resolvedOnly: "Только закрытые",
+        openOnly: "Только открытые",
         all: "Все кейсы",
       },
       cards: {
         overallReadiness: "Общая готовность",
-        datasetReadiness: "Готовность dataset",
-        tuningReadiness: "Готовность tuning",
+        datasetReadiness: "Готовность датасета",
+        tuningReadiness: "Готовность настройки",
         file: "Архив",
-        rawRows: "Сырые rows",
-        knownRows: "Размеченные rows",
-        unknownRows: "Unknown rows",
+        rawRows: "Сырые строки",
+        knownRows: "Размеченные строки",
+        unknownRows: "Неразмеченные строки",
         providerProfiles: "Профили провайдеров",
-        providerCoverage: "Покрытие provider key",
-        patternCandidates: "Кандидаты provider patterns",
+        providerCoverage: "Покрытие ключей провайдеров",
+        patternCandidates: "Кандидаты в паттерны провайдеров",
       },
       readiness: {
         checks: {
-          provider_profiles_present: "Provider profiles в snapshot",
-          resolved_ratio: "Resolved ratio",
-          provider_evidence_coverage: "Покрытие provider explainability",
-          provider_key_coverage: "Покрытие provider key",
-          min_provider_support: "Минимальный support по провайдерам",
+          provider_profiles_present: "Профили провайдеров в снимке",
+          resolved_ratio: "Доля закрытых кейсов",
+          provider_evidence_coverage: "Покрытие объяснимости провайдера",
+          provider_key_coverage: "Покрытие ключей провайдеров",
+          min_provider_support: "Минимальная поддержка по провайдерам",
         },
       },
       warnings: {
         live_rules_stale_or_unseeded:
-          "Live rules snapshot был пуст и был слит с runtime config.",
-        provider_profiles_missing: "В snapshot выгрузки нет provider profiles.",
-        provider_key_coverage_zero: "В resolved rows вообще нет provider key.",
+          "Снимок живых правил был пуст и был объединён с runtime-конфигом.",
+        provider_profiles_missing: "В снимке выгрузки нет профилей провайдеров.",
+        provider_key_coverage_zero: "В закрытых строках вообще нет ключей провайдеров.",
         provider_explainability_missing:
-          "В экспортированных rows отсутствует provider explainability.",
+          "В экспортированных строках отсутствует объяснимость по провайдерам.",
         resolved_ratio_below_threshold:
-          "Слишком много pending rows: resolved ratio ниже безопасного порога.",
+          "Слишком много ожидающих строк: доля закрытых кейсов ниже безопасного порога.",
         provider_key_coverage_below_target:
-          "Покрытие provider key ниже целевого порога 0.6.",
+          "Покрытие ключей провайдеров ниже целевого порога 0.6.",
         provider_support_below_target:
-          "Хотя бы один provider/provider_service кандидат имеет меньше 5 известных resolved cases.",
+          "Хотя бы один кандидат по провайдеру или сервису провайдера имеет меньше 5 известных закрытых кейсов.",
       },
     },
   },
@@ -1429,86 +1429,86 @@ export const ruDictionary: TranslationDictionary = {
   rulesMeta: {
     sections: {
       access: "Доступ",
-      asnLists: "ASN Lists",
-      keywords: "Keywords",
+      asnLists: "Списки ASN",
+      keywords: "Ключевые слова",
       providers: "Профили операторов",
-      thresholds: "Thresholds",
-      scores: "Scores",
-      behavior: "Behavior",
-      policy: "Policy",
-      learning: "Learning",
-      retention: "Retention",
+      thresholds: "Пороги",
+      scores: "Баллы",
+      behavior: "Поведение",
+      policy: "Политика",
+      learning: "Обучение",
+      retention: "Хранение",
     },
     listFields: {
       admin_tg_ids: {
-        label: "Owner Telegram IDs",
+        label: "Telegram ID владельцев",
         description:
           "Telegram IDs, которым назначена owner-роль с полным доступом к платформе.",
         recommendation:
           "Держите этот список коротким и максимально доверенным.",
       },
       moderator_tg_ids: {
-        label: "Moderator Telegram IDs",
+        label: "Telegram ID модераторов",
         description:
           "Telegram IDs, которым разрешены queue resolution, recheck и data-admin мутации без доступа к platform settings.",
         recommendation:
           "Используйте для операторов ручной модерации и runtime-коррекций.",
       },
       viewer_tg_ids: {
-        label: "Viewer Telegram IDs",
+        label: "Telegram ID наблюдателей",
         description:
           "Telegram IDs для read-only доступа к overview, quality, modules, queue, data и audit.",
         recommendation:
           "Подходит для аналитиков и поддержки, которым не нужно менять состояние.",
       },
       exempt_ids: {
-        label: "Excluded System IDs",
+        label: "Исключённые системные ID",
         description:
           "Системные user.id, исключённые из анализа и авто-санкций.",
         recommendation: "Добавляйте только служебные или доверенные аккаунты.",
       },
       exempt_tg_ids: {
-        label: "Excluded Telegram IDs",
+        label: "Исключённые Telegram ID",
         description: "Telegram IDs, исключённые из анализа и авто-санкций.",
         recommendation:
           "Используйте, если удобнее администрировать исключения по Telegram ID.",
       },
       pure_mobile_asns: {
-        label: "Pure mobile ASN list",
+        label: "Список чисто мобильных ASN",
         description:
           "ASN, которые почти всегда считаются мобильными и дают сильный mobile-сигнал.",
         recommendation:
           "Добавляйте ASN только после подтверждённой чистой мобильной выборки.",
       },
       pure_home_asns: {
-        label: "Pure home ASN list",
+        label: "Список чисто домашних ASN",
         description:
           "ASN, которые почти всегда считаются домашними и дают сильный home-сигнал.",
         recommendation:
           "Сюда должны попадать только стабильно домашние ASN без мобильной примеси.",
       },
       mixed_asns: {
-        label: "Mixed ASN list",
+        label: "Список смешанных ASN",
         description:
           "ASN со смешанным профилем, где нужны дополнительные признаки и осторожность.",
         recommendation:
           "Используйте для спорных ASN, где одного ASN недостаточно для вердикта.",
       },
       allowed_isp_keywords: {
-        label: "Mobile keywords",
+        label: "Ключевые слова мобильного доступа",
         description:
           "Ключевые слова, усиливающие mobile-версию при совпадении в ISP/hostname.",
         recommendation:
           "Держите здесь короткие устойчивые mobile-маркеры, без широких слов.",
       },
       home_isp_keywords: {
-        label: "Home keywords",
+        label: "Ключевые слова домашнего доступа",
         description: "Ключевые слова, которые тянут решение в сторону home.",
         recommendation:
           "Добавляйте только маркеры фиксированных/домашних провайдеров.",
       },
       exclude_isp_keywords: {
-        label: "Datacenter / hosting keywords",
+        label: "Ключевые слова дата-центров и хостинга",
         description:
           "Ключевые слова для детекта хостинга, датацентров и инфраструктурных сетей.",
         recommendation:
@@ -1517,52 +1517,52 @@ export const ruDictionary: TranslationDictionary = {
     },
     settingFields: {
       threshold_mobile: {
-        label: "MOBILE decision threshold",
+        label: "Порог решения для мобильного доступа",
         description:
-          "Score, начиная с которого кейс считается уверенно мобильным.",
+          "Балловый порог, начиная с которого кейс считается уверенно мобильным.",
         recommendation: "Базовое безопасное значение: около 60.",
       },
       threshold_probable_mobile: {
-        label: "Probable mobile threshold",
+        label: "Порог вероятно мобильного доступа",
         description:
-          "Порог для промежуточного mobile-сигнала до финального MOBILE.",
-        recommendation: "Обычно держат ниже основного mobile threshold.",
+          "Порог для промежуточного мобильного сигнала до финального решения.",
+        recommendation: "Обычно держат ниже основного порога мобильного доступа.",
       },
       threshold_home: {
-        label: "HOME decision threshold",
+        label: "Порог решения для домашнего доступа",
         description:
-          "Нижний score, после которого кейс считается уверенно домашним.",
+          "Нижний балловый порог, после которого кейс считается уверенно домашним.",
         recommendation: "Чем выше значение, тем осторожнее будут home-решения.",
       },
       threshold_probable_home: {
-        label: "Probable home threshold",
+        label: "Порог вероятно домашнего доступа",
         description:
-          "Порог для промежуточного home-сигнала до финального HOME.",
-        recommendation: "Держите между threshold_home и нейтральной зоной.",
+          "Порог для промежуточного домашнего сигнала до финального решения.",
+        recommendation: "Держите между порогом домашнего доступа и нейтральной зоной.",
       },
       pure_asn_score: {
-        label: "Pure mobile ASN bonus",
-        description: "Бонус к score, если ASN найден в pure_mobile_asns.",
+        label: "Бонус за чисто мобильный ASN",
+        description: "Бонус к баллу, если ASN найден в списке чисто мобильных.",
         recommendation:
-          "Обычно это сильный бонус, сопоставимый с threshold_mobile.",
+          "Обычно это сильный бонус, сопоставимый с порогом мобильного доступа.",
       },
       mixed_asn_score: {
-        label: "Mixed ASN bonus",
+        label: "Бонус за смешанный ASN",
         description:
-          "Бонус к score для mixed ASN до учёта дополнительных признаков.",
-        recommendation: "Держите заметно ниже pure mobile ASN bonus.",
+          "Бонус к баллу для смешанного ASN до учёта дополнительных признаков.",
+        recommendation: "Держите заметно ниже бонуса за чисто мобильный ASN.",
       },
       ptr_home_penalty: {
-        label: "Home keyword penalty",
-        description: "Штраф за home keywords в ISP/hostname.",
+        label: "Штраф за домашние ключевые слова",
+        description: "Штраф за домашние ключевые слова в ISP или hostname.",
         recommendation:
-          "Небольшой минус, чтобы keyword не перевешивал жёсткие сигналы.",
+          "Небольшой минус, чтобы ключевое слово не перевешивало жёсткие сигналы.",
       },
       mobile_kw_bonus: {
-        label: "Mobile keyword bonus",
-        description: "Бонус за mobile keywords в ISP/hostname.",
+        label: "Бонус за мобильные ключевые слова",
+        description: "Бонус за мобильные ключевые слова в ISP или hostname.",
         recommendation:
-          "Делайте меньше чистого ASN-бонуса, но достаточно значимым.",
+          "Делайте меньше бонуса за чисто мобильный ASN, но достаточно значимым.",
       },
       provider_mobile_marker_bonus: {
         label: "Бонус за mobile marker оператора",
@@ -1579,125 +1579,125 @@ export const ruDictionary: TranslationDictionary = {
           "Штраф должен быть заметным, но не единственной причиной для punitive по mixed-провайдеру.",
       },
       ip_api_mobile_bonus: {
-        label: "ip-api mobile bonus",
+        label: "Бонус за подтверждение через ip-api",
         description:
-          "Дополнительный bonus, если fallback ip-api подтверждает mobile сеть.",
+          "Дополнительный бонус, если резервная проверка через ip-api подтверждает мобильную сеть.",
         recommendation:
           "Используйте только как добивающий сигнал для mixed ASN.",
       },
       pure_home_asn_penalty: {
-        label: "Pure home ASN penalty",
-        description: "Штраф, если ASN попадает в pure_home_asns.",
-        recommendation: "Обычно это сильный penalty для уверенного HOME.",
+        label: "Штраф за чисто домашний ASN",
+        description: "Штраф, если ASN попадает в список чисто домашних.",
+        recommendation: "Обычно это сильный штраф для уверенного домашнего доступа.",
       },
       score_subnet_mobile_bonus: {
-        label: "Subnet mobile bonus",
-        description: "Бонус за исторические mobile-сигналы в той же подсети.",
+        label: "Бонус за мобильную историю подсети",
+        description: "Бонус за исторические мобильные сигналы в той же подсети.",
         recommendation:
           "Делайте его умеренным, чтобы не переобучать редкие подсети.",
       },
       score_subnet_home_penalty: {
-        label: "Subnet home penalty",
-        description: "Штраф за исторические home-сигналы в подсети.",
+        label: "Штраф за домашнюю историю подсети",
+        description: "Штраф за исторические домашние сигналы в подсети.",
         recommendation:
           "Подходит как корректирующий, а не доминирующий сигнал.",
       },
       score_churn_high_bonus: {
-        label: "High churn bonus",
+        label: "Сильный бонус за churn",
         description: "Бонус за очень высокую сменяемость IP/сессий.",
         recommendation: "Используйте как сильный поведенческий mobile-признак.",
       },
       score_churn_medium_bonus: {
-        label: "Medium churn bonus",
+        label: "Средний бонус за churn",
         description: "Бонус за умеренную сменяемость IP/сессий.",
         recommendation: "Делайте заметно ниже high churn bonus.",
       },
       score_stationary_penalty: {
-        label: "Stationary penalty",
-        description: "Штраф за слишком долгую стационарность пользователя.",
-        recommendation: "Обычно это мягкий penalty, не hard-stop.",
+        label: "Штраф за стационарность",
+        description: "Штраф за слишком долгую неподвижность поведения пользователя.",
+        recommendation: "Обычно это мягкий штраф, а не жёсткая блокировка.",
       },
       concurrency_threshold: {
-        label: "Concurrency threshold",
+        label: "Порог одновременности",
         description:
           "Сколько одновременных пользователей на IP считать признаком мобильности.",
         recommendation: "Стартовая точка: 2–3.",
       },
       churn_window_hours: {
-        label: "Churn window (hours)",
+        label: "Окно churn (часы)",
         description: "Окно в часах для расчёта churn и сменяемости IP.",
         recommendation:
           "Чем меньше окно, тем чувствительнее реакция на всплески.",
       },
       churn_mobile_threshold: {
-        label: "Churn mobile threshold",
-        description: "Сколько смен IP считать mobile-поведенческим сигналом.",
-        recommendation: "Подбирайте по реальным mobile-паттернам без перегиба.",
+        label: "Порог churn для мобильного сигнала",
+        description: "Сколько смен IP считать поведенческим признаком мобильного доступа.",
+        recommendation: "Подбирайте по реальным паттернам мобильного доступа без перегиба.",
       },
       lifetime_stationary_hours: {
-        label: "Stationary lifetime (hours)",
+        label: "Порог стационарности (часы)",
         description:
-          "После какой длительности одна и та же сессия выглядит слишком домашней.",
-        recommendation: "Увеличивайте, если боитесь ложных home-срабатываний.",
+          "После какой длительности одна и та же сессия начинает выглядеть слишком домашней.",
+        recommendation: "Увеличивайте, если боитесь ложных срабатываний на домашний доступ.",
       },
       subnet_mobile_ttl_days: {
-        label: "Subnet mobile TTL (days)",
-        description: "Сколько дней хранить mobile-историю по подсетям.",
+        label: "TTL мобильной истории подсети (дни)",
+        description: "Сколько дней хранить мобильную историю по подсетям.",
         recommendation:
           "Более длинный TTL повышает память системы, но и риск устаревания.",
       },
       subnet_home_ttl_days: {
-        label: "Subnet home TTL (days)",
-        description: "Сколько дней хранить home-историю по подсетям.",
-        recommendation: "Обычно меньше mobile TTL, чтобы быстрее забывать шум.",
+        label: "TTL домашней истории подсети (дни)",
+        description: "Сколько дней хранить домашнюю историю по подсетям.",
+        recommendation: "Обычно меньше TTL мобильной истории, чтобы быстрее забывать шум.",
       },
       subnet_mobile_min_evidence: {
-        label: "Subnet mobile min evidence",
+        label: "Минимум мобильных подтверждений по подсети",
         description:
-          "Минимум mobile-свидетельств до включения subnet mobile bonus.",
+          "Минимум мобильных подтверждений до включения бонуса по подсети.",
         recommendation: "Повышайте, если подсетей много и они шумные.",
       },
       subnet_home_min_evidence: {
-        label: "Subnet home min evidence",
+        label: "Минимум домашних подтверждений по подсети",
         description:
-          "Минимум home-свидетельств до включения subnet home penalty.",
-        recommendation: "Обычно требует больше подтверждений, чем mobile.",
+          "Минимум домашних подтверждений до включения штрафа по подсети.",
+        recommendation: "Обычно требует больше подтверждений, чем мобильный сигнал.",
       },
       shadow_mode: {
-        label: "Shadow mode",
+        label: "Теневой режим",
         description:
           "Если включено, система анализирует и пишет кейсы, но не применяет санкции жёстко.",
-        recommendation: "Новый rollout безопаснее начинать с true.",
+        recommendation: "Новый запуск безопаснее начинать с включённого режима.",
       },
       probable_home_warning_only: {
-        label: "Probable home = warning only",
+        label: "Probable HOME: только предупреждение",
         description:
-          "Ограничивает probable home кейсы предупреждением вместо punitive действий.",
+          "Для кейсов с вердиктом Probable HOME система ограничивается предупреждением и не повышает реакцию до жёстких санкций.",
         recommendation:
           "Рекомендуется держать включённым для осторожного режима.",
       },
       auto_enforce_requires_hard_or_multi_signal: {
-        label: "Require hard or multi-signal for auto-enforce",
+        label: "Авто-применение только при сильном сигнале",
         description:
-          "Авто-применение санкций разрешено только при сильном или многосигнальном HOME.",
+          "Автоматически применять ограничения только если HOME подтверждён сильным сигналом или несколькими независимыми признаками.",
         recommendation: "Безопаснее оставлять включённым.",
       },
       provider_conflict_review_only: {
-        label: "Mixed provider conflicts только в review",
+        label: "Конфликты mixed-провайдеров только через review",
         description:
-          "Оставляет конфликты mixed-провайдеров, отсутствие service markers и однофакторные carrier hints в ручном ревью.",
+          "Отправлять спорные кейсы mixed-провайдеров в ручную проверку вместо автоматической реакции.",
         recommendation:
           "Рекомендуется для review-first rollout по неоднозначным операторам.",
       },
       review_ui_base_url: {
-        label: "Review UI base URL",
+        label: "Базовый URL панели review",
         description:
-          "Базовый URL веб-панели, который используется в review links.",
+          "Адрес панели, который используется для ссылок на кейсы и review-страницы.",
         recommendation: "Укажите боевой HTTPS URL панели.",
       },
       live_rules_refresh_seconds: {
-        label: "Live rules refresh interval",
-        description: "Как часто runtime перечитывает live rules из storage.",
+        label: "Интервал обновления live rules",
+        description: "Как часто runtime проверяет и подхватывает изменения live rules.",
         recommendation: "Обычно достаточно 10–30 секунд.",
       },
       db_cleanup_interval_minutes: {
@@ -1708,70 +1708,70 @@ export const ruDictionary: TranslationDictionary = {
           "30 минут — безопасное стартовое значение для steady-state очистки.",
       },
       module_heartbeats_retention_days: {
-        label: "Хранение module heartbeat (дни)",
+        label: "Хранение сигналов модулей (дни)",
         description:
-          "Сколько дней держать исторические heartbeat-записи модулей перед очисткой.",
+          "Сколько дней хранить исторические сигналы модулей перед очисткой.",
         recommendation:
-          "Держите коротко: актуальное состояние модуля и так хранится в таблице modules.",
+          "Держите коротко: актуальное состояние модуля и так хранится в таблице модулей.",
       },
       ingested_raw_events_retention_days: {
-        label: "Хранение сырых ingested events (дни)",
+        label: "Хранение сырых входящих событий (дни)",
         description:
           "Сколько дней хранить события модулей после того, как они перестают быть нужны для обычной работы.",
         recommendation:
           "30 дней обычно достаточно, если вам не нужны длинные окна повторной подачи событий.",
       },
       ip_history_retention_days: {
-        label: "Хранение IP history (дни)",
+        label: "Хранение истории IP (дни)",
         description:
           "Сколько дней сохранять поведенческую историю IP для churn и long-window анализа.",
         recommendation:
-          "Согласуйте это значение с самым длинным history-based окном скоринга, которому вы реально доверяете.",
+          "Согласуйте это значение с самым длинным окном скоринга на основе истории, которому вы реально доверяете.",
       },
       orphan_analysis_events_retention_days: {
-        label: "Хранение orphan analysis events (дни)",
+        label: "Хранение осиротевших событий анализа (дни)",
         description:
-          "Сколько дней держать analysis events, на которые больше не ссылается ни один review case.",
+          "Сколько дней хранить события анализа, на которые больше не ссылается ни один кейс ревью.",
         recommendation:
           "Короткое окно заметно ограничивает рост базы, сохраняя недавний операторский контекст.",
       },
       resolved_review_retention_days: {
-        label: "Хранение resolved review (дни)",
+        label: "Хранение закрытых кейсов ревью (дни)",
         description:
-          "Сколько дней хранить resolved/skipped кейсы и связанную audit-историю.",
+          "Сколько дней хранить закрытые и пропущенные кейсы, а также связанную историю аудита.",
         recommendation:
           "Здесь держите длинное audit-окно; активные OPEN-кейсы эта настройка не удаляет.",
       },
       learning_promote_asn_min_support: {
-        label: "Promoted ASN min support",
+        label: "Минимальная поддержка продвинутого ASN",
         description:
-          "Минимум подтверждённых кейсов, чтобы ASN попал в promoted learning.",
+          "Минимум подтверждённых кейсов, чтобы ASN попал в продвинутое обучение.",
         recommendation: "Повышайте, если боитесь раннего переобучения.",
       },
       learning_promote_asn_min_precision: {
-        label: "Promoted ASN min precision",
-        description: "Минимальная precision для promoted ASN pattern.",
+        label: "Минимальная точность продвинутого ASN",
+        description: "Минимальная точность для продвинутого ASN-паттерна.",
         recommendation: "Консервативный режим обычно начинается около 0.95.",
       },
       learning_promote_combo_min_support: {
-        label: "Promoted combo min support",
-        description: "Минимум кейсов для promoted combo pattern.",
-        recommendation: "Обычно ниже ASN support, но не слишком низко.",
+        label: "Минимальная поддержка продвинутой комбинации",
+        description: "Минимум кейсов для продвинутого комбинированного паттерна.",
+        recommendation: "Обычно ниже поддержки ASN, но не слишком низко.",
       },
       learning_promote_combo_min_precision: {
-        label: "Promoted combo min precision",
-        description: "Минимальная precision для combo pattern.",
-        recommendation: "Держите высокой, чтобы combo не давал шумных бонусов.",
+        label: "Минимальная точность продвинутой комбинации",
+        description: "Минимальная точность для комбинированного паттерна.",
+        recommendation: "Держите высокой, чтобы комбинации не давали шумных бонусов.",
       },
     },
     rulesGeneralFields: {
       usage_time_threshold: {
-        label: "Minimum suspicious usage time (sec)",
+        label: "Минимальная длительность подозрительного использования (сек)",
         description:
           "Как долго подозрительная сессия должна оставаться активной до начала санкций.",
       },
       warning_timeout_seconds: {
-        label: "Warning cooldown (sec)",
+        label: "Пауза между предупреждениями (сек)",
         description: "Минимальная задержка перед следующим предупреждением.",
       },
       warnings_before_ban: {
@@ -1780,12 +1780,12 @@ export const ruDictionary: TranslationDictionary = {
           "Сколько предупреждений нужно до первого ограничения доступа.",
       },
       warning_only_mode: {
-        label: "Only warnings mode",
+        label: "Режим только предупреждений",
         description:
           "Никогда не повышать санкции до ограничений доступа автоматически.",
       },
       manual_review_mixed_home_enabled: {
-        label: "Review mixed HOME cases manually",
+        label: "Смешанные домашние кейсы только вручную",
         description:
           "Отправлять смешанные HOME-результаты в ручное ревью до действия.",
       },
@@ -1795,9 +1795,9 @@ export const ruDictionary: TranslationDictionary = {
           "Останавливать применение ограничения до ручного одобрения админом.",
       },
       dry_run: {
-        label: "Dry run",
+        label: "Пробный режим",
         description:
-          "Анализировать и уведомлять без удалённого переключения squads.",
+          "Анализировать и уведомлять без удалённого переключения групп доступа.",
       },
       ban_durations_minutes: {
         label: "Лестница ограничений (минуты)",
@@ -1805,24 +1805,24 @@ export const ruDictionary: TranslationDictionary = {
           "Одно значение на строку: первое ограничение, второе, третье и так далее.",
       },
       full_access_squad_name: {
-        label: "Имя squad полного доступа",
+        label: "Имя группы полного доступа",
         description:
-          "Точное имя internal squad Remnawave, которое означает полный доступ.",
+          "Точное имя внутренней группы Remnawave, которая означает полный доступ.",
       },
       restricted_access_squad_name: {
-        label: "Имя squad ограничения",
+        label: "Имя группы ограничения",
         description:
-          "Точное имя internal squad Remnawave, которое выдаётся при нарушении.",
+          "Точное имя внутренней группы Remnawave, которая выдаётся при нарушении.",
       },
       traffic_cap_increment_gb: {
-        label: "Прирост traffic cap (GB)",
+        label: "Прирост лимита трафика (ГБ)",
         description:
-          "На сколько гигабайт увеличить лимит относительно текущего used traffic.",
+          "На сколько гигабайт увеличить лимит относительно уже израсходованного трафика.",
       },
       traffic_cap_threshold_gb: {
-        label: "Порог traffic cap (GB)",
+        label: "Порог лимита трафика (ГБ)",
         description:
-          "Если пользователь уже израсходовал не меньше этого объёма, вместо скрытия мобильных конфигов применяется traffic cap.",
+          "Если пользователь уже израсходовал не меньше этого объёма, вместо скрытия мобильных конфигов применяется лимит трафика.",
       },
     },
     telegramFields: {
@@ -1871,9 +1871,9 @@ export const ruDictionary: TranslationDictionary = {
           "Отправлять админские сообщения при применении ограничения доступа",
       },
       telegram_notify_admin_usage_profile_risk_enabled: {
-        label: "Notify usage-profile risk",
+        label: "Риск по профилю использования",
         description:
-          "Отправлять админские сообщения с enriched usage-profile snapshot",
+          "Отправлять админские сообщения с расширенным снимком профиля использования",
       },
       telegram_notify_admin_violation_continues_enabled: {
         label: "Продолжительные нарушения",
@@ -1883,71 +1883,71 @@ export const ruDictionary: TranslationDictionary = {
       telegram_notify_admin_traffic_limit_exceeded_enabled: {
         label: "Ограничения по трафику",
         description:
-          "Отправлять админские сообщения, когда применяется traffic-cap ограничение",
+          "Отправлять админские сообщения, когда применяется ограничение по трафику",
       },
       telegram_notify_user_warning_only_enabled: {
-        label: "Send warning-only messages",
+        label: "Отправлять сообщения без эскалации",
         description:
           "Отправлять пользовательские сообщения по warning-only кейсам.",
       },
       telegram_notify_user_warning_enabled: {
-        label: "Send warning messages",
+        label: "Отправлять предупреждения",
         description:
           "Отправлять пользовательские сообщения при выдаче предупреждения.",
       },
       telegram_notify_user_ban_enabled: {
-        label: "Send access restriction messages",
+        label: "Отправлять сообщения об ограничении доступа",
         description:
           "Отправлять пользовательские сообщения при применении ограничения доступа.",
       },
     },
     telegramTemplateFields: {
       user_warning_only_template: {
-        label: "Warning-only message",
+        label: "Сообщение без эскалации",
         description:
           "Пользовательское сообщение, когда кейс warning-only и не эскалируется.",
       },
       user_warning_template: {
-        label: "Warning message",
+        label: "Сообщение о предупреждении",
         description:
           "Пользовательское сообщение для обычных предупреждений перед ограничением доступа.",
       },
       user_ban_template: {
-        label: "Access restriction message",
+        label: "Сообщение об ограничении доступа",
         description:
           "Пользовательское сообщение, отправляемое при ограничении доступа.",
       },
       admin_warning_only_template: {
-        label: "Warning-only message",
+        label: "Сообщение без эскалации",
         description: "Текст админского уведомления по warning-only кейсам.",
       },
       admin_warning_template: {
-        label: "Warning message",
+        label: "Сообщение о предупреждении",
         description: "Текст админского уведомления по предупреждениям.",
       },
       admin_ban_template: {
-        label: "Access restriction message",
+        label: "Сообщение об ограничении доступа",
         description: "Текст админского уведомления по ограничениям доступа.",
       },
       admin_review_template: {
-        label: "Review message",
+        label: "Сообщение для ревью",
         description:
           "Текст админского уведомления для кейсов ревью / ручной модерации.",
       },
       admin_usage_profile_risk_template: {
-        label: "Usage-profile risk message",
+        label: "Сообщение о риске по профилю использования",
         description:
-          "Текст админского уведомления для enriched usage-profile snapshot.",
+          "Текст админского уведомления для расширенного снимка профиля использования.",
       },
       admin_violation_continues_template: {
-        label: "Violation-continues message",
+        label: "Сообщение о продолжающемся нарушении",
         description:
           "Текст админского уведомления, когда подозрительное поведение продолжает развиваться.",
       },
       admin_traffic_limit_exceeded_template: {
-        label: "Traffic-limit-exceeded message",
+        label: "Сообщение о превышении лимита трафика",
         description:
-          "Текст админского уведомления, когда применяется traffic-cap ограничение.",
+          "Текст админского уведомления, когда применяется ограничение по трафику.",
       },
     },
   },

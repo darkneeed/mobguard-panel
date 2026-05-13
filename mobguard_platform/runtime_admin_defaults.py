@@ -71,6 +71,100 @@ TELEGRAM_EVENT_SETTING_KEYS = {
     ("user", "ban"): "telegram_notify_user_ban_enabled",
 }
 
+APPLIED_RUNTIME_NOTIFICATION_KEYS = (
+    "telegram_admin_notifications_enabled",
+    "telegram_user_notifications_enabled",
+    "telegram_admin_commands_enabled",
+    "telegram_notify_admin_review_enabled",
+    "telegram_notify_admin_warning_only_enabled",
+    "telegram_notify_admin_warning_enabled",
+    "telegram_notify_admin_ban_enabled",
+    "telegram_notify_admin_usage_profile_risk_enabled",
+    "telegram_notify_admin_violation_continues_enabled",
+    "telegram_notify_admin_traffic_limit_exceeded_enabled",
+    "telegram_notify_user_warning_only_enabled",
+    "telegram_notify_user_warning_enabled",
+    "telegram_notify_user_ban_enabled",
+)
+
+APPLIED_RUNTIME_NOTIFICATION_LABELS = {
+    "telegram_admin_notifications_enabled": "Уведомления администраторам",
+    "telegram_user_notifications_enabled": "Уведомления пользователям",
+    "telegram_admin_commands_enabled": "Команды администратора в Telegram",
+    "telegram_notify_admin_review_enabled": "Админ-уведомления о ревью",
+    "telegram_notify_admin_warning_only_enabled": "Админ-уведомления без эскалации",
+    "telegram_notify_admin_warning_enabled": "Админ-уведомления о предупреждениях",
+    "telegram_notify_admin_ban_enabled": "Админ-уведомления об ограничениях",
+    "telegram_notify_admin_usage_profile_risk_enabled": "Админ-уведомления о риске профиля использования",
+    "telegram_notify_admin_violation_continues_enabled": "Админ-уведомления о продолжающемся нарушении",
+    "telegram_notify_admin_traffic_limit_exceeded_enabled": "Админ-уведомления об ограничении по трафику",
+    "telegram_notify_user_warning_only_enabled": "Пользовательские сообщения без эскалации",
+    "telegram_notify_user_warning_enabled": "Пользовательские предупреждения",
+    "telegram_notify_user_ban_enabled": "Пользовательские сообщения об ограничении доступа",
+}
+
+
+def _mode_summary(raw_settings: Mapping[str, Any] | None) -> tuple[str, str]:
+    settings = raw_settings or {}
+    dry_run = bool(settings.get("dry_run", ENFORCEMENT_SETTINGS_DEFAULTS["dry_run"]))
+    shadow_mode = bool(settings.get("shadow_mode", True))
+    warning_only_mode = bool(
+        settings.get("warning_only_mode", ENFORCEMENT_SETTINGS_DEFAULTS["warning_only_mode"])
+    )
+    if dry_run or shadow_mode:
+        return ("observe", "Наблюдение")
+    if warning_only_mode:
+        return ("warning_only", "Реакция: только предупреждения")
+    return ("enforce", "Реакция: наказания")
+
+
+def _bool_label(value: bool) -> str:
+    return "включено" if value else "выключено"
+
+
+def build_applied_runtime_notification(
+    previous_settings: Mapping[str, Any] | None,
+    current_settings: Mapping[str, Any] | None,
+) -> dict[str, Any] | None:
+    previous = previous_settings or {}
+    current = current_settings or {}
+    lines: list[str] = []
+
+    previous_mode_key, previous_mode_label = _mode_summary(previous)
+    current_mode_key, current_mode_label = _mode_summary(current)
+    if previous_mode_key != current_mode_key:
+        lines.append(f"• Режим работы: {previous_mode_label} -> {current_mode_label}")
+
+    normalized_previous_telegram = normalize_telegram_runtime_settings(previous)
+    normalized_current_telegram = normalize_telegram_runtime_settings(current)
+    for key in APPLIED_RUNTIME_NOTIFICATION_KEYS:
+        previous_value = bool(normalized_previous_telegram.get(key, TELEGRAM_RUNTIME_SETTINGS_DEFAULTS[key]))
+        current_value = bool(normalized_current_telegram.get(key, TELEGRAM_RUNTIME_SETTINGS_DEFAULTS[key]))
+        if previous_value == current_value:
+            continue
+        label = APPLIED_RUNTIME_NOTIFICATION_LABELS.get(key, key)
+        lines.append(f"• {label}: {_bool_label(previous_value)} -> {_bool_label(current_value)}")
+
+    if not lines:
+        return None
+
+    previous_admin_enabled = bool(
+        normalized_previous_telegram.get("telegram_admin_notifications_enabled", True)
+    )
+    current_admin_enabled = bool(
+        normalized_current_telegram.get("telegram_admin_notifications_enabled", True)
+    )
+    return {
+        "message": (
+            "📶 <b>#mobguard</b>\n"
+            "➖➖➖➖➖➖➖➖➖\n"
+            "⚙️ <b>Конфиг применён</b>\n\n"
+            + "\n".join(lines)
+        ),
+        "force_send": previous_admin_enabled and not current_admin_enabled,
+        "admin_notifications_enabled": current_admin_enabled,
+    }
+
 
 def normalize_telegram_runtime_settings(raw_settings: Mapping[str, Any] | None) -> dict[str, Any]:
     source = raw_settings or {}

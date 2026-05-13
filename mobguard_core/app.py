@@ -43,6 +43,7 @@ from mobguard_platform import (
 )
 from mobguard_platform.template_utils import render_optional_template
 from mobguard_platform.runtime_admin_defaults import (
+    build_applied_runtime_notification,
     ENFORCEMENT_SETTINGS_DEFAULTS,
     ENFORCEMENT_TEMPLATE_DEFAULTS,
 )
@@ -112,6 +113,8 @@ PROCESSING_LOCK: Set[str] = set()
 TG_MESSAGE_QUEUE: asyncio.Queue = None
 TG_LAST_MESSAGE_TIME = datetime.now()
 TG_MIN_INTERVAL = float(CONFIG['settings'].get('telegram_message_min_interval_seconds', 1.0))
+MAIN_EVENT_LOOP: asyncio.AbstractEventLoop | None = None
+_LAST_APPLIED_RUNTIME_SETTINGS: Dict[str, Any] | None = None
 
 # Regex Compilation
 REGEX_UUID = re.compile(r'email: (\S+)')
@@ -1024,7 +1027,11 @@ def _config_file_refresh_marker() -> tuple[int, int]:
 
 
 def refresh_runtime_state_from_config() -> None:
-    global CONFIG, TG_ADMIN_CHAT_ID, TG_TOPIC_ID, DEBUG_LEVEL, DEBUG_MODE, DRY_RUN, EXEMPT_UUIDS, TG_MIN_INTERVAL
+    global CONFIG, TG_ADMIN_CHAT_ID, TG_TOPIC_ID, DEBUG_LEVEL, DEBUG_MODE, DRY_RUN, EXEMPT_UUIDS, TG_MIN_INTERVAL, _LAST_APPLIED_RUNTIME_SETTINGS
+
+    previous_settings = dict((CONFIG.get("settings", {}) if isinstance(CONFIG.get("settings", {}), dict) else {}))
+    previous_chat_id = str(TG_ADMIN_CHAT_ID or "")
+    previous_topic_id = int(TG_TOPIC_ID or 0) or None
 
     file_config = RUNTIME_CONTEXT.reload_config()
 
@@ -1041,6 +1048,17 @@ def refresh_runtime_state_from_config() -> None:
     DRY_RUN = config_flag('dry_run', True)
     EXEMPT_UUIDS = set(str(x) for x in CONFIG.get('exempt_uuids', []))
     TG_MIN_INTERVAL = float(telegram_setting('telegram_message_min_interval_seconds'))
+    current_settings = dict((CONFIG.get("settings", {}) if isinstance(CONFIG.get("settings", {}), dict) else {}))
+    if _LAST_APPLIED_RUNTIME_SETTINGS is None:
+        _LAST_APPLIED_RUNTIME_SETTINGS = dict(current_settings)
+        return
+    notice = build_applied_runtime_notification(previous_settings, current_settings)
+    _LAST_APPLIED_RUNTIME_SETTINGS = dict(current_settings)
+    _schedule_applied_runtime_notification(
+        notice,
+        fallback_chat_id=previous_chat_id,
+        fallback_topic_id=previous_topic_id,
+    )
 
 def is_admin(user_id: int) -> bool: 
     return user_id in CONFIG.get('admin_tg_ids', [])
@@ -1088,6 +1106,50 @@ async def notify_admin(text: str, reply_markup=None):
         except Exception as e:
             logger.error(f"TG Error: {e}")
             await notify_error(f"Ошибка отправки в админ-чат: {e}")
+
+
+async def _notify_admin_direct(
+    text: str,
+    *,
+    chat_id: str,
+    topic_id: int | None = None,
+) -> None:
+    try:
+        if bot and chat_id:
+            await bot.send_message(chat_id, text, message_thread_id=topic_id or None)
+    except Exception as e:
+        logger.error(f"TG direct notify error: {e}")
+
+
+def _schedule_applied_runtime_notification(
+    notice: dict[str, Any] | None,
+    *,
+    fallback_chat_id: str,
+    fallback_topic_id: int | None,
+) -> None:
+    if not notice or not MAIN_EVENT_LOOP:
+        return
+    if not notice.get("admin_notifications_enabled") and not notice.get("force_send"):
+        return
+    chat_id = str(TG_ADMIN_CHAT_ID or fallback_chat_id or "").strip()
+    topic_id = TG_TOPIC_ID or fallback_topic_id
+    if not chat_id:
+        return
+    if notice.get("force_send"):
+        future = asyncio.run_coroutine_threadsafe(
+            _notify_admin_direct(
+                str(notice["message"]),
+                chat_id=chat_id,
+                topic_id=topic_id,
+            ),
+            MAIN_EVENT_LOOP,
+        )
+    else:
+        future = asyncio.run_coroutine_threadsafe(
+            notify_admin(str(notice["message"])),
+            MAIN_EVENT_LOOP,
+        )
+    future.add_done_callback(lambda fut: fut.exception() if not fut.cancelled() else None)
 
 async def notify_user(tg_id: int, text: str):
     global TG_MESSAGE_QUEUE
@@ -2960,6 +3022,8 @@ def pre_flight_check():
     print("=" * 60)
 
 async def main():
+    global MAIN_EVENT_LOOP
+    MAIN_EVENT_LOOP = asyncio.get_running_loop()
     pre_flight_check()
     
     shared_http_session = aiohttp.ClientSession()

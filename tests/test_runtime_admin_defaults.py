@@ -1,6 +1,7 @@
 import unittest
 
 from mobguard_platform.runtime_admin_defaults import (
+    build_applied_runtime_notification,
     ENFORCEMENT_SETTINGS_DEFAULTS,
     ENFORCEMENT_TEMPLATE_DEFAULTS,
     normalize_telegram_runtime_settings,
@@ -96,6 +97,39 @@ class RuntimeAdminDefaultsTests(unittest.TestCase):
     def test_enforcement_defaults_include_traffic_cap_settings(self):
         self.assertEqual(ENFORCEMENT_SETTINGS_DEFAULTS["traffic_cap_increment_gb"], 10)
         self.assertEqual(ENFORCEMENT_SETTINGS_DEFAULTS["traffic_cap_threshold_gb"], 100)
+
+    def test_build_applied_runtime_notification_reports_mode_and_toggle_changes(self):
+        payload = build_applied_runtime_notification(
+            {
+                "dry_run": True,
+                "shadow_mode": True,
+                "warning_only_mode": False,
+                "telegram_admin_notifications_enabled": True,
+                "telegram_user_notifications_enabled": False,
+            },
+            {
+                "dry_run": False,
+                "shadow_mode": False,
+                "warning_only_mode": True,
+                "telegram_admin_notifications_enabled": True,
+                "telegram_user_notifications_enabled": True,
+            },
+        )
+
+        self.assertIsNotNone(payload)
+        self.assertIn("Режим работы", payload["message"])
+        self.assertIn("Уведомления пользователям", payload["message"])
+        self.assertFalse(payload["force_send"])
+
+    def test_build_applied_runtime_notification_requests_force_send_when_admin_notifications_turn_off(self):
+        payload = build_applied_runtime_notification(
+            {"telegram_admin_notifications_enabled": True},
+            {"telegram_admin_notifications_enabled": False},
+        )
+
+        self.assertIsNotNone(payload)
+        self.assertTrue(payload["force_send"])
+        self.assertIn("Уведомления администраторам", payload["message"])
 
 
 if __name__ == "__main__":
