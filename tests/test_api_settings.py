@@ -155,6 +155,8 @@ class APISettingsTests(unittest.TestCase):
         initial = settings_service.get_access_settings(container)
         self.assertEqual(initial["settings"]["panel_name"], "MobGuard")
         self.assertEqual(initial["settings"]["panel_logo_url"], "")
+        self.assertIn("owner_security", initial)
+        self.assertFalse(initial["owner_security"]["totp_enabled"])
 
         updated = settings_service.update_access_settings(
             container,

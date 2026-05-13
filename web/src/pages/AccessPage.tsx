@@ -1,6 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 
-import { api, BrandingConfig, EnvFieldState } from "../api/client";
+import {
+  api,
+  AccessSettingsResponse,
+  BrandingConfig,
+  EnvFieldState,
+  OwnerSecurityStatus,
+} from "../api/client";
 import { PaletteName, ThemeMode } from "../app/appearance";
 import { BrandLogo } from "../components/BrandLogo";
 import { FieldLabel } from "../components/FieldLabel";
@@ -11,22 +17,6 @@ import {
 } from "../features/settings/lib/envFields";
 import { Language, useI18n } from "../localization";
 import { RULE_LIST_FIELDS } from "../rulesMeta";
-
-type AccessPayload = {
-  revision: number;
-  updated_at: string;
-  updated_by: string;
-  lists: Record<string, Array<string | number>>;
-  settings: BrandingConfig;
-  auth: {
-    telegram_enabled: boolean;
-    local_enabled: boolean;
-    local_username_hint: string;
-  };
-  env: Record<string, EnvFieldState>;
-  env_file_path: string;
-  env_file_writable: boolean;
-};
 
 const ACCESS_FIELDS = RULE_LIST_FIELDS.filter(
   (field) => field.sectionKey === "access",
@@ -58,7 +48,7 @@ export function AccessPage({
   onThemeChange,
 }: AccessPageProps) {
   const { t } = useI18n();
-  const [data, setData] = useState<AccessPayload | null>(null);
+  const [data, setData] = useState<AccessSettingsResponse | null>(null);
   const [lists, setLists] = useState<Record<string, string>>({});
   const [savedLists, setSavedLists] = useState<Record<string, string>>({});
   const [brandingDraft, setBrandingDraft] = useState<BrandingConfig>(branding);
@@ -69,18 +59,20 @@ export function AccessPage({
   const [brandingSaved, setBrandingSaved] = useState("");
   const [envError, setEnvError] = useState("");
   const [envSaved, setEnvSaved] = useState("");
+  const [securityError, setSecurityError] = useState("");
+  const [securitySaved, setSecuritySaved] = useState("");
+  const [securitySubmitting, setSecuritySubmitting] = useState(false);
 
   useEffect(() => {
     api
       .getAccessSettings()
       .then((payload) => {
-        const typed = payload as AccessPayload;
-        setData(typed);
+        setData(payload);
         setLists(
           Object.fromEntries(
             ACCESS_FIELDS.map((field) => [
               field.key,
-              listValuesToText(typed.lists[field.key]),
+              listValuesToText(payload.lists[field.key]),
             ]),
           ),
         );
@@ -88,13 +80,13 @@ export function AccessPage({
           Object.fromEntries(
             ACCESS_FIELDS.map((field) => [
               field.key,
-              listValuesToText(typed.lists[field.key]),
+              listValuesToText(payload.lists[field.key]),
             ]),
           ),
         );
-        setBrandingDraft(typed.settings);
-        setSavedBranding(typed.settings);
-        setEnvDraft(buildInitialEnvDraft(typed.env));
+        setBrandingDraft(payload.settings);
+        setSavedBranding(payload.settings);
+        setEnvDraft(buildInitialEnvDraft(payload.env));
       })
       .catch((err: Error) => setError(err.message || t("access.loadFailed")));
   }, [t]);
@@ -116,6 +108,15 @@ export function AccessPage({
   const envPresentCount = Object.values(data?.env || {}).filter(
     (field) => field.present,
   ).length;
+
+  function ownerSecurityStatus(
+    security: OwnerSecurityStatus | undefined,
+  ): string {
+    if (!security) return t("common.notAvailable");
+    return security.totp_enabled
+      ? t("access.ownerSecurity.enabled")
+      : t("access.ownerSecurity.disabled");
+  }
 
   function parseNumberList(text: string): number[] {
     const values: number[] = [];
@@ -203,6 +204,24 @@ export function AccessPage({
     } catch (err) {
       setEnvError(err instanceof Error ? err.message : t("access.saveFailed"));
       setEnvSaved("");
+    }
+  }
+
+  async function disableOwnerTotp() {
+    if (!data) return;
+    setSecuritySubmitting(true);
+    try {
+      const ownerSecurity = await api.disableOwnerTotp();
+      setData((prev) => (prev ? { ...prev, owner_security: ownerSecurity } : prev));
+      setSecuritySaved(t("access.ownerSecurity.disableSaved"));
+      setSecurityError("");
+    } catch (err) {
+      setSecurityError(
+        err instanceof Error ? err.message : t("access.saveFailed"),
+      );
+      setSecuritySaved("");
+    } finally {
+      setSecuritySubmitting(false);
     }
   }
 
@@ -488,10 +507,60 @@ export function AccessPage({
               </div>
             </div>
 
-            <div className="panel">
-              <div className="panel-heading panel-heading-row">
-                <div>
-                  <h2>{t("access.envTitle")}</h2>
+          <div className="panel">
+            <div className="panel-heading panel-heading-row">
+              <div>
+                <h2>{t("access.ownerSecurity.title")}</h2>
+                <p className="muted">{t("access.ownerSecurity.description")}</p>
+              </div>
+              <div className="action-row">
+                <span
+                  className={
+                    data.owner_security.totp_enabled
+                      ? "tag review-only"
+                      : "tag status-resolved"
+                  }
+                >
+                  {ownerSecurityStatus(data.owner_security)}
+                </span>
+                <button
+                  onClick={disableOwnerTotp}
+                  disabled={
+                    securitySubmitting || !data.owner_security.enabled_owner_count
+                  }
+                >
+                  {securitySubmitting
+                    ? t("access.ownerSecurity.disabling")
+                    : t("access.ownerSecurity.disableAction")}
+                </button>
+              </div>
+            </div>
+            {securityError ? <div className="error-box">{securityError}</div> : null}
+            {securitySaved ? <div className="ok-box">{securitySaved}</div> : null}
+            <div className="detail-list">
+              <div>
+                <dt>{t("access.ownerSecurity.statusLabel")}</dt>
+                <dd>{ownerSecurityStatus(data.owner_security)}</dd>
+              </div>
+              <div>
+                <dt>{t("access.ownerSecurity.ownerCountLabel")}</dt>
+                <dd>{data.owner_security.owner_identity_count}</dd>
+              </div>
+              <div>
+                <dt>{t("access.ownerSecurity.enabledCountLabel")}</dt>
+                <dd>{data.owner_security.enabled_owner_count}</dd>
+              </div>
+              <div>
+                <dt>{t("access.ownerSecurity.pendingLabel")}</dt>
+                <dd>{data.owner_security.pending_challenge_count}</dd>
+              </div>
+            </div>
+          </div>
+
+          <div className="panel">
+            <div className="panel-heading panel-heading-row">
+              <div>
+                <h2>{t("access.envTitle")}</h2>
                   <p className="muted">{t("access.envDescription")}</p>
                 </div>
                 <div className="action-row">

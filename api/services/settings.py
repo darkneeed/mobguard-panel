@@ -75,6 +75,16 @@ def get_access_settings(container: APIContainer) -> dict[str, Any]:
         runtime_config,
         ACCESS_RUNTIME_SETTINGS_DEFAULTS,
     )
+    owner_security = (
+        container.store.get_owner_totp_summary()
+        if hasattr(container.store, "get_owner_totp_summary")
+        else {
+            "owner_identity_count": 0,
+            "enabled_owner_count": 0,
+            "pending_challenge_count": 0,
+            "totp_enabled": False,
+        }
+    )
     return {
         "revision": state["revision"],
         "updated_at": state["updated_at"],
@@ -83,6 +93,7 @@ def get_access_settings(container: APIContainer) -> dict[str, Any]:
         "settings": access_settings,
         "env": serialize_env_fields(container, ACCESS_ENV_FIELDS, env_values),
         "auth": get_auth_capabilities(container, env_values),
+        "owner_security": owner_security,
         "env_file_path": env_status["path"],
         "env_file_writable": env_status["writable"],
     }

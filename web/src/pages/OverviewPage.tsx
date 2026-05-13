@@ -52,6 +52,13 @@ type QualityPayload = {
 const OVERVIEW_REFRESH_MS = 30000;
 const OVERVIEW_STALE_AFTER_SECONDS = 15;
 
+type RealtimeUsagePayload = {
+  active_users: number;
+  violating_users: number;
+  compliant_users: number;
+  active_window_seconds?: number;
+};
+
 export function OverviewPage({ session }: { session?: Session }) {
   const { t, language } = useI18n();
   const [data, setData] = useState<OverviewMetricsResponse | null>(null);
@@ -84,6 +91,7 @@ export function OverviewPage({ session }: { session?: Session }) {
   const freshness = data?.freshness || null;
   const automationStatus = data?.automation_status || null;
   const enforcement = data?.enforcement || null;
+  const realtimeUsage = (data?.realtime_usage as RealtimeUsagePayload | undefined) || null;
   const moduleConfig = data?.module_config || null;
   const overviewStale = Boolean(
     (freshness?.overview_age_seconds ?? 0) > OVERVIEW_STALE_AFTER_SECONDS,
@@ -96,32 +104,6 @@ export function OverviewPage({ session }: { session?: Session }) {
       : health?.status
         ? "severity-high"
         : "severity-low";
-
-  const rulesOwner =
-    !quality?.live_rules_updated_by ||
-    quality.live_rules_updated_by === "bootstrap"
-      ? t("common.system")
-      : quality.live_rules_updated_by;
-  const coreStatusLabel =
-    health?.core.mode === "embedded"
-      ? t("overview.health.embedded")
-      : health?.core.status || t("common.notAvailable");
-  const coreRuntimeMeta =
-    health?.core.mode === "embedded"
-      ? t("overview.health.embeddedRuntime", {
-          value: formatDisplayDateTime(
-            health?.core.updated_at || "",
-            t("common.notAvailable"),
-            language,
-          ),
-        })
-      : t("overview.health.updated", {
-          value: formatDisplayDateTime(
-            health?.core.updated_at || "",
-            t("common.notAvailable"),
-            language,
-          ),
-        });
 
   function formatAge(seconds?: number | null): string {
     if (seconds === null || seconds === undefined || Number.isNaN(seconds)) {
@@ -187,25 +169,6 @@ export function OverviewPage({ session }: { session?: Session }) {
   }
   const automationModeReasons = automationModeReasonLabels(t, automationStatus);
   const automationGuardrails = automationGuardrailLabels(t, automationStatus);
-  const lastEventLabel =
-    enforcement?.last_event_type === "warning" && enforcement?.last_event_at
-      ? t("overview.enforcement.lastWarning", {
-          value: formatDisplayDateTime(
-            enforcement.last_event_at,
-            t("common.notAvailable"),
-            language,
-          ),
-        })
-      : enforcement?.last_event_type === "ban" && enforcement?.last_event_at
-        ? t("overview.enforcement.lastBan", {
-            value: formatDisplayDateTime(
-              enforcement.last_event_at,
-              t("common.notAvailable"),
-              language,
-            ),
-          })
-        : t("overview.enforcement.never");
-
   return (
     <section className="page">
       <div className="page-header page-header-stack">
@@ -288,14 +251,14 @@ export function OverviewPage({ session }: { session?: Session }) {
               <strong>{enforcement?.active_ban_count ?? "—"}</strong>
             </div>
             <div className="stat-card">
-              <span>{t("overview.cards.currentConfigModules")}</span>
+              <span>{t("overview.cards.violatingNow")}</span>
               <strong>
-                {moduleConfig?.up_to_date_healthy_count ?? "—"}
+                {realtimeUsage?.violating_users ?? "—"}
               </strong>
             </div>
             <div className="stat-card">
-              <span>{t("overview.cards.laggingConfigModules")}</span>
-              <strong>{moduleConfig?.lagging_healthy_count ?? "—"}</strong>
+              <span>{t("overview.cards.compliantNow")}</span>
+              <strong>{realtimeUsage?.compliant_users ?? "—"}</strong>
             </div>
             <div className="stat-card">
               <span>{t("overview.cards.failedQueue")}</span>
@@ -396,53 +359,6 @@ export function OverviewPage({ session }: { session?: Session }) {
             <div className="metric-row">
               <div className="record-main">
                 <span className="record-title">
-                  {t("overview.health.core")}
-                </span>
-                <span
-                  className={`tag ${health?.core.healthy ? "status-resolved" : "severity-high"}`}
-                >
-                  {coreStatusLabel}
-                </span>
-              </div>
-              <div className="record-meta">{coreRuntimeMeta}</div>
-            </div>
-            <div className="metric-row">
-              <div className="record-main">
-                <span className="record-title">{t("overview.health.db")}</span>
-                <span
-                  className={
-                    health?.db.healthy
-                      ? "tag status-resolved"
-                      : "tag severity-high"
-                  }
-                >
-                  {health?.db.healthy ? t("common.on") : t("common.off")}
-                </span>
-              </div>
-              <div className="record-meta">
-                <span>{health?.db.path || t("common.notAvailable")}</span>
-              </div>
-            </div>
-            <div className="metric-row">
-              <div className="record-main">
-                <span className="record-title">
-                  {t("overview.health.rules")}
-                </span>
-                <span>
-                  {t("rules.revision", {
-                    value: quality?.live_rules_revision ?? "—",
-                  })}
-                </span>
-              </div>
-              <div className="record-meta">
-                {t("overview.health.rulesBy", {
-                  value: rulesOwner,
-                })}
-              </div>
-            </div>
-            <div className="metric-row">
-              <div className="record-main">
-                <span className="record-title">
                   {t("overview.health.enforcement")}
                 </span>
                 <span>{enforcement?.active_total ?? "—"}</span>
@@ -453,44 +369,6 @@ export function OverviewPage({ session }: { session?: Session }) {
                   warnings: enforcement?.active_warning_count ?? 0,
                   bans: enforcement?.active_ban_count ?? 0,
                 })}
-              </div>
-            </div>
-            <div className="metric-row">
-              <div className="record-main">
-                <span className="record-title">
-                  {t("overview.health.moduleConfig")}
-                </span>
-                <span>
-                  {t("rules.revision", {
-                    value: moduleConfig?.desired_revision ?? "—",
-                  })}
-                </span>
-              </div>
-              <div className="record-meta">
-                {t("overview.enforcement.configSummary", {
-                  revision: moduleConfig?.desired_revision ?? "—",
-                  current: moduleConfig?.up_to_date_healthy_count ?? 0,
-                  lagging: moduleConfig?.lagging_healthy_count ?? 0,
-                  stale: moduleConfig?.stale_count ?? 0,
-                })}
-              </div>
-            </div>
-            <div className="metric-row">
-              <div className="record-main">
-                <span className="record-title">
-                  {t("overview.health.lastEnforcement")}
-                </span>
-                <span>{lastEventLabel}</span>
-              </div>
-              <div className="record-meta">
-                {enforcement?.last_event_type === "ban" &&
-                enforcement.last_ban_duration_minutes
-                  ? t("overview.enforcement.lastBanDuration", {
-                      value: enforcement.last_ban_duration_minutes,
-                    })
-                  : automationModeReasons.length > 0
-                    ? automationModeReasons.join(", ")
-                    : t("overview.automation.noModeReasons")}
               </div>
             </div>
             <div className="metric-row">
@@ -520,6 +398,19 @@ export function OverviewPage({ session }: { session?: Session }) {
                 {health?.ipinfo_token_present
                   ? t("common.on")
                   : t("common.off")}
+              </div>
+            </div>
+            <div className="metric-row">
+              <div className="record-main">
+                <span className="record-title">
+                  {t("overview.cards.activeUsers")}
+                </span>
+                <span>{realtimeUsage?.active_users ?? "—"}</span>
+              </div>
+              <div className="record-meta">
+                {t("overview.cards.activeUsersHint", {
+                  value: realtimeUsage?.active_window_seconds ?? 3600,
+                })}
               </div>
             </div>
             <div className="metric-row">

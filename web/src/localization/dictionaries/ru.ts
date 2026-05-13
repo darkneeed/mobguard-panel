@@ -144,7 +144,7 @@ export const ruDictionary: TranslationDictionary = {
       "База, модуль скоринга, живые правила и базовые сигналы времени выполнения.",
     healthTitle: "Состояние панели",
     healthDescription:
-      "Показывает, доступна ли база, встроенный модуль скоринга и когда обновлялись живые правила.",
+      "Ключевые operational-сигналы: активные ограничения, доставка удалённых действий и текущий режим реакции.",
     pipelineTitle: "Состояние конвейера обработки",
     pipelineDescription:
       "Очередь, лаг воркера и отложенные удалённые задачи применения. Только здесь, на главном экране.",
@@ -183,8 +183,10 @@ export const ruDictionary: TranslationDictionary = {
       activeViolations: "Активные нарушения",
       activeWarnings: "Активные предупреждения",
       activeBans: "Активные баны",
-      currentConfigModules: "На актуальном конфиге",
-      laggingConfigModules: "Отстают по конфигу",
+      violatingNow: "Сейчас нарушают",
+      compliantNow: "Сейчас по правилам",
+      activeUsers: "Активные пользователи",
+      activeUsersHint: "Окно активности {value} сек",
       core: "Модуль скоринга",
       embeddedValue: "встроен",
       ipinfo: "Токен IPINFO",
@@ -747,11 +749,25 @@ export const ruDictionary: TranslationDictionary = {
       save: "Сохранить общие настройки",
     },
     automationControls: {
-      title: "Переключатели автоматизации",
+      title: "Режим работы",
       description:
-        "Runtime- и detection-флаги, которые определяют режим наблюдения, предупреждений или ограничений.",
+        "Понятные верхнеуровневые переключатели для наблюдения, реакции и эскалации.",
       save: "Сохранить переключатели",
       saved: "Переключатели автоматизации сохранены",
+      workMode: {
+        label: "Режим работы",
+        description:
+          "Наблюдение не применяет жёсткие действия, реакция включает полноценную обработку.",
+        observe: "Наблюдение",
+        react: "Реакция",
+      },
+      reactionMode: {
+        label: "Реакция",
+        description:
+          "Определяет, будут ли нарушения ограничиваться предупреждениями или повышаться до ограничений.",
+        enforce: "Наказания",
+        warningOnly: "Только предупреждения",
+      },
     },
     sectionTitles: {
       thresholds: "Пороги, скоринг и поведение",
@@ -953,6 +969,20 @@ export const ruDictionary: TranslationDictionary = {
     envDescription:
       "Локальные резервные учётки живут в `.env`, а секреты меняются только явной заменой.",
     envCount: "{present} из {total} задано",
+    ownerSecurity: {
+      title: "Безопасность owner",
+      description:
+        "Серверное состояние owner TOTP. Отключение снимает проверку для всех owner identity сразу.",
+      enabled: "OTP включён",
+      disabled: "OTP отключён",
+      statusLabel: "Статус OTP",
+      ownerCountLabel: "Owner identity",
+      enabledCountLabel: "С TOTP",
+      pendingLabel: "Ожидающие challenge",
+      disableAction: "Отключить OTP для всех owner",
+      disabling: "Отключаю…",
+      disableSaved: "OTP для всех owner отключён",
+    },
   },
   data: {
     eyebrow: "Данные",

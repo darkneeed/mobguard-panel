@@ -90,22 +90,33 @@ class AdminAuthSecurityTests(unittest.TestCase):
             "totp_verified": False,
         }
         read_dependency = require_permission(PERMISSION_DATA_READ)
-        self.assertEqual(read_dependency(viewer_session)["role"], "viewer")
+        self.assertEqual(read_dependency(None, viewer_session)["role"], "viewer")
         write_dependency = require_permission(PERMISSION_DATA_WRITE)
         with self.assertRaises(HTTPException) as exc_info:
-            write_dependency(viewer_session)
+            write_dependency(None, viewer_session)
         self.assertEqual(exc_info.exception.status_code, 403)
 
     def test_owner_critical_permission_requires_totp_verified_session(self):
         owner_session = {
             "role": ROLE_OWNER,
             "permissions": permissions_for_role(ROLE_OWNER),
+            "totp_enabled": True,
             "totp_verified": False,
         }
         dependency = require_permission(PERMISSION_MODULES_TOKEN_REVEAL, require_owner_totp=True)
         with self.assertRaises(HTTPException) as exc_info:
-            dependency(owner_session)
+            dependency(None, owner_session)
         self.assertEqual(exc_info.exception.status_code, 403)
+
+    def test_owner_critical_permission_allows_unverified_session_when_totp_disabled(self):
+        owner_session = {
+            "role": ROLE_OWNER,
+            "permissions": permissions_for_role(ROLE_OWNER),
+            "totp_enabled": False,
+            "totp_verified": False,
+        }
+        dependency = require_permission(PERMISSION_MODULES_TOKEN_REVEAL, require_owner_totp=True)
+        self.assertEqual(dependency(None, owner_session)["role"], ROLE_OWNER)
 
     def test_local_login_first_time_requires_totp_setup_then_issues_owner_session(self):
         challenge = auth_service.local_login(self.container, "owner", "secret", Response())
@@ -179,6 +190,28 @@ class AdminAuthSecurityTests(unittest.TestCase):
         self.assertFalse(session["totp_enabled"])
         self.assertTrue(session["totp_verified"])
         self.assertEqual(session["auth_method"], "local")
+
+    def test_disable_owner_totp_clears_identity_and_skips_future_totp_challenge(self):
+        first_challenge = auth_service.local_login(self.container, "owner", "secret", Response())
+        setup_payload = auth_service.totp_setup(self.container, first_challenge["challenge_token"])
+        auth_service.totp_confirm_setup(
+            self.container,
+            first_challenge["challenge_token"],
+            current_totp_code(setup_payload["secret"]),
+            Response(),
+        )
+
+        disabled = auth_service.disable_owner_totp(self.container)
+        session = auth_service.local_login(self.container, "owner", "secret", Response())
+        identity = self.container.store.get_admin_identity("local:owner")
+
+        self.assertFalse(disabled["totp_enabled"])
+        self.assertEqual(disabled["enabled_owner_count"], 0)
+        self.assertFalse(identity["totp_enabled"])
+        self.assertEqual(identity["totp_secret_cipher"], "")
+        self.assertEqual(session["role"], ROLE_OWNER)
+        self.assertFalse(session["totp_enabled"])
+        self.assertFalse(session.get("requires_totp", False))
 
     def test_admin_audit_records_and_lists_events(self):
         session = {

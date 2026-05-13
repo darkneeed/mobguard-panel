@@ -4,11 +4,14 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Response
 
-from ..dependencies import get_container, get_session
+from ..dependencies import get_container, get_session, require_permission
+from ..permissions import PERMISSION_SETTINGS_ACCESS_WRITE
 from ..schemas.auth import LocalLoginRequest, TelegramVerifyRequest, TotpChallengeRequest, TotpCodeRequest
+from ..services.admin_audit import record_admin_action
 from ..services.auth import (
     auth_start_payload,
     clear_session_cookie,
+    disable_owner_totp,
     local_login,
     totp_confirm_setup,
     totp_setup,
@@ -56,6 +59,26 @@ def auth_totp_verify(
     container=Depends(get_container),
 ) -> dict[str, Any]:
     return totp_verify(container, body.challenge_token, body.code, response)
+
+
+@router.post("/auth/totp/disable-all")
+def auth_totp_disable_all(
+    session: dict[str, Any] = Depends(require_permission(PERMISSION_SETTINGS_ACCESS_WRITE, require_owner_totp=True)),
+    container=Depends(get_container),
+) -> dict[str, Any]:
+    result = disable_owner_totp(container)
+    record_admin_action(
+        container,
+        session,
+        action="auth.totp.disable_all",
+        target_type="owner_security",
+        target_id="owner_totp",
+        details={
+            "cleared_identity_count": int(result.get("cleared_identity_count") or 0),
+            "cleared_challenge_count": int(result.get("cleared_challenge_count") or 0),
+        },
+    )
+    return result
 
 
 @router.post("/logout")

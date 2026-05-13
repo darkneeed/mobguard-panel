@@ -4,6 +4,7 @@ import { reviewsApi } from "../features/reviews/api/client";
 import { settingsApi } from "../features/settings/api/client";
 
 export type {
+  AccessSettingsResponse,
   AutomationStatus,
   AuditEvent,
   AnalysisEventItem,
@@ -32,6 +33,7 @@ export type {
   ModuleProvisioningPayload,
   ModuleRecord,
   OverviewMetricsResponse,
+  OwnerSecurityStatus,
   OverridesResponse,
   PipelineStatus,
   ReviewDetailResponse,

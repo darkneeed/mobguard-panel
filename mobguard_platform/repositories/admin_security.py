@@ -84,6 +84,61 @@ class AdminSecurityRepository(SQLiteRepository):
             raise KeyError(f"Admin identity {subject} not found")
         return identity
 
+    def owner_totp_summary(self) -> dict[str, Any]:
+        with self.connect() as conn:
+            owner_counts = conn.execute(
+                """
+                SELECT
+                    COUNT(*) AS owner_identity_count,
+                    COALESCE(SUM(CASE WHEN totp_enabled = 1 THEN 1 ELSE 0 END), 0) AS enabled_owner_count
+                FROM admin_identities
+                WHERE role = 'owner'
+                """
+            ).fetchone()
+            pending_challenges = conn.execute(
+                """
+                SELECT COUNT(*) AS cnt
+                FROM admin_totp_challenges
+                WHERE role = 'owner'
+                """
+            ).fetchone()
+        owner_identity_count = int(owner_counts["owner_identity_count"] or 0) if owner_counts else 0
+        enabled_owner_count = int(owner_counts["enabled_owner_count"] or 0) if owner_counts else 0
+        return {
+            "owner_identity_count": owner_identity_count,
+            "enabled_owner_count": enabled_owner_count,
+            "pending_challenge_count": int(pending_challenges["cnt"] or 0) if pending_challenges else 0,
+            "totp_enabled": enabled_owner_count > 0,
+        }
+
+    def disable_totp_for_role(self, role: str) -> dict[str, Any]:
+        now = utcnow()
+        normalized_role = str(role or "").strip().lower()
+        with self.connect() as conn:
+            conn.execute(
+                """
+                UPDATE admin_identities
+                SET totp_secret_cipher = '', totp_enabled = 0, updated_at = ?
+                WHERE role = ?
+                """,
+                (now, normalized_role),
+            )
+            cleared_identity_count = int(conn.execute("SELECT changes() AS cnt").fetchone()["cnt"] or 0)
+            conn.execute(
+                "DELETE FROM admin_totp_challenges WHERE role = ?",
+                (normalized_role,),
+            )
+            cleared_challenge_count = int(conn.execute("SELECT changes() AS cnt").fetchone()["cnt"] or 0)
+            conn.commit()
+        result = {
+            "role": normalized_role,
+            "cleared_identity_count": cleared_identity_count,
+            "cleared_challenge_count": cleared_challenge_count,
+        }
+        if normalized_role == "owner":
+            result.update(self.owner_totp_summary())
+        return result
+
     def create_totp_challenge(
         self,
         *,

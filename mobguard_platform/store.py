@@ -2901,10 +2901,50 @@ class PlatformStore:
                 if healthy:
                     lagging_healthy_count += 1
 
+        active_cutoff = (now_dt - timedelta(hours=1)).isoformat()
+        with self._snapshot_connect(fast_read=fast_read, low_priority=low_priority) as conn:
+            has_active_trackers = self._table_exists(conn, "active_trackers")
+            has_violations = self._table_exists(conn, "violations")
+            active_users = int(
+                conn.execute(
+                    """
+                    SELECT COUNT(*) AS cnt
+                    FROM (
+                        SELECT DISTINCT SUBSTR(key, 1, INSTR(key, ':') - 1) AS uuid
+                        FROM active_trackers
+                        WHERE INSTR(key, ':') > 0 AND last_seen >= ?
+                    )
+                    """,
+                    (active_cutoff,),
+                ).fetchone()["cnt"]
+                or 0
+            ) if has_active_trackers else 0
+            violating_users = int(
+                conn.execute(
+                    """
+                    SELECT COUNT(*) AS cnt
+                    FROM (
+                        SELECT DISTINCT SUBSTR(t.key, 1, INSTR(t.key, ':') - 1) AS uuid
+                        FROM active_trackers t
+                        INNER JOIN violations v ON v.uuid = SUBSTR(t.key, 1, INSTR(t.key, ':') - 1)
+                        WHERE INSTR(t.key, ':') > 0 AND t.last_seen >= ?
+                    )
+                    """,
+                    (active_cutoff,),
+                ).fetchone()["cnt"]
+                or 0
+            ) if has_active_trackers and has_violations else 0
+
         return {
             "health": self.get_health_snapshot(fast_read=fast_read, low_priority=low_priority),
             "quality": quality,
             "latest_cases": latest_cases,
+            "realtime_usage": {
+                "active_users": active_users,
+                "violating_users": violating_users,
+                "compliant_users": max(active_users - violating_users, 0),
+                "active_window_seconds": 3600,
+            },
             "module_config": {
                 "desired_revision": desired_revision,
                 "total_count": len(module_rows),
@@ -3288,6 +3328,12 @@ class PlatformStore:
 
     def set_admin_identity_totp(self, subject: str, *, secret_cipher: str, enabled: bool) -> dict[str, Any]:
         return self.admin_security.set_identity_totp(subject, secret_cipher=secret_cipher, enabled=enabled)
+
+    def get_owner_totp_summary(self) -> dict[str, Any]:
+        return self.admin_security.owner_totp_summary()
+
+    def disable_owner_totp(self) -> dict[str, Any]:
+        return self.admin_security.disable_totp_for_role("owner")
 
     def create_admin_totp_challenge(
         self,

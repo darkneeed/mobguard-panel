@@ -9,7 +9,8 @@ import { renderWithProviders } from "../test/renderWithProviders";
 vi.mock("../api/client", () => ({
   api: {
     getAccessSettings: vi.fn(),
-    updateAccessSettings: vi.fn()
+    updateAccessSettings: vi.fn(),
+    disableOwnerTotp: vi.fn()
   }
 }));
 
@@ -32,6 +33,12 @@ describe("AccessPage", () => {
       telegram_enabled: true,
       local_enabled: true,
       local_username_hint: "operator"
+    },
+    owner_security: {
+      owner_identity_count: 1,
+      enabled_owner_count: 1,
+      pending_challenge_count: 0,
+      totp_enabled: true
     },
     env_file_path: "/opt/mobguard/.env",
     env_file_writable: true
@@ -148,5 +155,40 @@ describe("AccessPage", () => {
       panel_name: "Acme Shield",
       panel_logo_url: "https://cdn.example.com/logo.png"
     });
+  });
+
+  it("disables owner otp through dedicated action", async () => {
+    vi.mocked(api.getAccessSettings).mockResolvedValue({
+      ...basePayload,
+      env: {}
+    });
+    vi.mocked(api.disableOwnerTotp).mockResolvedValue({
+      owner_identity_count: 1,
+      enabled_owner_count: 0,
+      pending_challenge_count: 0,
+      totp_enabled: false
+    });
+
+    renderWithProviders(
+      <AccessPage
+        branding={{ panel_name: "MobGuard", panel_logo_url: "" }}
+        onBrandingChange={() => undefined}
+        language="en"
+        onLanguageChange={() => undefined}
+        palette="green"
+        onPaletteChange={() => undefined}
+        theme="system"
+        onThemeChange={() => undefined}
+      />
+    );
+
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Disable OTP for all owners" })
+    );
+
+    await waitFor(() => {
+      expect(api.disableOwnerTotp).toHaveBeenCalled();
+    });
+    expect(await screen.findByText("OTP was disabled for all owners")).toBeInTheDocument();
   });
 });

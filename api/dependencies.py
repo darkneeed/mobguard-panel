@@ -29,15 +29,30 @@ def get_session(request: Request) -> dict[str, Any]:
                 session["role"] = inferred_role
     if not session.get("permissions") and session.get("role"):
         session["permissions"] = permissions_for_role(session["role"])
+    if str(session.get("role") or "").lower() == ROLE_OWNER:
+        identity = container.store.get_admin_identity(str(session.get("subject") or ""))
+        if identity is not None:
+            session["totp_enabled"] = bool(identity.get("totp_enabled"))
+            if not session["totp_enabled"]:
+                session["totp_verified"] = False
+                session["totp_verified_at"] = ""
+            payload = session.get("payload")
+            if isinstance(payload, dict):
+                payload["totp_enabled"] = session["totp_enabled"]
+                payload["totp_verified"] = bool(session.get("totp_verified"))
+                payload["totp_verified_at"] = session.get("totp_verified_at", "")
     return session
 
 
 def require_permission(permission: str, *, require_owner_totp: bool = False) -> Callable[[dict[str, Any]], dict[str, Any]]:
-    def dependency(session: dict[str, Any] = Depends(get_session)) -> dict[str, Any]:
+    def dependency(request: Request = None, session: dict[str, Any] = Depends(get_session)) -> dict[str, Any]:
         if not session_has_permission(session, permission):
             raise HTTPException(status_code=403, detail="Permission denied")
         if require_owner_totp and str(session.get("role") or "").lower() == ROLE_OWNER:
-            if not bool(session.get("totp_verified")):
+            owner_totp_enabled = bool(session.get("totp_enabled", True))
+            if request is not None:
+                owner_totp_enabled = bool(get_container(request).store.get_owner_totp_summary().get("totp_enabled"))
+            if owner_totp_enabled and not bool(session.get("totp_verified")):
                 raise HTTPException(status_code=403, detail="Owner session requires TOTP verification")
         return session
 

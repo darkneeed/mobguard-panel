@@ -139,7 +139,7 @@ export const enDictionary: TranslationDictionary = {
     systemStatusTitle: "Live operator status",
     systemStatusDescription: "Database, scoring runtime, live rules, and the control-plane basics in one place.",
     healthTitle: "Panel health",
-    healthDescription: "Shows whether the database, embedded scoring runtime, and live rules state look healthy.",
+    healthDescription: "Operational signals for active restrictions, remote delivery health, and the current reaction mode.",
     pipelineTitle: "Pipeline backlog",
     pipelineDescription: "Durable ingest queue, worker lag, and pending remote enforcement state. This stays on the main overview only.",
     attentionItems: {
@@ -172,8 +172,10 @@ export const enDictionary: TranslationDictionary = {
       activeViolations: "Active violations",
       activeWarnings: "Active warnings",
       activeBans: "Active bans",
-      currentConfigModules: "On current config",
-      laggingConfigModules: "Lagging configs",
+      violatingNow: "Violating now",
+      compliantNow: "Compliant now",
+      activeUsers: "Active users",
+      activeUsersHint: "Active window {value}s",
       core: "Scoring runtime",
       embeddedValue: "embedded",
       ipinfo: "IPINFO token",
@@ -706,10 +708,24 @@ export const enDictionary: TranslationDictionary = {
       save: "Save general settings"
     },
     automationControls: {
-      title: "Automation controls",
-      description: "The runtime and detection switches that decide observe, warning-only, or full enforcement behavior.",
+      title: "Operating mode",
+      description: "Readable top-level controls for observe, react, and escalation behavior.",
       save: "Save automation controls",
-      saved: "Automation controls saved"
+      saved: "Automation controls saved",
+      workMode: {
+        label: "Operating mode",
+        description:
+          "Observe keeps the system non-punitive; react enables full runtime handling.",
+        observe: "Observe",
+        react: "React",
+      },
+      reactionMode: {
+        label: "Reaction",
+        description:
+          "Choose whether violations escalate into restrictions or stop at warnings.",
+        enforce: "Punishments",
+        warningOnly: "Warnings only",
+      },
     },
     sectionTitles: {
       thresholds: "Thresholds, scores, and behavior",
@@ -881,7 +897,21 @@ export const enDictionary: TranslationDictionary = {
     listsDescription: "Panel admins and runtime exclusions are managed separately.",
     envTitle: "Access .env",
     envDescription: "Local fallback credentials live in `.env` and require explicit replacement for secrets.",
-    envCount: "{present} of {total} configured"
+    envCount: "{present} of {total} configured",
+    ownerSecurity: {
+      title: "Owner security",
+      description:
+        "Server-side owner TOTP state. Disabling it removes the check for every owner identity at once.",
+      enabled: "OTP enabled",
+      disabled: "OTP disabled",
+      statusLabel: "OTP status",
+      ownerCountLabel: "Owner identities",
+      enabledCountLabel: "With TOTP",
+      pendingLabel: "Pending challenges",
+      disableAction: "Disable OTP for all owners",
+      disabling: "Disabling…",
+      disableSaved: "OTP was disabled for all owners",
+    },
   },
   data: {
     eyebrow: "Data",

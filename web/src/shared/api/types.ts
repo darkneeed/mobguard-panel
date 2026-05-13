@@ -42,6 +42,32 @@ export type BrandingConfig = {
   panel_logo_url: string;
 };
 
+export type OwnerSecurityStatus = {
+  owner_identity_count: number;
+  enabled_owner_count: number;
+  pending_challenge_count: number;
+  totp_enabled: boolean;
+  cleared_identity_count?: number;
+  cleared_challenge_count?: number;
+};
+
+export type AccessSettingsResponse = {
+  revision: number;
+  updated_at: string;
+  updated_by: string;
+  lists: Record<string, Array<string | number>>;
+  settings: BrandingConfig;
+  auth: {
+    telegram_enabled: boolean;
+    local_enabled: boolean;
+    local_username_hint: string;
+  };
+  env: Record<string, EnvFieldState>;
+  owner_security: OwnerSecurityStatus;
+  env_file_path: string;
+  env_file_writable: boolean;
+};
+
 export type EnvFieldState = {
   key: string;
   value: string;
@@ -473,6 +499,13 @@ export type OverviewEnforcementSummary = {
   last_event_at?: string | null;
 };
 
+export type OverviewRealtimeUsageSummary = {
+  active_users: number;
+  violating_users: number;
+  compliant_users: number;
+  active_window_seconds?: number;
+};
+
 export type OverviewMetricsResponse = {
   health: HealthSnapshot;
   quality: Record<string, unknown>;
@@ -482,6 +515,7 @@ export type OverviewMetricsResponse = {
   automation_status?: AutomationStatus;
   module_config?: OverviewModuleConfigSummary;
   enforcement?: OverviewEnforcementSummary;
+  realtime_usage?: OverviewRealtimeUsageSummary;
 };
 
 export type ViolationsResponse = {

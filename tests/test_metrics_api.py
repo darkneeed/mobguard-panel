@@ -107,3 +107,29 @@ class MetricsAPITests(unittest.TestCase):
         self.assertIn("snapshot_updated_at", payload["pipeline"])
         self.assertIn("snapshot_age_seconds", payload["pipeline"])
         self.assertTrue(payload["pipeline"]["stale"])
+
+    def test_metrics_overview_includes_realtime_usage_summary(self):
+        with self.store._connect() as conn:
+            conn.execute(
+                "INSERT INTO active_trackers (key, start_time, last_seen) VALUES (?, ?, ?)",
+                ("uuid-1:1.1.1.1", "2026-04-12T03:00:00", "9999-04-12T03:20:00"),
+            )
+            conn.execute(
+                "INSERT INTO active_trackers (key, start_time, last_seen) VALUES (?, ?, ?)",
+                ("uuid-2:2.2.2.2", "2026-04-12T03:05:00", "9999-04-12T03:20:00"),
+            )
+            conn.execute(
+                """
+                INSERT INTO violations (
+                    uuid, strikes, unban_time, last_forgiven, last_strike_time, warning_time, warning_count
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                ("uuid-1", 1, None, None, "2026-04-12T03:18:00", "2026-04-12T03:18:00", 1),
+            )
+            conn.commit()
+
+        payload = metrics_router.get_overview(_={}, container=self.container)
+
+        self.assertEqual(payload["realtime_usage"]["active_users"], 2)
+        self.assertEqual(payload["realtime_usage"]["violating_users"], 1)
+        self.assertEqual(payload["realtime_usage"]["compliant_users"], 1)

@@ -1,5 +1,6 @@
 import { request } from "../../../shared/api/request";
 import {
+  AccessSettingsResponse,
   DetectionSettingsResponse,
   EnforcementSettingsResponse,
   SettingsSectionUpdatePayload
@@ -12,9 +13,9 @@ export const settingsApi = {
       method: "PUT",
       body: JSON.stringify(payload)
     }),
-  getAccessSettings: () => request<Record<string, unknown>>("/admin/settings/access"),
+  getAccessSettings: () => request<AccessSettingsResponse>("/admin/settings/access"),
   updateAccessSettings: (payload: SettingsSectionUpdatePayload) =>
-    request<Record<string, unknown>>("/admin/settings/access", {
+    request<AccessSettingsResponse>("/admin/settings/access", {
       method: "PUT",
       body: JSON.stringify(payload)
     }),

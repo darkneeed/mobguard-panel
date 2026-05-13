@@ -4,6 +4,7 @@ import logging
 import os
 import re
 import sqlite3
+import time
 import aiohttp
 from pathlib import Path
 from datetime import datetime, timedelta
@@ -1012,6 +1013,14 @@ def admin_scenario_enabled(scenario: str) -> bool:
         scenario,
         has_admin_bot=admin_bot_available(),
     )
+
+
+def _config_file_refresh_marker() -> tuple[int, int]:
+    try:
+        stat = Path(CONFIG_PATH).stat()
+    except OSError:
+        return (0, 0)
+    return (int(getattr(stat, "st_mtime_ns", 0)), int(getattr(stat, "st_size", 0)))
 
 
 def refresh_runtime_state_from_config() -> None:
@@ -2776,12 +2785,21 @@ async def stats_flush_task():
 
 async def live_rules_refresh_task():
     logger.info("Starting Live Rules Refresh Worker...")
+    last_refresh_monotonic = 0.0
+    last_marker = _config_file_refresh_marker()
     while True:
         try:
-            await asyncio.get_running_loop().run_in_executor(None, refresh_runtime_state_from_config)
+            refresh_interval = max(int(CONFIG['settings'].get('live_rules_refresh_seconds', 15) or 15), 1)
+            current_marker = _config_file_refresh_marker()
+            marker_changed = current_marker != last_marker
+            refresh_due = (time.monotonic() - last_refresh_monotonic) >= refresh_interval
+            if marker_changed or refresh_due:
+                await asyncio.get_running_loop().run_in_executor(None, refresh_runtime_state_from_config)
+                last_refresh_monotonic = time.monotonic()
+                last_marker = _config_file_refresh_marker()
         except Exception as e:
             logger.error(f"[LIVE RULES] Refresh failed: {e}")
-        await asyncio.sleep(int(CONFIG['settings'].get('live_rules_refresh_seconds', 15)))
+        await asyncio.sleep(1)
 
 
 async def learning_promotion_task():

@@ -1,5 +1,5 @@
 import { request } from "../../../shared/api/request";
-import { AuthCapabilities, AuthResult, Session, TotpSetupPayload } from "../../../shared/api/types";
+import { AuthCapabilities, AuthResult, OwnerSecurityStatus, Session, TotpSetupPayload } from "../../../shared/api/types";
 
 export const authApi = {
   authStart: () => request<AuthCapabilities>("/admin/auth/telegram/start", { method: "POST" }),
@@ -27,6 +27,10 @@ export const authApi = {
     request<Session>("/admin/auth/totp/verify", {
       method: "POST",
       body: JSON.stringify({ challenge_token: challengeToken, code })
+    }),
+  disableOwnerTotp: () =>
+    request<OwnerSecurityStatus>("/admin/auth/totp/disable-all", {
+      method: "POST"
     }),
   me: () => request<Session>("/admin/me"),
   logout: () => request<{ ok: boolean }>("/admin/logout", { method: "POST" })

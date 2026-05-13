@@ -147,6 +147,12 @@ describe("OverviewPage", () => {
         lagging_healthy_count: 1,
         stale_after_seconds: 180
       },
+      realtime_usage: {
+        active_users: 5,
+        violating_users: 2,
+        compliant_users: 3,
+        active_window_seconds: 3600
+      },
       enforcement: {
         active_total: 3,
         active_warning_count: 2,
@@ -165,7 +171,8 @@ describe("OverviewPage", () => {
     expect(screen.getByRole("link", { name: /alpha/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Open console" })).toHaveAttribute("href", "/data/console");
     expect(screen.getByText("Active violations")).toBeInTheDocument();
-    expect(screen.getByText("On current config")).toBeInTheDocument();
+    expect(screen.getByText("Violating now")).toBeInTheDocument();
+    expect(screen.getByText("Compliant now")).toBeInTheDocument();
     expect(api.getOverview).toHaveBeenCalledTimes(1);
   });
 
@@ -297,6 +304,12 @@ describe("OverviewPage", () => {
           up_to_date_healthy_count: 1,
           lagging_healthy_count: 1,
           stale_after_seconds: 180
+        },
+        realtime_usage: {
+          active_users: 5,
+          violating_users: 2,
+          compliant_users: 3,
+          active_window_seconds: 3600
         },
         enforcement: {
           active_total: 3,

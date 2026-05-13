@@ -155,6 +155,21 @@ def _challenge_for_identity(
     return _challenge_response(challenge, setup_required=setup_required)
 
 
+def _owner_totp_policy(
+    container: APIContainer,
+    subject: str,
+) -> tuple[str, dict[str, Any] | None, dict[str, Any]]:
+    identity = container.store.get_admin_identity(subject)
+    summary = container.store.get_owner_totp_summary()
+    if identity and bool(identity.get("totp_enabled")):
+        return "verify", identity, summary
+    if int(summary.get("owner_identity_count") or 0) == 0:
+        return "setup", identity, summary
+    if int(summary.get("enabled_owner_count") or 0) == 0:
+        return "disabled", identity, summary
+    return "setup", identity, summary
+
+
 def _resolve_success_or_totp(
     container: APIContainer,
     response: Response,
@@ -166,6 +181,13 @@ def _resolve_success_or_totp(
     username: str | None,
     first_name: str | None,
 ) -> dict[str, Any]:
+    owner_totp_mode = "disabled"
+    existing_identity: dict[str, Any] | None = None
+    if role == ROLE_OWNER:
+        owner_totp_mode, existing_identity, _ = _owner_totp_policy(
+            container,
+            subject,
+        )
     identity = _identity_record(
         container,
         subject=subject,
@@ -176,16 +198,28 @@ def _resolve_success_or_totp(
         first_name=first_name,
     )
     if role == ROLE_OWNER:
-        return _challenge_for_identity(
-            container,
+        if owner_totp_mode in {"setup", "verify"}:
+            return _challenge_for_identity(
+                container,
+                subject=subject,
+                auth_method=auth_method,
+                role=role,
+                telegram_id=telegram_id,
+                username=username,
+                first_name=first_name,
+                setup_required=owner_totp_mode == "setup",
+            )
+        payload = _build_identity_payload(
             subject=subject,
             auth_method=auth_method,
             role=role,
             telegram_id=telegram_id,
             username=username,
             first_name=first_name,
-            setup_required=not bool(identity.get("totp_enabled")),
+            totp_enabled=False,
+            totp_verified=False,
         )
+        return _issue_session(container, response, payload)
     payload = _build_identity_payload(
         subject=subject,
         auth_method=auth_method,
@@ -193,7 +227,7 @@ def _resolve_success_or_totp(
         telegram_id=telegram_id,
         username=username,
         first_name=first_name,
-        totp_enabled=bool(identity.get("totp_enabled")),
+        totp_enabled=bool((existing_identity or identity).get("totp_enabled")),
         totp_verified=False,
     )
     return _issue_session(container, response, payload)
@@ -422,3 +456,7 @@ def totp_verify(container: APIContainer, challenge_token: str, code: str, respon
         response=response,
         totp_enabled=True,
     )
+
+
+def disable_owner_totp(container: APIContainer) -> dict[str, Any]:
+    return container.store.disable_owner_totp()

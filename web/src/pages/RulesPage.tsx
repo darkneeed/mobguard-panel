@@ -86,9 +86,13 @@ const GENERAL_RUNTIME_FIELDS = GENERAL_SETTINGS_FIELDS.filter(
 const AUTOMATION_GENERAL_FIELDS = GENERAL_SETTINGS_FIELDS.filter((field) =>
   AUTOMATION_GENERAL_FIELD_SET.has(field.key),
 );
+const ADVANCED_AUTOMATION_GENERAL_FIELD_KEYS = [
+  "manual_review_mixed_home_enabled",
+  "manual_ban_approval_enabled",
+] as const;
 
 const POLICY_FIELDS = RULE_SETTING_FIELDS.filter(
-  (field) => field.sectionKey === "policy",
+  (field) => field.sectionKey === "policy" && field.key !== "shadow_mode",
 );
 
 const LIST_SECTIONS = Array.from(
@@ -204,11 +208,13 @@ export function RulesPage() {
   const automationGeneralDirty = AUTOMATION_GENERAL_FIELD_KEYS.some(
     (key) => (generalDraft?.[key] ?? "") !== (savedGeneralDraft?.[key] ?? ""),
   );
+  const automationModeDirty =
+    draft?.settings?.shadow_mode !== savedDraft?.settings?.shadow_mode;
   const policyDirty = POLICY_FIELDS.some(
     (field) =>
       draft?.settings?.[field.key] !== savedDraft?.settings?.[field.key],
   );
-  const automationDirty = automationGeneralDirty;
+  const automationDirty = automationGeneralDirty || automationModeDirty;
   const previewAutomationStatus = useMemo(
     () =>
       deriveAutomationStatus({
@@ -234,6 +240,14 @@ export function RulesPage() {
     !state?.updated_by || state.updated_by === "bootstrap"
       ? t("common.system")
       : state.updated_by;
+  const workMode =
+    generalDraft?.dry_run === "true" || draft?.settings?.shadow_mode === true
+      ? "observe"
+      : "react";
+  const reactionMode =
+    generalDraft?.warning_only_mode === "true"
+      ? "warning_only"
+      : "enforce";
 
   function listFieldMeta(field: RuleListFieldMeta) {
     return {
@@ -490,6 +504,32 @@ export function RulesPage() {
     setAutomationSaved("");
   }
 
+  function updateWorkMode(value: "observe" | "react") {
+    setGeneralDraft((prev) => ({
+      ...(prev || {}),
+      dry_run: value === "observe" ? "true" : "false",
+    }));
+    setDraft((prev) => ({
+      ...(prev || {}),
+      settings: {
+        ...(prev?.settings || {}),
+        shadow_mode: value === "observe",
+      },
+    }));
+    setGeneralSaved("");
+    setAutomationSaved("");
+    setPolicySaved("");
+  }
+
+  function updateReactionMode(value: "warning_only" | "enforce") {
+    setGeneralDraft((prev) => ({
+      ...(prev || {}),
+      warning_only_mode: value === "warning_only" ? "true" : "false",
+    }));
+    setGeneralSaved("");
+    setAutomationSaved("");
+  }
+
   function updateProviderProfile(
     index: number,
     patch: Partial<ProviderProfileDraft>,
@@ -570,7 +610,7 @@ export function RulesPage() {
   }
 
   async function saveAutomationControls() {
-    if (!generalDraft) return;
+    if (!generalDraft || !state) return;
     try {
       let nextAutomationStatus = serverAutomationStatus;
       if (automationGeneralDirty) {
@@ -587,6 +627,21 @@ export function RulesPage() {
         nextAutomationStatus = enforcementResponse.automation_status ?? null;
         setGeneralDraft(normalizedGeneral);
         setSavedGeneralDraft(normalizedGeneral);
+      }
+      if (automationModeDirty) {
+        const detectionResponse = (await api.updateDetectionSettings({
+          rules: {
+            settings: {
+              shadow_mode: draft?.settings?.shadow_mode === true,
+            },
+          },
+          revision: state.revision,
+          updated_at: state.updated_at,
+        })) as RulesState;
+        const normalizedRules = normalizeRulesDraft(detectionResponse.rules);
+        setState(detectionResponse);
+        setDraft(normalizedRules);
+        setSavedDraft(normalizedRules);
       }
 
       setServerAutomationStatus(nextAutomationStatus ?? null);
@@ -652,7 +707,49 @@ export function RulesPage() {
         {automationError ? <div className="error-box">{automationError}</div> : null}
         {automationSaved ? <div className="ok-box">{automationSaved}</div> : null}
         <div className="form-grid compact-form-grid">
-          {AUTOMATION_GENERAL_FIELD_KEYS.map((key) => {
+          <div className="rule-field compact-rule-field">
+            <FieldLabel
+              label={t("rules.automationControls.workMode.label")}
+              description={t("rules.automationControls.workMode.description")}
+            />
+            <select
+              value={workMode}
+              onChange={(event) =>
+                updateWorkMode(event.target.value as "observe" | "react")
+              }
+            >
+              <option value="observe">
+                {t("rules.automationControls.workMode.observe")}
+              </option>
+              <option value="react">
+                {t("rules.automationControls.workMode.react")}
+              </option>
+            </select>
+          </div>
+          <div className="rule-field compact-rule-field">
+            <FieldLabel
+              label={t("rules.automationControls.reactionMode.label")}
+              description={t(
+                "rules.automationControls.reactionMode.description",
+              )}
+            />
+            <select
+              value={reactionMode}
+              onChange={(event) =>
+                updateReactionMode(
+                  event.target.value as "warning_only" | "enforce",
+                )
+              }
+            >
+              <option value="enforce">
+                {t("rules.automationControls.reactionMode.enforce")}
+              </option>
+              <option value="warning_only">
+                {t("rules.automationControls.reactionMode.warningOnly")}
+              </option>
+            </select>
+          </div>
+          {ADVANCED_AUTOMATION_GENERAL_FIELD_KEYS.map((key) => {
             const meta = generalFieldMeta(key);
             return (
               <div className="rule-field compact-rule-field" key={key}>

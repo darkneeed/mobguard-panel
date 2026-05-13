@@ -145,16 +145,16 @@ describe("RulesPage retention settings", () => {
     });
     vi.mocked(api.getEnforcementSettings).mockResolvedValue({
       settings: {
-        dry_run: true,
+        dry_run: false,
         warning_only_mode: false,
         manual_review_mixed_home_enabled: false,
         manual_ban_approval_enabled: false,
       },
       automation_status: {
-        mode: "observe",
-        mode_reasons: ["dry_run"],
+        mode: "enforce",
+        mode_reasons: [],
         flags: {
-          dry_run: true,
+          dry_run: false,
           warning_only_mode: false,
           manual_review_mixed_home_enabled: false,
           manual_ban_approval_enabled: false,
@@ -171,7 +171,7 @@ describe("RulesPage retention settings", () => {
         settings: {
           ...(detectionPayload.rules.settings as Record<string, unknown>),
           shadow_mode: true,
-          probable_home_warning_only: true,
+          probable_home_warning_only: false,
           auto_enforce_requires_hard_or_multi_signal: true,
           provider_conflict_review_only: false,
         },
@@ -179,20 +179,20 @@ describe("RulesPage retention settings", () => {
     });
     vi.mocked(api.updateEnforcementSettings).mockResolvedValue({
       settings: {
-        dry_run: false,
+        dry_run: true,
         warning_only_mode: false,
         manual_review_mixed_home_enabled: false,
         manual_ban_approval_enabled: false,
       },
       automation_status: {
         mode: "observe",
-        mode_reasons: [],
+        mode_reasons: ["dry_run"],
         flags: {
-          dry_run: false,
+          dry_run: true,
           warning_only_mode: false,
           manual_review_mixed_home_enabled: false,
           manual_ban_approval_enabled: false,
-          shadow_mode: false,
+          shadow_mode: true,
           auto_enforce_requires_hard_or_multi_signal: true,
           provider_conflict_review_only: false,
         },
@@ -205,18 +205,19 @@ describe("RulesPage retention settings", () => {
     });
 
     const automationHeadings = await screen.findAllByText(
-      "Automation controls",
+      "Operating mode",
     );
     const automationPanel = automationHeadings.at(-1)?.closest(".panel");
     expect(automationPanel).not.toBeNull();
 
-    const dryRunField = within(automationPanel as HTMLElement)
-      .getByText("Dry run")
+    const workModeField = within(automationPanel as HTMLElement)
+      .getAllByText("Operating mode")
+      .at(-1)
       .closest(".rule-field");
-    expect(dryRunField).not.toBeNull();
+    expect(workModeField).not.toBeNull();
     await userEvent.selectOptions(
-      within(dryRunField as HTMLElement).getByRole("combobox"),
-      "false",
+      within(workModeField as HTMLElement).getByRole("combobox"),
+      "observe",
     );
 
     await userEvent.click(
@@ -229,16 +230,26 @@ describe("RulesPage retention settings", () => {
       expect(api.updateEnforcementSettings).toHaveBeenCalled();
     });
 
-    expect(api.updateDetectionSettings).not.toHaveBeenCalled();
     expect(
-      vi.mocked(api.updateEnforcementSettings).mock.calls.at(-1)?.[0],
+      vi.mocked(api.updateEnforcementSettings).mock.calls[0][0],
     ).toEqual({
       settings: {
-        dry_run: false,
+        dry_run: true,
         warning_only_mode: false,
         manual_review_mixed_home_enabled: false,
         manual_ban_approval_enabled: false,
       },
+    });
+    expect(
+      vi.mocked(api.updateDetectionSettings).mock.calls[0][0],
+    ).toEqual({
+      rules: {
+        settings: {
+          shadow_mode: true,
+        },
+      },
+      revision: 7,
+      updated_at: "2026-04-21T10:00:00Z",
     });
     expect(
       await within(automationPanel as HTMLElement).findByText(
@@ -250,15 +261,6 @@ describe("RulesPage retention settings", () => {
       .getByText("Detection policy")
       .closest(".panel");
     expect(policyPanel).not.toBeNull();
-
-    const shadowField = within(policyPanel as HTMLElement)
-      .getByText("Shadow mode")
-      .closest(".rule-field");
-    expect(shadowField).not.toBeNull();
-    await userEvent.selectOptions(
-      within(shadowField as HTMLElement).getByRole("combobox"),
-      "true",
-    );
 
     const probableHomeField = within(policyPanel as HTMLElement)
       .getByText("Probable home = warning only")
@@ -276,14 +278,13 @@ describe("RulesPage retention settings", () => {
     );
 
     await waitFor(() => {
-      expect(api.updateDetectionSettings).toHaveBeenCalled();
+      expect(api.updateDetectionSettings).toHaveBeenCalledTimes(2);
     });
     expect(
       vi.mocked(api.updateDetectionSettings).mock.calls.at(-1)?.[0],
     ).toEqual({
       rules: {
         settings: {
-          shadow_mode: true,
           probable_home_warning_only: true,
           auto_enforce_requires_hard_or_multi_signal: true,
           provider_conflict_review_only: false,
