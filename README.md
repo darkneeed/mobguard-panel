@@ -36,7 +36,8 @@ Backward-compatible fallback for older installs is still supported:
 - `MOBGUARD_DB_BACKEND=sqlite|postgres` selects the staged runtime backend path.
 - `sqlite` remains the supported runtime default.
 - For migration prep, provide `MOBGUARD_POSTGRES_DSN` or the discrete `MOBGUARD_POSTGRES_*` variables.
-- Use `python scripts/migrate_sqlite_to_postgres.py --sqlite-path runtime/bans.db --postgres-dsn ...` to copy the current SQLite operational store into Postgres and validate table counts.
+- The current `docker-compose.yml` does not include a Postgres service, so the migration target must be an external Postgres instance or a separately added container/service.
+- Use `python scripts/migrate_sqlite_to_postgres.py --sqlite-path runtime/bans.db --postgres-dsn postgresql://mobguard:secret@postgres:5432/mobguard` to copy the current SQLite operational store into Postgres and validate table counts.
 
 ## Local dev without Docker
 

@@ -1,20 +1,46 @@
 services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: mobguard-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: mobguard
+      POSTGRES_PASSWORD: ${MOBGUARD_POSTGRES_PASSWORD}
+      POSTGRES_DB: mobguard
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mobguard -d mobguard"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   mobguard-api:
     build:
       context: .
       dockerfile: api/Dockerfile
     container_name: mobguard-api
     restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
     env_file:
       - .env
     environment:
       BAN_SYSTEM_DIR: /opt/mobguard/runtime
       MOBGUARD_ENV_FILE: /opt/mobguard/.env
+      DATABASE_URL: postgresql://mobguard:${MOBGUARD_POSTGRES_PASSWORD}@postgres:5432/mobguard
     volumes:
       - ./.env:/opt/mobguard/.env
       - ./runtime:/opt/mobguard/runtime
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/ready', timeout=5)"]
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/ready', timeout=5)",
+        ]
       interval: 5s
       timeout: 5s
       retries: 12
@@ -30,10 +56,17 @@ services:
       mobguard-api:
         condition: service_healthy
     ports:
-      - "127.0.0.1:8080:80"
+      - "127.0.0.1:8085:80"
     healthcheck:
-      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1/ >/dev/null 2>&1 || exit 1"]
+      test:
+        [
+          "CMD-SHELL",
+          "wget -q -O - http://127.0.0.1/ >/dev/null 2>&1 || exit 1",
+        ]
       interval: 15s
       timeout: 5s
       retries: 5
       start_period: 10s
+
+volumes:
+  postgres_data:

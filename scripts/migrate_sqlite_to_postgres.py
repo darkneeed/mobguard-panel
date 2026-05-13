@@ -39,6 +39,24 @@ def _connect_postgres(dsn: str):
     return psycopg.connect(dsn)
 
 
+def _validate_postgres_dsn(dsn: str) -> str:
+    normalized = str(dsn or "").strip()
+    if not normalized:
+        raise SystemExit("Missing --postgres-dsn or MOBGUARD_POSTGRES_DSN")
+    if normalized in {"...", "<dsn>", "<postgres-dsn>"}:
+        raise SystemExit(
+            "Invalid Postgres DSN placeholder. Pass a real DSN, for example: "
+            "postgresql://mobguard:secret@postgres:5432/mobguard"
+        )
+    if "://" not in normalized and "=" not in normalized:
+        raise SystemExit(
+            "Invalid Postgres DSN format. Expected URI form like "
+            "postgresql://user:pass@host:5432/dbname or libpq form like "
+            "'host=... port=5432 dbname=... user=... password=...'."
+        )
+    return normalized
+
+
 def _sqlite_tables(conn: sqlite3.Connection) -> list[str]:
     rows = conn.execute(
         """
@@ -171,11 +189,9 @@ def _validate_counts(sqlite_conn: sqlite3.Connection, pg_conn, table_names: list
 def main() -> int:
     args = _parse_args()
     sqlite_path = str(args.sqlite_path or "").strip()
-    postgres_dsn = str(args.postgres_dsn or "").strip()
+    postgres_dsn = _validate_postgres_dsn(args.postgres_dsn)
     if not sqlite_path:
         raise SystemExit("Missing --sqlite-path or MOBGUARD_SQLITE_PATH")
-    if not postgres_dsn:
-        raise SystemExit("Missing --postgres-dsn or MOBGUARD_POSTGRES_DSN")
     if not Path(sqlite_path).exists():
         raise SystemExit(f"SQLite DB not found: {sqlite_path}")
 
