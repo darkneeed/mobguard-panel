@@ -3,7 +3,10 @@ from __future__ import annotations
 import sqlite3
 import time
 from dataclasses import dataclass
-from typing import Optional
+from typing import Callable, Optional, TypeVar
+
+
+T = TypeVar("T")
 
 
 def is_sqlite_busy_error(exc: BaseException) -> bool:
@@ -24,6 +27,27 @@ def is_sqlite_interrupted_error(exc: BaseException) -> bool:
     if not isinstance(exc, sqlite3.OperationalError):
         return False
     return "interrupted" in str(exc).lower()
+
+
+def run_with_sqlite_retry(
+    operation: Callable[[], T],
+    *,
+    retry_delays_seconds: tuple[float, ...] = (),
+    retry_on_interrupted: bool = False,
+) -> T:
+    attempts = max(len(retry_delays_seconds), 0) + 1
+    for attempt in range(attempts):
+        try:
+            return operation()
+        except sqlite3.OperationalError as exc:
+            busy = is_sqlite_busy_error(exc)
+            interrupted = retry_on_interrupted and is_sqlite_interrupted_error(exc)
+            if not (busy or interrupted) or attempt >= len(retry_delays_seconds):
+                raise
+            delay = max(float(retry_delays_seconds[attempt]), 0.0)
+            if delay > 0:
+                time.sleep(delay)
+    return operation()
 
 
 @dataclass

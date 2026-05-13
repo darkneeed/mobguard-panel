@@ -40,6 +40,8 @@ OVERVIEW_SNAPSHOT_REFRESH_INTERVAL_SECONDS = 15.0
 HEARTBEAT_WRITE_INTERVAL_SECONDS = 15.0
 INGEST_MAX_ATTEMPTS = 5
 ENFORCEMENT_MAX_ATTEMPTS = 5
+SQLITE_BUSY_LOG_SUPPRESSION_SECONDS = 30.0
+_LAST_BUSY_LOG_AT: dict[str, float] = {}
 
 
 def _utcnow() -> str:
@@ -63,11 +65,29 @@ def _is_best_effort_sqlite_error(exc: BaseException) -> bool:
     return is_sqlite_busy_error(exc) or is_sqlite_interrupted_error(exc)
 
 
+def _should_emit_busy_log(action: str, *, now: float | None = None) -> bool:
+    current = time.monotonic() if now is None else float(now)
+    previous = _LAST_BUSY_LOG_AT.get(action)
+    if previous is not None and current - previous < SQLITE_BUSY_LOG_SUPPRESSION_SECONDS:
+        return False
+    _LAST_BUSY_LOG_AT[action] = current
+    return True
+
+
+def _log_busy_skip(action: str, *, interrupted: bool = False) -> None:
+    if interrupted:
+        if _should_emit_busy_log(f"{action}:interrupted"):
+            logger.debug("%s skipped because SQLite fast-read timed out", action)
+        return
+    if _should_emit_busy_log(f"{action}:busy"):
+        logger.warning("%s skipped because SQLite is busy", action)
+
+
 def _log_best_effort_skip(action: str, exc: BaseException) -> None:
     if is_sqlite_interrupted_error(exc):
-        logger.debug("%s skipped because SQLite fast-read timed out", action)
+        _log_busy_skip(action, interrupted=True)
         return
-    logger.warning("%s skipped because SQLite is busy", action)
+    _log_busy_skip(action)
 
 
 def _cache_decision_tx(conn: sqlite3.Connection, ip: str, bundle: DecisionBundle) -> None:
@@ -729,7 +749,7 @@ async def ingest_worker_loop(container: APIContainer) -> None:
         now = time.monotonic()
         pipeline_snapshot_result = await asyncio.to_thread(container.store.refresh_due_ingest_pipeline_snapshot)
         if pipeline_snapshot_result.get("busy"):
-            logger.warning("Pipeline snapshot refresh skipped because SQLite is busy")
+            _log_busy_skip("Pipeline snapshot refresh")
         if now - last_overview_snapshot_refresh >= OVERVIEW_SNAPSHOT_REFRESH_INTERVAL_SECONDS:
             try:
                 await asyncio.to_thread(container.store.refresh_overview_snapshot, low_priority=True)
@@ -773,7 +793,7 @@ async def enforcement_dispatcher_loop(container: APIContainer) -> None:
         summary = await dispatch_enforcement_batch_once(container)
         pipeline_snapshot_result = await asyncio.to_thread(container.store.refresh_due_ingest_pipeline_snapshot)
         if pipeline_snapshot_result.get("busy"):
-            logger.warning("Pipeline snapshot refresh skipped because SQLite is busy")
+            _log_busy_skip("Pipeline snapshot refresh")
         now = time.monotonic()
         if now - last_heartbeat_write >= HEARTBEAT_WRITE_INTERVAL_SECONDS:
             try:

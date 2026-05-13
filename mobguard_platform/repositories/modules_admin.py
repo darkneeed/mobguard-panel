@@ -6,9 +6,11 @@ from datetime import datetime, timedelta
 from typing import Any, Optional
 
 from .base import SQLiteRepository
+from ..storage.sqlite import run_with_sqlite_retry
 
 MODULE_PROTOCOL_SQLITE_TIMEOUT_SECONDS = 1
 MODULE_PROTOCOL_SQLITE_BUSY_TIMEOUT_MS = 1000
+MODULE_PROTOCOL_SQLITE_BUSY_RETRY_DELAYS_SECONDS = (0.05, 0.1, 0.2)
 
 
 def _utcnow() -> str:
@@ -120,6 +122,12 @@ def _module_health_snapshot(
 
 
 class ModuleAdminRepository(SQLiteRepository):
+    def _run_retryable_module_write(self, operation):
+        return run_with_sqlite_retry(
+            operation,
+            retry_delays_seconds=MODULE_PROTOCOL_SQLITE_BUSY_RETRY_DELAYS_SECONDS,
+        )
+
     def _backfill_module_name(self, conn, module_id: str, module_name: str) -> None:
         normalized_id = str(module_id or "").strip()
         normalized_name = str(module_name or "").strip()
@@ -280,68 +288,72 @@ class ModuleAdminRepository(SQLiteRepository):
             raise ValueError("module_id is required")
         if not token:
             raise ValueError("module token is required")
-        now = _utcnow()
         token_hash = _sha256_hex(token)
-        with self.storage.connect(
-            timeout=MODULE_PROTOCOL_SQLITE_TIMEOUT_SECONDS,
-            busy_timeout_ms=MODULE_PROTOCOL_SQLITE_BUSY_TIMEOUT_MS,
-        ) as conn:
-            existing = conn.execute(
-                "SELECT token_hash, module_name, metadata_json FROM modules WHERE module_id = ?",
-                (normalized_id,),
-            ).fetchone()
-            if existing:
-                if str(existing["token_hash"]) != token_hash:
-                    raise ValueError("Invalid module token")
-                stored_metadata = _module_metadata_from_json(existing["metadata_json"])
-                effective_metadata = stored_metadata if metadata is None else {**stored_metadata, **metadata}
-                conn.execute(
-                    """
-                    UPDATE modules
-                    SET module_name = ?, status = 'online', version = ?, protocol_version = ?,
-                        config_revision_applied = ?, last_seen_at = ?, install_state = 'online', metadata_json = ?
-                    WHERE module_id = ?
-                    """,
-                    (
+        
+        def _operation() -> None:
+            now = _utcnow()
+            with self.storage.connect(
+                timeout=MODULE_PROTOCOL_SQLITE_TIMEOUT_SECONDS,
+                busy_timeout_ms=MODULE_PROTOCOL_SQLITE_BUSY_TIMEOUT_MS,
+            ) as conn:
+                existing = conn.execute(
+                    "SELECT token_hash, module_name, metadata_json FROM modules WHERE module_id = ?",
+                    (normalized_id,),
+                ).fetchone()
+                if existing:
+                    if str(existing["token_hash"]) != token_hash:
+                        raise ValueError("Invalid module token")
+                    stored_metadata = _module_metadata_from_json(existing["metadata_json"])
+                    effective_metadata = stored_metadata if metadata is None else {**stored_metadata, **metadata}
+                    conn.execute(
+                        """
+                        UPDATE modules
+                        SET module_name = ?, status = 'online', version = ?, protocol_version = ?,
+                            config_revision_applied = ?, last_seen_at = ?, install_state = 'online', metadata_json = ?
+                        WHERE module_id = ?
+                        """,
+                        (
+                            normalized_name or str(existing["module_name"] or normalized_id).strip() or normalized_id,
+                            str(version or "").strip(),
+                            str(protocol_version or "v1").strip() or "v1",
+                            int(config_revision_applied or 0),
+                            now,
+                            json.dumps(effective_metadata, ensure_ascii=False),
+                            normalized_id,
+                        ),
+                    )
+                    self._backfill_module_name(
+                        conn,
+                        normalized_id,
                         normalized_name or str(existing["module_name"] or normalized_id).strip() or normalized_id,
-                        str(version or "").strip(),
-                        str(protocol_version or "v1").strip() or "v1",
-                        int(config_revision_applied or 0),
-                        now,
-                        json.dumps(effective_metadata, ensure_ascii=False),
-                        normalized_id,
-                    ),
-                )
-                self._backfill_module_name(
-                    conn,
-                    normalized_id,
-                    normalized_name or str(existing["module_name"] or normalized_id).strip() or normalized_id,
-                )
-            else:
-                if not auto_create:
-                    raise ValueError("Module is not registered")
-                metadata_json = json.dumps(metadata or {}, ensure_ascii=False)
-                conn.execute(
-                    """
-                    INSERT INTO modules (
-                        module_id, module_name, token_hash, token_ciphertext, status, version, protocol_version,
-                        config_revision_applied, first_seen_at, last_seen_at, install_state, managed, metadata_json
-                    ) VALUES (?, ?, ?, '', 'online', ?, ?, ?, ?, ?, 'online', 0, ?)
-                    """,
-                    (
-                        normalized_id,
-                        normalized_name or normalized_id,
-                        token_hash,
-                        str(version or "").strip(),
-                        str(protocol_version or "v1").strip() or "v1",
-                        int(config_revision_applied or 0),
-                        now,
-                        now,
-                        metadata_json,
-                    ),
-                )
-                self._backfill_module_name(conn, normalized_id, normalized_name or normalized_id)
-            conn.commit()
+                    )
+                else:
+                    if not auto_create:
+                        raise ValueError("Module is not registered")
+                    metadata_json = json.dumps(metadata or {}, ensure_ascii=False)
+                    conn.execute(
+                        """
+                        INSERT INTO modules (
+                            module_id, module_name, token_hash, token_ciphertext, status, version, protocol_version,
+                            config_revision_applied, first_seen_at, last_seen_at, install_state, managed, metadata_json
+                        ) VALUES (?, ?, ?, '', 'online', ?, ?, ?, ?, ?, 'online', 0, ?)
+                        """,
+                        (
+                            normalized_id,
+                            normalized_name or normalized_id,
+                            token_hash,
+                            str(version or "").strip(),
+                            str(protocol_version or "v1").strip() or "v1",
+                            int(config_revision_applied or 0),
+                            now,
+                            now,
+                            metadata_json,
+                        ),
+                    )
+                    self._backfill_module_name(conn, normalized_id, normalized_name or normalized_id)
+                conn.commit()
+
+        self._run_retryable_module_write(_operation)
         module = self.get_module(normalized_id)
         if not module:
             raise ValueError("Failed to persist module")
@@ -381,69 +393,73 @@ class ModuleAdminRepository(SQLiteRepository):
         details: Optional[dict[str, Any]] = None,
     ) -> dict[str, Any]:
         normalized_id = str(module_id or "").strip()
-        now = _utcnow()
         details_payload = dict(details or {})
-        details_json = json.dumps(details_payload, ensure_ascii=False)
-        with self.storage.connect(
-            timeout=MODULE_PROTOCOL_SQLITE_TIMEOUT_SECONDS,
-            busy_timeout_ms=MODULE_PROTOCOL_SQLITE_BUSY_TIMEOUT_MS,
-        ) as conn:
-            row = conn.execute(
-                """
-                SELECT module_name, health_status, error_text, last_validation_at, spool_depth, access_log_exists
-                FROM modules WHERE module_id = ?
-                """,
-                (normalized_id,),
-            ).fetchone()
-            if not row:
-                raise ValueError("Module is not registered")
-            health_status, error_text, last_validation_at, spool_depth, access_log_exists = _module_health_snapshot(
-                details_payload,
-                current_status=row["health_status"] if row else "warn",
-                current_error_text=row["error_text"] if row else "",
-                current_last_validation_at=row["last_validation_at"] if row else "",
-                current_spool_depth=row["spool_depth"] if row else 0,
-                current_access_log_exists=row["access_log_exists"] if row else 0,
-            )
-            conn.execute(
-                """
-                UPDATE modules
-                SET status = ?, version = ?, protocol_version = ?, config_revision_applied = ?, last_seen_at = ?, install_state = 'online',
-                    health_status = ?, error_text = ?, last_validation_at = ?, spool_depth = ?, access_log_exists = ?
-                WHERE module_id = ?
-                """,
-                (
-                    str(status or "online").strip() or "online",
-                    str(version or "").strip(),
-                    str(protocol_version or "v1").strip() or "v1",
-                    int(config_revision_applied or 0),
-                    now,
-                    health_status,
-                    error_text,
-                    last_validation_at,
-                    spool_depth,
-                    access_log_exists,
-                    normalized_id,
-                ),
-            )
-            self._backfill_module_name(conn, normalized_id, str(row["module_name"] or "").strip())
-            conn.execute(
-                """
-                INSERT INTO module_heartbeats (
-                    module_id, status, version, protocol_version, config_revision_applied, details_json, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    normalized_id,
-                    str(status or "online").strip() or "online",
-                    str(version or "").strip(),
-                    str(protocol_version or "v1").strip() or "v1",
-                    int(config_revision_applied or 0),
-                    details_json,
-                    now,
-                ),
-            )
-            conn.commit()
+
+        def _operation() -> None:
+            now = _utcnow()
+            details_json = json.dumps(details_payload, ensure_ascii=False)
+            with self.storage.connect(
+                timeout=MODULE_PROTOCOL_SQLITE_TIMEOUT_SECONDS,
+                busy_timeout_ms=MODULE_PROTOCOL_SQLITE_BUSY_TIMEOUT_MS,
+            ) as conn:
+                row = conn.execute(
+                    """
+                    SELECT module_name, health_status, error_text, last_validation_at, spool_depth, access_log_exists
+                    FROM modules WHERE module_id = ?
+                    """,
+                    (normalized_id,),
+                ).fetchone()
+                if not row:
+                    raise ValueError("Module is not registered")
+                health_status, error_text, last_validation_at, spool_depth, access_log_exists = _module_health_snapshot(
+                    details_payload,
+                    current_status=row["health_status"] if row else "warn",
+                    current_error_text=row["error_text"] if row else "",
+                    current_last_validation_at=row["last_validation_at"] if row else "",
+                    current_spool_depth=row["spool_depth"] if row else 0,
+                    current_access_log_exists=row["access_log_exists"] if row else 0,
+                )
+                conn.execute(
+                    """
+                    UPDATE modules
+                    SET status = ?, version = ?, protocol_version = ?, config_revision_applied = ?, last_seen_at = ?, install_state = 'online',
+                        health_status = ?, error_text = ?, last_validation_at = ?, spool_depth = ?, access_log_exists = ?
+                    WHERE module_id = ?
+                    """,
+                    (
+                        str(status or "online").strip() or "online",
+                        str(version or "").strip(),
+                        str(protocol_version or "v1").strip() or "v1",
+                        int(config_revision_applied or 0),
+                        now,
+                        health_status,
+                        error_text,
+                        last_validation_at,
+                        spool_depth,
+                        access_log_exists,
+                        normalized_id,
+                    ),
+                )
+                self._backfill_module_name(conn, normalized_id, str(row["module_name"] or "").strip())
+                conn.execute(
+                    """
+                    INSERT INTO module_heartbeats (
+                        module_id, status, version, protocol_version, config_revision_applied, details_json, created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        normalized_id,
+                        str(status or "online").strip() or "online",
+                        str(version or "").strip(),
+                        str(protocol_version or "v1").strip() or "v1",
+                        int(config_revision_applied or 0),
+                        details_json,
+                        now,
+                    ),
+                )
+                conn.commit()
+
+        self._run_retryable_module_write(_operation)
         module = self.get_module(normalized_id)
         if not module:
             raise ValueError("Module is not registered")

@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from dotenv import load_dotenv
+from ..storage.config import DatabaseBackendConfig, load_database_backend_config
 
 from .paths import normalize_runtime_bound_settings, resolve_runtime_dir
 
@@ -19,6 +20,7 @@ class RuntimeContext:
     config_path: Path
     config: dict[str, Any]
     env: dict[str, str]
+    database: DatabaseBackendConfig
 
     @property
     def settings(self) -> dict[str, Any]:
@@ -31,11 +33,13 @@ class RuntimeContext:
     def reload_config(self) -> dict[str, Any]:
         with self.config_path.open("r", encoding="utf-8") as handle:
             self.config = normalize_runtime_bound_settings(json.load(handle), self.runtime_dir)
+        self.database = load_database_backend_config(self.config.get("settings", {}), self.env)
         return self.config
 
     def reload_env(self) -> dict[str, str]:
         load_dotenv(self.env_path, override=True)
         self.env = {key: str(value) for key, value in os.environ.items()}
+        self.database = load_database_backend_config(self.config.get("settings", {}), self.env)
         return self.env
 
 
@@ -60,6 +64,7 @@ def load_runtime_context(base_dir: str | Path, explicit_runtime_dir: str | None 
     with config_path.open("r", encoding="utf-8") as handle:
         config = normalize_runtime_bound_settings(json.load(handle), runtime_dir)
     env = {key: str(value) for key, value in os.environ.items()}
+    database = load_database_backend_config(config.get("settings", {}), env)
     return RuntimeContext(
         root_dir=root_dir,
         runtime_dir=runtime_dir,
@@ -67,4 +72,5 @@ def load_runtime_context(base_dir: str | Path, explicit_runtime_dir: str | None 
         config_path=config_path,
         config=config,
         env=env,
+        database=database,
     )

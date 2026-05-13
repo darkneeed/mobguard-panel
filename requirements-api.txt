@@ -3,3 +3,4 @@ uvicorn[standard]
 python-dotenv
 aiohttp
 cryptography
+psycopg[binary]>=3.1

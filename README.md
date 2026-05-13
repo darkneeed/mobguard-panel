@@ -31,6 +31,13 @@ Backward-compatible fallback for older installs is still supported:
 
 - `PANEL_TOKEN` may be used instead of `REMNAWAVE_API_TOKEN`
 
+## Database backend
+
+- `MOBGUARD_DB_BACKEND=sqlite|postgres` selects the staged runtime backend path.
+- `sqlite` remains the supported runtime default.
+- For migration prep, provide `MOBGUARD_POSTGRES_DSN` or the discrete `MOBGUARD_POSTGRES_*` variables.
+- Use `python scripts/migrate_sqlite_to_postgres.py --sqlite-path runtime/bans.db --postgres-dsn ...` to copy the current SQLite operational store into Postgres and validate table counts.
+
 ## Local dev without Docker
 
 For real-time UI work with Vite HMR and backend auto-reload, see [docs/local-dev.md](./docs/local-dev.md).
