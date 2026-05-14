@@ -200,12 +200,78 @@ export type ModuleRecord = {
   stale_after_seconds?: number;
   open_review_cases?: number;
   analysis_events_count?: number;
+  runtime_metrics?: ModuleRuntimeMetrics;
 };
 
 export type ModuleListResponse = {
   items: ModuleRecord[];
   count: number;
+  summary?: ModuleSummary;
   pipeline?: PipelineStatus;
+};
+
+export type ModuleProcessSample = {
+  pid?: number | null;
+  name?: string | null;
+  cmdline?: string | null;
+  cpu_percent?: number | null;
+  rss_bytes?: number | null;
+  vms_bytes?: number | null;
+};
+
+export type ModuleProcessMetrics = {
+  match_count: number;
+  cpu_percent?: number | null;
+  rss_bytes?: number | null;
+  vms_bytes?: number | null;
+  top: ModuleProcessSample[];
+};
+
+export type ModuleSystemMetrics = {
+  cpu_percent?: number | null;
+  cpu_cores?: number | null;
+  load_avg_1m?: number | null;
+  load_avg_5m?: number | null;
+  load_avg_15m?: number | null;
+  memory_total_bytes?: number | null;
+  memory_used_bytes?: number | null;
+  memory_percent?: number | null;
+  disk_total_bytes?: number | null;
+  disk_used_bytes?: number | null;
+  disk_percent?: number | null;
+  disk_read_bps?: number | null;
+  disk_write_bps?: number | null;
+  uptime_seconds?: number | null;
+};
+
+export type ModuleRuntimeMetrics = {
+  activity_window_seconds: number;
+  active_users: number;
+  recent_events: number;
+  system: ModuleSystemMetrics;
+  processes: ModuleProcessMetrics;
+  collected_at?: string | null;
+};
+
+export type ModuleSummary = {
+  activity_window_seconds: number;
+  total_modules: number;
+  pending_modules: number;
+  healthy_modules: number;
+  warning_modules: number;
+  error_modules: number;
+  stale_modules: number;
+  modules_with_metrics: number;
+  active_users_total: number;
+  recent_events_total: number;
+  avg_cpu_percent?: number | null;
+  peak_cpu_percent?: number | null;
+  memory_total_bytes: number;
+  memory_used_bytes: number;
+  disk_total_bytes: number;
+  disk_used_bytes: number;
+  mobguard_process_cpu_percent: number;
+  mobguard_process_rss_bytes: number;
 };
 
 export type ModuleInstallBundle = {

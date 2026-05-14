@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import copy
 import hashlib
+import json
 import os
 import secrets
 import sqlite3
@@ -40,6 +41,7 @@ DEFAULT_ACCESS_LOG_PATH = "/var/log/remnanode/access.log"
 DEFAULT_STATE_DIR = "./state"
 DEFAULT_SPOOL_DIR = "./state/spool"
 DEFAULT_MODULE_EVENT_BATCH_SIZE = 25
+MODULE_ACTIVITY_WINDOW_SECONDS = 900
 
 
 MODULE_INGEST_LOCK = asyncio.Lock()
@@ -302,6 +304,257 @@ def _event_uid(module_id: str, payload: dict[str, Any]) -> str:
         ]
     )
     return hashlib.sha256(fallback.encode("utf-8")).hexdigest()
+
+
+def _coerce_float(value: Any) -> float | None:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _coerce_int(value: Any) -> int | None:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _heartbeat_detail_map(container: APIContainer, module_ids: list[str]) -> dict[str, dict[str, Any]]:
+    if not module_ids:
+        return {}
+    placeholders = ", ".join("?" for _ in module_ids)
+    query = f"""
+        SELECT mh.module_id, mh.details_json
+        FROM module_heartbeats mh
+        JOIN (
+            SELECT module_id, MAX(id) AS max_id
+            FROM module_heartbeats
+            WHERE module_id IN ({placeholders})
+            GROUP BY module_id
+        ) latest ON latest.module_id = mh.module_id AND latest.max_id = mh.id
+    """
+    try:
+        with container.store._snapshot_connect(fast_read=True) as conn:
+            rows = conn.execute(query, module_ids).fetchall()
+    except sqlite3.OperationalError:
+        return {}
+    payload: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        raw_details = str(row["details_json"] or "").strip() or "{}"
+        try:
+            details = json.loads(raw_details)
+        except json.JSONDecodeError:
+            details = {}
+        if isinstance(details, dict):
+            payload[str(row["module_id"] or "").strip()] = details
+    return payload
+
+
+def _activity_identity_sql() -> str:
+    return """
+        COALESCE(
+            NULLIF(subject_uuid, ''),
+            CASE WHEN system_id IS NOT NULL THEN 'sys:' || CAST(system_id AS TEXT) END,
+            CASE WHEN telegram_id IS NOT NULL AND telegram_id != '' THEN 'tg:' || telegram_id END,
+            CASE WHEN username IS NOT NULL AND username != '' THEN 'usr:' || username END,
+            'ip:' || ip
+        )
+    """
+
+
+def _activity_snapshot(
+    container: APIContainer,
+    *,
+    window_seconds: int = MODULE_ACTIVITY_WINDOW_SECONDS,
+) -> dict[str, Any]:
+    occurred_from = (
+        datetime.utcnow().replace(microsecond=0) - timedelta(seconds=max(int(window_seconds), 60))
+    ).isoformat()
+    identity_sql = _activity_identity_sql()
+    try:
+        with container.store._snapshot_connect(fast_read=True) as conn:
+            module_rows = conn.execute(
+                f"""
+                SELECT
+                    module_id,
+                    COUNT(*) AS recent_events,
+                    COUNT(DISTINCT {identity_sql}) AS active_users
+                FROM ingested_raw_events
+                WHERE occurred_at >= ?
+                GROUP BY module_id
+                """,
+                (occurred_from,),
+            ).fetchall()
+            total_row = conn.execute(
+                f"""
+                SELECT
+                    COUNT(*) AS recent_events_total,
+                    COUNT(DISTINCT {identity_sql}) AS active_users_total
+                FROM ingested_raw_events
+                WHERE occurred_at >= ?
+                """,
+                (occurred_from,),
+            ).fetchone()
+    except sqlite3.OperationalError:
+        return {
+            "window_seconds": int(window_seconds),
+            "modules": {},
+            "totals": {
+                "recent_events_total": 0,
+                "active_users_total": 0,
+            },
+        }
+    return {
+        "window_seconds": int(window_seconds),
+        "modules": {
+            str(row["module_id"] or "").strip(): {
+                "recent_events": int(row["recent_events"] or 0),
+                "active_users": int(row["active_users"] or 0),
+            }
+            for row in module_rows
+            if str(row["module_id"] or "").strip()
+        },
+        "totals": {
+            "recent_events_total": int(total_row["recent_events_total"] or 0) if total_row else 0,
+            "active_users_total": int(total_row["active_users_total"] or 0) if total_row else 0,
+        },
+    }
+
+
+def _normalize_runtime_metrics(
+    details: dict[str, Any],
+    *,
+    activity_window_seconds: int,
+    active_users: int,
+    recent_events: int,
+) -> dict[str, Any]:
+    system_raw = details.get("system") if isinstance(details.get("system"), dict) else {}
+    processes_raw = details.get("processes") if isinstance(details.get("processes"), dict) else {}
+    top_raw = processes_raw.get("top") if isinstance(processes_raw.get("top"), list) else []
+    system = {
+        "cpu_percent": _coerce_float(system_raw.get("cpu_percent")),
+        "cpu_cores": _coerce_int(system_raw.get("cpu_cores")),
+        "load_avg_1m": _coerce_float(system_raw.get("load_avg_1m")),
+        "load_avg_5m": _coerce_float(system_raw.get("load_avg_5m")),
+        "load_avg_15m": _coerce_float(system_raw.get("load_avg_15m")),
+        "memory_total_bytes": _coerce_int(system_raw.get("memory_total_bytes")),
+        "memory_used_bytes": _coerce_int(system_raw.get("memory_used_bytes")),
+        "memory_percent": _coerce_float(system_raw.get("memory_percent")),
+        "disk_total_bytes": _coerce_int(system_raw.get("disk_total_bytes")),
+        "disk_used_bytes": _coerce_int(system_raw.get("disk_used_bytes")),
+        "disk_percent": _coerce_float(system_raw.get("disk_percent")),
+        "disk_read_bps": _coerce_int(system_raw.get("disk_read_bps")),
+        "disk_write_bps": _coerce_int(system_raw.get("disk_write_bps")),
+        "uptime_seconds": _coerce_int(system_raw.get("uptime_seconds")),
+    }
+    processes = {
+        "match_count": _coerce_int(processes_raw.get("match_count")) or 0,
+        "cpu_percent": _coerce_float(processes_raw.get("cpu_percent")),
+        "rss_bytes": _coerce_int(processes_raw.get("rss_bytes")),
+        "vms_bytes": _coerce_int(processes_raw.get("vms_bytes")),
+        "top": [
+            {
+                "pid": _coerce_int(item.get("pid")),
+                "name": str(item.get("name") or "").strip(),
+                "cmdline": str(item.get("cmdline") or "").strip(),
+                "cpu_percent": _coerce_float(item.get("cpu_percent")),
+                "rss_bytes": _coerce_int(item.get("rss_bytes")),
+                "vms_bytes": _coerce_int(item.get("vms_bytes")),
+            }
+            for item in top_raw
+            if isinstance(item, dict)
+        ],
+    }
+    return {
+        "activity_window_seconds": int(activity_window_seconds),
+        "active_users": int(active_users),
+        "recent_events": int(recent_events),
+        "system": system,
+        "processes": processes,
+        "collected_at": str(details.get("collected_at") or "").strip() or None,
+    }
+
+
+def _attach_runtime_metrics(
+    container: APIContainer,
+    modules: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    module_ids = [str(item.get("module_id") or "").strip() for item in modules if str(item.get("module_id") or "").strip()]
+    heartbeat_details = _heartbeat_detail_map(container, module_ids)
+    activity = _activity_snapshot(container)
+    per_module_activity = activity.get("modules", {})
+    activity_window_seconds = int(activity.get("window_seconds") or MODULE_ACTIVITY_WINDOW_SECONDS)
+    enriched: list[dict[str, Any]] = []
+    healthy_count = 0
+    warning_count = 0
+    error_count = 0
+    stale_count = 0
+    pending_count = 0
+    cpu_values: list[float] = []
+    memory_total_bytes = 0
+    memory_used_bytes = 0
+    disk_total_bytes = 0
+    disk_used_bytes = 0
+    mobguard_process_cpu_percent = 0.0
+    mobguard_process_rss_bytes = 0
+
+    for module in modules:
+        payload = dict(module)
+        module_id = str(payload.get("module_id") or "").strip()
+        module_activity = per_module_activity.get(module_id, {})
+        details = heartbeat_details.get(module_id, {})
+        payload["runtime_metrics"] = _normalize_runtime_metrics(
+            details,
+            activity_window_seconds=activity_window_seconds,
+            active_users=int(module_activity.get("active_users") or 0),
+            recent_events=int(module_activity.get("recent_events") or 0),
+        )
+        enriched.append(payload)
+
+        if payload.get("install_state") == "pending_install":
+            pending_count += 1
+        elif not payload.get("healthy"):
+            stale_count += 1
+        elif payload.get("health_status") == "error":
+            error_count += 1
+        elif payload.get("health_status") == "warn":
+            warning_count += 1
+        else:
+            healthy_count += 1
+
+        system = payload["runtime_metrics"]["system"]
+        processes = payload["runtime_metrics"]["processes"]
+        cpu_percent = system.get("cpu_percent")
+        if cpu_percent is not None:
+            cpu_values.append(float(cpu_percent))
+        memory_total_bytes += int(system.get("memory_total_bytes") or 0)
+        memory_used_bytes += int(system.get("memory_used_bytes") or 0)
+        disk_total_bytes += int(system.get("disk_total_bytes") or 0)
+        disk_used_bytes += int(system.get("disk_used_bytes") or 0)
+        mobguard_process_cpu_percent += float(processes.get("cpu_percent") or 0.0)
+        mobguard_process_rss_bytes += int(processes.get("rss_bytes") or 0)
+
+    return enriched, {
+        "activity_window_seconds": activity_window_seconds,
+        "total_modules": len(enriched),
+        "pending_modules": pending_count,
+        "healthy_modules": healthy_count,
+        "warning_modules": warning_count,
+        "error_modules": error_count,
+        "stale_modules": stale_count,
+        "modules_with_metrics": sum(1 for item in enriched if item.get("runtime_metrics", {}).get("collected_at")),
+        "active_users_total": int(activity.get("totals", {}).get("active_users_total") or 0),
+        "recent_events_total": int(activity.get("totals", {}).get("recent_events_total") or 0),
+        "avg_cpu_percent": round(sum(cpu_values) / len(cpu_values), 1) if cpu_values else None,
+        "peak_cpu_percent": round(max(cpu_values), 1) if cpu_values else None,
+        "memory_total_bytes": memory_total_bytes,
+        "memory_used_bytes": memory_used_bytes,
+        "disk_total_bytes": disk_total_bytes,
+        "disk_used_bytes": disk_used_bytes,
+        "mobguard_process_cpu_percent": round(mobguard_process_cpu_percent, 1),
+        "mobguard_process_rss_bytes": mobguard_process_rss_bytes,
+    }
 
 
 async def _resolve_remote_user(
@@ -774,12 +1027,15 @@ def list_modules(container: APIContainer) -> dict[str, Any]:
             include_counters=False,
             fast_read=True,
         )
+        fresh_modules = [
+            _apply_module_freshness(module, stale_after_seconds=stale_after_seconds)
+            for module in modules
+        ]
+        enriched_items, summary = _attach_runtime_metrics(container, fresh_modules)
         return {
-            "items": [
-                _apply_module_freshness(module, stale_after_seconds=stale_after_seconds)
-                for module in modules
-            ],
-            "count": len(modules),
+            "items": enriched_items,
+            "count": len(enriched_items),
+            "summary": summary,
             "pipeline": container.store.get_ingest_pipeline_status(fast_read=True),
         }
     except ReadSnapshotUnavailableError as exc:
@@ -815,9 +1071,13 @@ def get_module_detail(container: APIContainer, module_id: str) -> dict[str, Any]
     module = container.store.get_module(module_id)
     if not module:
         raise ValueError("Module is not registered")
+    enriched_modules, _ = _attach_runtime_metrics(
+        container,
+        [_apply_module_freshness(module, stale_after_seconds=_module_stale_after_seconds(container))],
+    )
     return _module_detail_response(
         container,
-        _apply_module_freshness(module, stale_after_seconds=_module_stale_after_seconds(container)),
+        enriched_modules[0],
     )
 
 
@@ -828,9 +1088,13 @@ def update_module_detail(container: APIContainer, module_id: str, payload: dict[
         module_name=normalized["module_name"],
         metadata=normalized["metadata"],
     )
+    enriched_modules, _ = _attach_runtime_metrics(
+        container,
+        [_apply_module_freshness(module, stale_after_seconds=_module_stale_after_seconds(container))],
+    )
     return _module_detail_response(
         container,
-        _apply_module_freshness(module, stale_after_seconds=_module_stale_after_seconds(container)),
+        enriched_modules[0],
     )
 
 

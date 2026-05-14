@@ -23,7 +23,7 @@ from .services.telegram_notifier import TelegramNotifier
 
 
 container = build_container()
-ensure_console_logging(container.runtime.db_path, service_name="mobguard-api")
+ensure_console_logging(container.runtime.database, container.runtime.db_path, service_name="mobguard-api")
 logger = logging.getLogger(__name__)
 
 

@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 
 import { hasPermission } from "../app/permissions";
 import {
@@ -93,6 +93,7 @@ export function DataPage({ session }: { session?: Session }) {
   const { pushToast } = useToast();
   const { section } = useParams();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const tab = useMemo<DataTab>(() => {
     return DATA_TABS.includes(section as DataTab)
       ? (section as DataTab)
@@ -168,6 +169,8 @@ export function DataPage({ session }: { session?: Session }) {
     useState<CalibrationExportPreview | null>(null);
   const [lastCalibrationFilename, setLastCalibrationFilename] = useState("");
   const [previewError, setPreviewError] = useState("");
+  const handledQueryRef = useRef("");
+  const handledIdentifierRef = useRef("");
 
   async function loadConsoleTab() {
     try {
@@ -344,10 +347,12 @@ export function DataPage({ session }: { session?: Session }) {
     };
   }, [tab, calibrationFilters, t]);
 
-  async function searchUsers() {
+  async function searchUsers(queryOverride?: string) {
+    const targetQuery = (queryOverride ?? userQuery).trim();
+    if (!targetQuery) return;
     try {
       const payload = await withPending("userSearch", () =>
-        api.searchUsers(userQuery),
+        api.searchUsers(targetQuery),
       );
       setUserSearch(payload);
     } catch (err) {
@@ -562,6 +567,24 @@ export function DataPage({ session }: { session?: Session }) {
     }
     return `${Math.round(check.current * 100)}% / ${Math.round(check.target * 100)}%`;
   }
+
+  useEffect(() => {
+    if (tab !== "users") return;
+    const queryFromUrl = searchParams.get("query")?.trim() || "";
+    const identifierFromUrl = searchParams.get("identifier")?.trim() || "";
+
+    if (queryFromUrl && queryFromUrl !== userQuery) {
+      setUserQuery(queryFromUrl);
+    }
+    if (queryFromUrl && handledQueryRef.current !== queryFromUrl) {
+      handledQueryRef.current = queryFromUrl;
+      void searchUsers(queryFromUrl);
+    }
+    if (identifierFromUrl && handledIdentifierRef.current !== identifierFromUrl) {
+      handledIdentifierRef.current = identifierFromUrl;
+      void loadUser(identifierFromUrl);
+    }
+  }, [loadUser, searchParams, searchUsers, tab, userQuery]);
 
   return (
     <section className="page">

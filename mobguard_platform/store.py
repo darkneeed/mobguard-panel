@@ -515,6 +515,8 @@ class PlatformStore:
         db_path: str,
         base_config: Optional[dict[str, Any]] = None,
         config_path: Optional[str] = None,
+        *,
+        storage: SQLiteStorage | None = None,
     ):
         self.db_path = db_path
         self.base_config = copy.deepcopy(base_config or {})
@@ -527,7 +529,7 @@ class PlatformStore:
         self._maintenance_state_lock = threading.Lock()
         self._ingest_pipeline_snapshot_dirty = True
         self._last_ingest_pipeline_snapshot_attempt_monotonic = 0.0
-        self.storage = SQLiteStorage(db_path)
+        self.storage = storage or SQLiteStorage(db_path)
         self.sessions = AdminSessionRepository(self.storage)
         self.admin_security = AdminSecurityRepository(self.storage)
         self.health = ServiceHealthRepository(self.storage, db_path)
@@ -905,6 +907,8 @@ class PlatformStore:
             raise
 
     def init_schema(self) -> None:
+        if getattr(self.storage, "backend", "sqlite") != "sqlite":
+            return
         seed_rules = self.build_seed_rules()
         with self._connect() as conn:
             conn.execute("PRAGMA journal_mode=WAL")
@@ -3434,6 +3438,9 @@ class PlatformStore:
             ),
             allow_stale_on_busy=fast_read,
         )
+
+    def get_readiness_status(self) -> dict[str, Any]:
+        return self.health.get_readiness()
 
     def is_admin_tg_id(self, tg_id: int) -> bool:
         return self.get_admin_role_for_tg_id(tg_id) is not None

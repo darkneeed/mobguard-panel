@@ -44,24 +44,79 @@ function toProvisioningPayload(draft: ModuleDraft): ModuleProvisioningPayload {
   };
 }
 
+function formatBytes(value?: number | null): string {
+  if (value === null || value === undefined || Number.isNaN(value)) {
+    return "—";
+  }
+  const units = ["B", "KiB", "MiB", "GiB", "TiB"];
+  let size = Math.max(value, 0);
+  let unit = units[0];
+  for (const candidate of units) {
+    unit = candidate;
+    if (size < 1024 || candidate === units[units.length - 1]) {
+      break;
+    }
+    size /= 1024;
+  }
+  const digits = size >= 100 ? 0 : size >= 10 ? 1 : 2;
+  return `${size.toFixed(digits)} ${unit}`;
+}
+
+function formatRate(value?: number | null): string {
+  if (value === null || value === undefined || Number.isNaN(value)) {
+    return "—";
+  }
+  return `${formatBytes(value)}/s`;
+}
+
+function formatAge(seconds?: number | null): string {
+  if (seconds === null || seconds === undefined || Number.isNaN(seconds)) {
+    return "—";
+  }
+  const total = Math.max(Math.round(seconds), 0);
+  if (total < 60) return `${total}s`;
+  if (total < 3600) return `${Math.round(total / 60)}m`;
+  if (total < 86400) return `${Math.round(total / 3600)}h`;
+  return `${Math.round(total / 86400)}d`;
+}
+
+function formatPercent(value?: number | null): string {
+  if (value === null || value === undefined || Number.isNaN(value)) {
+    return "—";
+  }
+  return `${value.toFixed(1)}%`;
+}
+
 function heartbeatVariant(module: ModuleRecord): string {
   if (module.install_state === "pending_install") {
     return "review-only";
   }
   if (!module.healthy) {
-    return "severity-high";
+    return "severity-critical";
   }
   return "status-resolved";
 }
 
 function validationVariant(module: ModuleRecord): string {
+  const system = module.runtime_metrics?.system;
   if (module.install_state === "pending_install") {
     return "review-only";
   }
-  if (module.health_status === "error") {
+  if (
+    !module.healthy ||
+    module.health_status === "error" ||
+    (system?.cpu_percent ?? 0) >= 92 ||
+    (system?.memory_percent ?? 0) >= 95 ||
+    (system?.disk_percent ?? 0) >= 95
+  ) {
     return "punitive";
   }
-  if (module.health_status === "warn") {
+  if (
+    module.health_status === "warn" ||
+    (system?.cpu_percent ?? 0) >= 75 ||
+    (system?.memory_percent ?? 0) >= 85 ||
+    (system?.disk_percent ?? 0) >= 88
+  ) {
     return "severity-high";
   }
   return "status-resolved";
@@ -77,6 +132,29 @@ function heartbeatLabelKey(module: ModuleRecord): string {
   return "modules.freshness.ok";
 }
 
+function metricVariant(value?: number | null, warn = 75, error = 90): string {
+  if (value === null || value === undefined || Number.isNaN(value)) {
+    return "severity-low";
+  }
+  if (value >= error) return "severity-critical";
+  if (value >= warn) return "severity-high";
+  return "status-resolved";
+}
+
+function meterWidth(value?: number | null): string {
+  if (value === null || value === undefined || Number.isNaN(value)) {
+    return "0%";
+  }
+  return `${Math.min(Math.max(value, 0), 100)}%`;
+}
+
+function summaryPercent(used?: number | null, total?: number | null): number | null {
+  if (used === null || used === undefined || total === null || total === undefined || total <= 0) {
+    return null;
+  }
+  return (used / total) * 100;
+}
+
 export function ModulesPage({ session }: { session?: Session }) {
   const { t, language } = useI18n();
   const { pushToast } = useToast();
@@ -87,6 +165,7 @@ export function ModulesPage({ session }: { session?: Session }) {
   const [draft, setDraft] = useState<ModuleDraft>(EMPTY_DRAFT);
   const [savedDraft, setSavedDraft] = useState<ModuleDraft>(EMPTY_DRAFT);
   const [revealedToken, setRevealedToken] = useState("");
+  const [query, setQuery] = useState("");
   const [error, setError] = useState("");
   const [panelError, setPanelError] = useState("");
   const [saved, setSaved] = useState("");
@@ -105,6 +184,24 @@ export function ModulesPage({ session }: { session?: Session }) {
     modalMode === "create"
       ? draftDirty && Boolean(draft.module_name.trim())
       : draftDirty;
+
+  const filteredItems = useMemo(() => {
+    const items = data?.items || [];
+    const normalizedQuery = query.trim().toLowerCase();
+    if (!normalizedQuery) return items;
+    return items.filter((item) => {
+      const haystack = [
+        item.module_name,
+        item.module_id,
+        item.version,
+        ...(item.inbound_tags || []),
+      ]
+        .join(" ")
+        .toLowerCase();
+      return haystack.includes(normalizedQuery);
+    });
+  }, [data, query]);
+
   const installedItems = useMemo(
     () =>
       (data?.items || []).filter(
@@ -112,14 +209,15 @@ export function ModulesPage({ session }: { session?: Session }) {
       ),
     [data],
   );
+
   const healthyCount = installedItems.filter(
-    (item) => item.healthy && item.health_status === "ok",
+    (item) => item.healthy && validationVariant(item) === "status-resolved",
   ).length;
   const warnCount = installedItems.filter(
-    (item) => item.healthy && item.health_status === "warn",
+    (item) => item.healthy && validationVariant(item) === "severity-high",
   ).length;
   const errorCount = installedItems.filter(
-    (item) => item.healthy && item.health_status === "error",
+    (item) => validationVariant(item) === "punitive",
   ).length;
   const staleCount = installedItems.filter((item) => !item.healthy).length;
 
@@ -208,6 +306,7 @@ export function ModulesPage({ session }: { session?: Session }) {
           return {
             items: nextItems,
             count: nextItems.length,
+            summary: prev?.summary,
             pipeline: prev?.pipeline,
           };
         });
@@ -228,6 +327,7 @@ export function ModulesPage({ session }: { session?: Session }) {
               : item,
           ),
           count: prev?.count || 0,
+          summary: prev?.summary,
           pipeline: prev?.pipeline,
         }));
         setSaved(t("modules.updateSuccess"));
@@ -266,34 +366,55 @@ export function ModulesPage({ session }: { session?: Session }) {
     }
   }
 
-  function formatAge(seconds?: number | null): string {
-    if (seconds === null || seconds === undefined || Number.isNaN(seconds)) {
-      return t("common.notAvailable");
-    }
-    const total = Math.max(Math.round(seconds), 0);
-    if (total < 60) return `${total}s`;
-    if (total < 3600) return `${Math.round(total / 60)}m`;
-    return `${Math.round(total / 3600)}h`;
-  }
-
-  function formatHeartbeatAge(module: ModuleRecord): string {
-    return formatAge(module.seconds_since_last_seen);
-  }
-
-  function formatFreshnessWindow(module: ModuleRecord): string {
-    return formatAge(module.stale_after_seconds);
+  function renderMetricMeter(
+    label: string,
+    value?: number | null,
+    suffix = "%",
+    warn = 75,
+    error = 90,
+  ) {
+    const variant = metricVariant(value, warn, error);
+    return (
+      <div className="module-meter">
+        <div className="module-meter-head">
+          <span>{label}</span>
+          <strong>{value === null || value === undefined ? "—" : `${value.toFixed(1)}${suffix}`}</strong>
+        </div>
+        <div className="module-meter-track">
+          <span
+            className={`module-meter-fill ${variant}`}
+            style={{ width: meterWidth(value) }}
+          />
+        </div>
+      </div>
+    );
   }
 
   function renderModuleCard(item: ModuleRecord) {
     const isActive = modalMode === "detail" && selectedId === item.module_id;
+    const runtime = item.runtime_metrics;
+    const system = runtime?.system;
+    const activeUsers = runtime?.active_users ?? 0;
+    const recentEvents = runtime?.recent_events ?? 0;
 
     return (
       <article
-        className={`queue-card module-card ${isActive ? "module-card-active" : ""}`}
+        className={`queue-card module-ops-card ${isActive ? "module-card-active" : ""}`}
         key={item.module_id}
       >
         <div className="queue-card-top">
-          <strong>{item.module_name}</strong>
+          <div>
+            <strong>{item.module_name}</strong>
+            <div className="queue-card-identifiers">
+              <span>{t("modules.moduleId", { value: item.module_id })}</span>
+              <span>
+                {t("modules.version", {
+                  value: item.version || t("common.notAvailable"),
+                })}
+              </span>
+              <span>{t("modules.protocol", { value: item.protocol_version || "v1" })}</span>
+            </div>
+          </div>
           <div className="queue-card-flags">
             <span className={`status-badge ${heartbeatVariant(item)}`}>
               {t(heartbeatLabelKey(item))}
@@ -305,63 +426,74 @@ export function ModulesPage({ session }: { session?: Session }) {
             ) : null}
           </div>
         </div>
-        <div className="queue-card-identifiers">
-          <span>{t("modules.moduleId", { value: item.module_id })}</span>
-          <span>
-            {t("modules.version", {
-              value: item.version || t("common.notAvailable"),
-            })}
-          </span>
-          <span>
-            {t("modules.protocol", { value: item.protocol_version || "v1" })}
-          </span>
+
+        <div className="module-ops-grid">
+          <div className="module-ops-chip">
+            <span>Онлайн {runtime?.activity_window_seconds ? `${Math.round(runtime.activity_window_seconds / 60)}м` : ""}</span>
+            <strong>{activeUsers}</strong>
+          </div>
+          <div className="module-ops-chip">
+            <span>События {runtime?.activity_window_seconds ? `${Math.round(runtime.activity_window_seconds / 60)}м` : ""}</span>
+            <strong>{recentEvents}</strong>
+          </div>
+          <div className="module-ops-chip">
+            <span>Spool</span>
+            <strong>{item.spool_depth}</strong>
+          </div>
+          <div className="module-ops-chip">
+            <span>MobGuard RSS</span>
+            <strong>{formatBytes(runtime?.processes?.rss_bytes)}</strong>
+          </div>
         </div>
-        <div className="queue-card-stack">
-          <div className="queue-card-meta">
-            <span>{t("modules.lastSeen")}</span>
-            <strong>
+
+        <div className="module-meters">
+          {renderMetricMeter("CPU", system?.cpu_percent)}
+          {renderMetricMeter("RAM", system?.memory_percent)}
+          {renderMetricMeter("Диск", system?.disk_percent, "%", 80, 92)}
+        </div>
+
+        <div className="record-grid">
+          <div className="record-kv">
+            <strong>{t("modules.lastSeen")}</strong>
+            <span>
               {formatDisplayDateTime(
                 item.last_seen_at,
                 t("common.notAvailable"),
                 language,
               )}
-            </strong>
+            </span>
           </div>
-          <div className="queue-card-meta">
-            <span>{t("modules.lastHeartbeatAge")}</span>
-            <strong>{formatHeartbeatAge(item)}</strong>
+          <div className="record-kv">
+            <strong>{t("modules.lastHeartbeatAge")}</strong>
+            <span>{formatAge(item.seconds_since_last_seen)}</span>
           </div>
-          <div className="queue-card-meta">
-            <span>{t("modules.staleWindow")}</span>
-            <strong>{formatFreshnessWindow(item)}</strong>
+          <div className="record-kv">
+            <strong>Load avg</strong>
+            <span>
+              {system?.load_avg_1m !== null && system?.load_avg_1m !== undefined
+                ? `${system.load_avg_1m?.toFixed(2)} / ${system.load_avg_5m?.toFixed(2) ?? "0.00"} / ${system.load_avg_15m?.toFixed(2) ?? "0.00"}`
+                : "—"}
+            </span>
           </div>
-          <div className="queue-card-meta">
-            <span>{t("modules.inboundTags")}</span>
-            <strong>
+          <div className="record-kv">
+            <strong>{t("modules.inboundTags")}</strong>
+            <span>
               {item.inbound_tags.length
                 ? item.inbound_tags.join(", ")
                 : t("common.notAvailable")}
-            </strong>
-          </div>
-          <div className="queue-card-meta">
-            <span>{t("modules.accessLogExists")}</span>
-            <strong>
-              {item.access_log_exists ? t("common.yes") : t("common.no")}
-            </strong>
-          </div>
-          <div className="queue-card-meta">
-            <span>{t("modules.spoolDepth")}</span>
-            <strong>{item.spool_depth}</strong>
+            </span>
           </div>
         </div>
-        {!item.healthy && item.install_state !== "pending_install" ? (
-          <div className="record-meta">
-            {t("modules.freshnessHint", { value: formatFreshnessWindow(item) })}
-          </div>
-        ) : null}
-        {item.error_text ? (
-          <div className="error-box">{item.error_text}</div>
-        ) : null}
+
+        <div className="record-meta">
+          <span>RAM {formatBytes(system?.memory_used_bytes)} / {formatBytes(system?.memory_total_bytes)}</span>
+          <span>Disk {formatBytes(system?.disk_used_bytes)} / {formatBytes(system?.disk_total_bytes)}</span>
+          <span>I/O {formatRate(system?.disk_read_bps)} ↓ / {formatRate(system?.disk_write_bps)} ↑</span>
+          <span>{t("modules.accessLogExists")}: {item.access_log_exists ? t("common.yes") : t("common.no")}</span>
+        </div>
+
+        {item.error_text ? <div className="error-box">{item.error_text}</div> : null}
+
         <div className="action-row">
           <button className="ghost" onClick={() => openModule(item.module_id)}>
             {t("modules.open")}
@@ -370,6 +502,8 @@ export function ModulesPage({ session }: { session?: Session }) {
       </article>
     );
   }
+
+  const summary = data?.summary;
 
   return (
     <section className="page">
@@ -396,16 +530,6 @@ export function ModulesPage({ session }: { session?: Session }) {
           <strong>{data?.count ?? "—"}</strong>
         </div>
         <div className="stat-card">
-          <span>{t("modules.cards.pending")}</span>
-          <strong>
-            {data
-              ? data.items.filter(
-                  (item) => item.install_state === "pending_install",
-                ).length
-              : "—"}
-          </strong>
-        </div>
-        <div className="stat-card">
           <span>{t("modules.cards.healthy")}</span>
           <strong>{data ? healthyCount : "—"}</strong>
         </div>
@@ -421,6 +545,30 @@ export function ModulesPage({ session }: { session?: Session }) {
           <span>{t("modules.cards.stale")}</span>
           <strong>{data ? staleCount : "—"}</strong>
         </div>
+        <div className="stat-card">
+          <span>Онлайн модулей</span>
+          <strong>{summary?.active_users_total ?? "—"}</strong>
+        </div>
+        <div className="stat-card">
+          <span>События за окно</span>
+          <strong>{summary?.recent_events_total ?? "—"}</strong>
+        </div>
+        <div className="stat-card">
+          <span>Средний CPU</span>
+          <strong>{formatPercent(summary?.avg_cpu_percent)}</strong>
+        </div>
+        <div className="stat-card">
+          <span>RAM</span>
+          <strong>
+            {formatPercent(summaryPercent(summary?.memory_used_bytes, summary?.memory_total_bytes))}
+          </strong>
+        </div>
+        <div className="stat-card">
+          <span>Диск</span>
+          <strong>
+            {formatPercent(summaryPercent(summary?.disk_used_bytes, summary?.disk_total_bytes))}
+          </strong>
+        </div>
       </div>
 
       <div className="panel">
@@ -429,10 +577,17 @@ export function ModulesPage({ session }: { session?: Session }) {
             <h2>{t("modules.listTitle")}</h2>
             <p className="muted">{t("modules.listDescription")}</p>
           </div>
+          <div className="search-strip compact-search-strip">
+            <input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Поиск по имени, ID или INBOUND-тегу"
+            />
+          </div>
         </div>
-        <div className="queue-grid">
-          {(data?.items || []).map(renderModuleCard)}
-          {!data?.items.length ? (
+        <div className="queue-grid module-ops-grid-list">
+          {filteredItems.map(renderModuleCard)}
+          {!filteredItems.length ? (
             <div className="provider-empty">{t("modules.empty")}</div>
           ) : null}
         </div>
@@ -532,14 +687,14 @@ export function ModulesPage({ session }: { session?: Session }) {
             <div className="panel">{t("common.loading")}</div>
           ) : null}
 
-          {modalMode === "detail" ? (
+          {modalMode === "detail" && activeModule ? (
             <>
-              <div className="panel">
-                <div className="panel-heading">
-                  <h2>{t("modules.healthTitle")}</h2>
-                  <p className="muted">{t("modules.healthDescription")}</p>
-                </div>
-                {activeModule ? (
+              <div className="detail-grid">
+                <div className="panel">
+                  <div className="panel-heading">
+                    <h2>{t("modules.healthTitle")}</h2>
+                    <p className="muted">{t("modules.healthDescription")}</p>
+                  </div>
                   <div className="detail-list">
                     <div>
                       <dt>{t("modules.freshnessTitle")}</dt>
@@ -555,11 +710,7 @@ export function ModulesPage({ session }: { session?: Session }) {
                     </div>
                     <div>
                       <dt>{t("modules.lastHeartbeatAge")}</dt>
-                      <dd>{formatHeartbeatAge(activeModule)}</dd>
-                    </div>
-                    <div>
-                      <dt>{t("modules.staleWindow")}</dt>
-                      <dd>{formatFreshnessWindow(activeModule)}</dd>
+                      <dd>{formatAge(activeModule.seconds_since_last_seen)}</dd>
                     </div>
                     <div>
                       <dt>{t("modules.lastValidationAt")}</dt>
@@ -584,23 +735,120 @@ export function ModulesPage({ session }: { session?: Session }) {
                       </dd>
                     </div>
                   </div>
-                ) : (
-                  <div className="provider-empty">
-                    {t("modules.healthEmpty")}
+                  {activeModule.error_text ? (
+                    <div className="error-box">{activeModule.error_text}</div>
+                  ) : null}
+                </div>
+
+                <div className="panel">
+                  <div className="panel-heading">
+                    <h2>Нагрузка и активность</h2>
+                    <p className="muted">
+                      Последний снимок по серверу и процессам MobGuard.
+                    </p>
                   </div>
-                )}
-                {activeModule &&
-                !activeModule.healthy &&
-                activeModule.install_state !== "pending_install" ? (
-                  <div className="record-meta">
-                    {t("modules.freshnessHint", {
-                      value: formatFreshnessWindow(activeModule),
-                    })}
+                  <div className="stats-grid">
+                    <div className="stat-card">
+                      <span>Онлайн</span>
+                      <strong>{activeModule.runtime_metrics?.active_users ?? "—"}</strong>
+                    </div>
+                    <div className="stat-card">
+                      <span>События</span>
+                      <strong>{activeModule.runtime_metrics?.recent_events ?? "—"}</strong>
+                    </div>
+                    <div className="stat-card">
+                      <span>CPU</span>
+                      <strong>{formatPercent(activeModule.runtime_metrics?.system?.cpu_percent)}</strong>
+                    </div>
+                    <div className="stat-card">
+                      <span>RAM</span>
+                      <strong>{formatPercent(activeModule.runtime_metrics?.system?.memory_percent)}</strong>
+                    </div>
                   </div>
-                ) : null}
-                {activeModule?.error_text ? (
-                  <div className="error-box">{activeModule.error_text}</div>
-                ) : null}
+                  <div className="module-meters">
+                    {renderMetricMeter("CPU", activeModule.runtime_metrics?.system?.cpu_percent)}
+                    {renderMetricMeter("RAM", activeModule.runtime_metrics?.system?.memory_percent)}
+                    {renderMetricMeter("Диск", activeModule.runtime_metrics?.system?.disk_percent, "%", 80, 92)}
+                  </div>
+                  <div className="record-grid">
+                    <div className="record-kv">
+                      <strong>Load avg</strong>
+                      <span>
+                        {activeModule.runtime_metrics?.system?.load_avg_1m !== null &&
+                        activeModule.runtime_metrics?.system?.load_avg_1m !== undefined
+                          ? `${activeModule.runtime_metrics?.system?.load_avg_1m?.toFixed(2)} / ${activeModule.runtime_metrics?.system?.load_avg_5m?.toFixed(2) ?? "0.00"} / ${activeModule.runtime_metrics?.system?.load_avg_15m?.toFixed(2) ?? "0.00"}`
+                          : "—"}
+                      </span>
+                    </div>
+                    <div className="record-kv">
+                      <strong>RAM</strong>
+                      <span>
+                        {formatBytes(activeModule.runtime_metrics?.system?.memory_used_bytes)} / {formatBytes(activeModule.runtime_metrics?.system?.memory_total_bytes)}
+                      </span>
+                    </div>
+                    <div className="record-kv">
+                      <strong>Диск</strong>
+                      <span>
+                        {formatBytes(activeModule.runtime_metrics?.system?.disk_used_bytes)} / {formatBytes(activeModule.runtime_metrics?.system?.disk_total_bytes)}
+                      </span>
+                    </div>
+                    <div className="record-kv">
+                      <strong>Uptime</strong>
+                      <span>{formatAge(activeModule.runtime_metrics?.system?.uptime_seconds)}</span>
+                    </div>
+                    <div className="record-kv">
+                      <strong>MobGuard CPU</strong>
+                      <span>{formatPercent(activeModule.runtime_metrics?.processes?.cpu_percent)}</span>
+                    </div>
+                    <div className="record-kv">
+                      <strong>MobGuard RSS</strong>
+                      <span>{formatBytes(activeModule.runtime_metrics?.processes?.rss_bytes)}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="panel">
+                <div className="panel-heading panel-heading-row">
+                  <div>
+                    <h2>Процессы MobGuard</h2>
+                    <p className="muted">
+                      Найдено процессов: {activeModule.runtime_metrics?.processes?.match_count ?? 0}
+                    </p>
+                  </div>
+                </div>
+                <div className="record-list">
+                  {(activeModule.runtime_metrics?.processes?.top || []).length ? (
+                    activeModule.runtime_metrics?.processes?.top.map((process, index) => (
+                      <div className="record-item" key={`${process.pid || "pid"}-${index}`}>
+                        <div className="record-main">
+                          <span className="record-title">
+                            {process.name || "process"} #{process.pid ?? "—"}
+                          </span>
+                          <span className={`tag ${metricVariant(process.cpu_percent, 50, 80)}`}>
+                            CPU {formatPercent(process.cpu_percent)}
+                          </span>
+                        </div>
+                        <div className="record-grid">
+                          <div className="record-kv">
+                            <strong>RSS</strong>
+                            <span>{formatBytes(process.rss_bytes)}</span>
+                          </div>
+                          <div className="record-kv">
+                            <strong>VMS</strong>
+                            <span>{formatBytes(process.vms_bytes)}</span>
+                          </div>
+                          <div className="record-kv">
+                            <strong>Команда</strong>
+                            <span>{process.cmdline || "—"}</span>
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="provider-empty">Снимок процессов пока не получен</div>
+                  )}
+                </div>
               </div>
 
               <div className="panel">

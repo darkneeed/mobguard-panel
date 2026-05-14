@@ -22,6 +22,10 @@
   grid-template-columns: minmax(0, 1.4fr) minmax(320px, 0.9fr);
 }
 
+.overview-split-grid {
+  align-items: start;
+}
+
 .panel-hero {
   background:
     linear-gradient(145deg, rgba(15, 118, 110, 0.09), rgba(255, 255, 255, 0)),
@@ -331,6 +335,10 @@
   }
 
   .env-field-edit-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .module-ops-grid {
     grid-template-columns: 1fr;
   }
 

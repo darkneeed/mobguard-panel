@@ -18,14 +18,16 @@ def utcnow_iso() -> str:
 
 
 class AnalysisStore:
-    def __init__(self, db_path: str):
+    def __init__(self, db_path: str, *, storage: SQLiteStorage | None = None):
         self.db_path = db_path
-        self.storage = SQLiteStorage(db_path)
+        self.storage = storage or SQLiteStorage(db_path)
 
     def _connect(self) -> sqlite3.Connection:
         return self.storage.connect()
 
     def init_schema(self) -> None:
+        if getattr(self.storage, "backend", "sqlite") != "sqlite":
+            return
         with self._connect() as conn:
             conn.execute("PRAGMA journal_mode=WAL")
             conn.execute(

@@ -131,9 +131,11 @@ class ServiceHealthRepository(SQLiteRepository):
         ipinfo_token_present = bool(os.getenv("IPINFO_TOKEN"))
         degraded = not core_snapshot["healthy"] or not ipinfo_token_present
         overall = "degraded" if degraded else "ok"
+        db_backend = str(getattr(self.storage, "backend", "sqlite") or "sqlite")
+        db_target = self.db_path if db_backend == "sqlite" else "postgres"
         return {
             "status": overall,
-            "db": {"healthy": True, "path": self.db_path},
+            "db": {"healthy": True, "path": self.db_path, "backend": db_backend, "target": db_target},
             "live_rules": {
                 "revision": live_rules_state["revision"],
                 "updated_at": live_rules_state["updated_at"],
@@ -149,4 +151,35 @@ class ServiceHealthRepository(SQLiteRepository):
                 "asn_missing_count": asn_missing_count,
                 "asn_missing_ratio": asn_missing_ratio,
             },
+        }
+
+    def get_readiness(
+        self,
+        *,
+        required_tables: tuple[str, ...] = (
+            "live_rules",
+            "modules",
+            "admin_sessions",
+            "analysis_events",
+            "violations",
+        ),
+    ) -> dict[str, Any]:
+        try:
+            with self.storage.connect(timeout=2, query_time_limit_ms=2000) as conn:
+                conn.execute("SELECT 1").fetchone()
+                missing_tables = [table_name for table_name in required_tables if not self.storage.table_exists(conn, table_name)]
+        except Exception as exc:
+            return {
+                "ready": False,
+                "backend": str(getattr(self.storage, "backend", "sqlite") or "sqlite"),
+                "target": self.db_path if str(getattr(self.storage, "backend", "sqlite")) == "sqlite" else "postgres",
+                "missing_tables": [],
+                "error": str(exc),
+            }
+        return {
+            "ready": len(missing_tables) == 0,
+            "backend": str(getattr(self.storage, "backend", "sqlite") or "sqlite"),
+            "target": self.db_path if str(getattr(self.storage, "backend", "sqlite")) == "sqlite" else "postgres",
+            "missing_tables": missing_tables,
+            "error": "",
         }

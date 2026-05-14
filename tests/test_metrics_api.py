@@ -133,3 +133,125 @@ class MetricsAPITests(unittest.TestCase):
         self.assertEqual(payload["realtime_usage"]["active_users"], 2)
         self.assertEqual(payload["realtime_usage"]["violating_users"], 1)
         self.assertEqual(payload["realtime_usage"]["compliant_users"], 1)
+
+    def test_admin_modules_includes_runtime_summary_and_latest_heartbeat_metrics(self):
+        self.store.create_managed_module(
+            "node-metrics",
+            "token-metrics",
+            "encrypted-token-metrics",
+            module_name="Node Metrics",
+            metadata={"inbound_tags": ["SELFSTEAL_RU-YANDEX_TCP"]},
+        )
+        module_service.register_module(
+            self.container,
+            {
+                "module_id": "node-metrics",
+                "module_name": "Node Metrics",
+                "version": "1.0.0",
+                "protocol_version": "v1",
+            },
+            "token-metrics",
+        )
+        module_service.record_module_heartbeat(
+            self.container,
+            {
+                "module_id": "node-metrics",
+                "status": "online",
+                "version": "1.0.1",
+                "protocol_version": "v1",
+                "config_revision_applied": 3,
+                "details": {
+                    "health_status": "ok",
+                    "error_text": "",
+                    "last_validation_at": "2026-04-11T10:01:00",
+                    "spool_depth": 1,
+                    "access_log_exists": True,
+                    "system": {
+                        "cpu_percent": 23.5,
+                        "memory_total_bytes": 4096,
+                        "memory_used_bytes": 2048,
+                        "memory_percent": 50.0,
+                        "disk_total_bytes": 8192,
+                        "disk_used_bytes": 4096,
+                        "disk_percent": 50.0,
+                    },
+                    "processes": {
+                        "match_count": 1,
+                        "cpu_percent": 0.5,
+                        "rss_bytes": 1024,
+                        "top": [
+                            {
+                                "pid": 100,
+                                "name": "python",
+                                "cmdline": "python -m mobguard_module.main",
+                                "cpu_percent": 0.5,
+                                "rss_bytes": 1024,
+                            }
+                        ],
+                    },
+                    "collected_at": "2026-04-11T10:01:00",
+                },
+            },
+            "token-metrics",
+        )
+        with self.store._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO ingested_raw_events (
+                    event_uid, module_id, module_name, received_at, occurred_at, log_offset,
+                    subject_uuid, username, system_id, telegram_id, ip, tag, raw_payload_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    "evt-1",
+                    "node-metrics",
+                    "Node Metrics",
+                    "2026-04-11T10:00:10",
+                    "9999-04-11T10:00:00",
+                    1,
+                    "uuid-1",
+                    "alice",
+                    None,
+                    None,
+                    "1.2.3.4",
+                    "SELFSTEAL_RU-YANDEX_TCP",
+                    "{}",
+                ),
+            )
+            conn.execute(
+                """
+                INSERT INTO ingested_raw_events (
+                    event_uid, module_id, module_name, received_at, occurred_at, log_offset,
+                    subject_uuid, username, system_id, telegram_id, ip, tag, raw_payload_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    "evt-2",
+                    "node-metrics",
+                    "Node Metrics",
+                    "2026-04-11T10:00:10",
+                    "9999-04-11T10:00:01",
+                    2,
+                    "uuid-2",
+                    "bob",
+                    None,
+                    None,
+                    "1.2.3.5",
+                    "SELFSTEAL_RU-YANDEX_TCP",
+                    "{}",
+                ),
+            )
+            conn.commit()
+
+        payload = modules_router.admin_list_modules(_={}, container=self.container)
+
+        self.assertIn("summary", payload)
+        self.assertEqual(payload["summary"]["active_users_total"], 2)
+        self.assertEqual(payload["summary"]["recent_events_total"], 2)
+        self.assertEqual(payload["summary"]["avg_cpu_percent"], 23.5)
+        self.assertEqual(payload["summary"]["memory_total_bytes"], 4096)
+        self.assertEqual(payload["summary"]["mobguard_process_rss_bytes"], 1024)
+        self.assertEqual(payload["items"][0]["runtime_metrics"]["active_users"], 2)
+        self.assertEqual(payload["items"][0]["runtime_metrics"]["recent_events"], 2)
+        self.assertEqual(payload["items"][0]["runtime_metrics"]["system"]["cpu_percent"], 23.5)
+        self.assertEqual(payload["items"][0]["runtime_metrics"]["processes"]["match_count"], 1)

@@ -1,76 +1,135 @@
-import { useState } from "react";
+import { FormEvent, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { hasPermission } from "../app/permissions";
 import { prefetchRouteModule } from "../app/routeModules";
 import {
   api,
+  ModuleListResponse,
+  ModuleRecord,
   OverviewMetricsResponse,
   Session,
+  UserSearchResponse,
 } from "../api/client";
 import { useI18n } from "../localization";
-import {
-  automationGuardrailLabels,
-  automationModeLabel,
-  automationModeReasonLabels,
-} from "../shared/automationStatus";
 import { useVisiblePolling } from "../shared/useVisiblePolling";
 import { formatDisplayDateTime } from "../utils/datetime";
-
-type QualityPayload = {
-  open_cases: number;
-  total_cases: number;
-  resolved_home: number;
-  resolved_mobile: number;
-  skipped: number;
-  active_learning_patterns: number;
-  active_sessions: number;
-  live_rules_revision: number;
-  live_rules_updated_at: string;
-  live_rules_updated_by: string;
-  top_noisy_asns: Array<{ asn_key: string; cnt: number }>;
-  mixed_providers: {
-    open_cases: number;
-    conflict_cases: number;
-    conflict_rate: number;
-    top_open_cases: Array<{
-      provider_key: string;
-      open_cases: number;
-      conflict_cases: number;
-      home_cases: number;
-      mobile_cases: number;
-      unsure_cases: number;
-    }>;
-  };
-  learning: {
-    promoted: {
-      active_patterns: number;
-    };
-  };
-};
 
 const OVERVIEW_REFRESH_MS = 30000;
 const OVERVIEW_STALE_AFTER_SECONDS = 15;
 
-type RealtimeUsagePayload = {
-  active_users: number;
-  violating_users: number;
-  compliant_users: number;
-  active_window_seconds?: number;
-};
+function formatBytes(value?: number | null): string {
+  if (value === null || value === undefined || Number.isNaN(value)) {
+    return "—";
+  }
+  const units = ["B", "KiB", "MiB", "GiB", "TiB"];
+  let size = Math.max(value, 0);
+  let unit = units[0];
+  for (const candidate of units) {
+    unit = candidate;
+    if (size < 1024 || candidate === units[units.length - 1]) {
+      break;
+    }
+    size /= 1024;
+  }
+  const digits = size >= 100 ? 0 : size >= 10 ? 1 : 2;
+  return `${size.toFixed(digits)} ${unit}`;
+}
+
+function formatRate(value?: number | null): string {
+  if (value === null || value === undefined || Number.isNaN(value)) {
+    return "—";
+  }
+  return `${formatBytes(value)}/s`;
+}
+
+function formatPercent(value?: number | null): string {
+  if (value === null || value === undefined || Number.isNaN(value)) {
+    return "—";
+  }
+  return `${value.toFixed(1)}%`;
+}
+
+function formatAge(seconds?: number | null): string {
+  if (seconds === null || seconds === undefined || Number.isNaN(seconds)) {
+    return "—";
+  }
+  const total = Math.max(Math.round(seconds), 0);
+  if (total < 60) return `${total}s`;
+  if (total < 3600) return `${Math.round(total / 60)}m`;
+  if (total < 86400) return `${Math.round(total / 3600)}h`;
+  return `${Math.round(total / 86400)}d`;
+}
+
+function summaryPercent(used?: number | null, total?: number | null): number | null {
+  if (used === null || used === undefined || total === null || total === undefined || total <= 0) {
+    return null;
+  }
+  return (used / total) * 100;
+}
+
+function metricVariant(value?: number | null, warn = 75, error = 90): string {
+  if (value === null || value === undefined || Number.isNaN(value)) {
+    return "severity-low";
+  }
+  if (value >= error) return "severity-critical";
+  if (value >= warn) return "severity-high";
+  return "status-resolved";
+}
+
+function meterWidth(value?: number | null): string {
+  if (value === null || value === undefined || Number.isNaN(value)) {
+    return "0%";
+  }
+  return `${Math.min(Math.max(value, 0), 100)}%`;
+}
+
+function moduleVariant(module: ModuleRecord): string {
+  const system = module.runtime_metrics?.system;
+  if (module.install_state === "pending_install") {
+    return "review-only";
+  }
+  if (
+    !module.healthy ||
+    module.health_status === "error" ||
+    (system?.cpu_percent ?? 0) >= 92 ||
+    (system?.memory_percent ?? 0) >= 95 ||
+    (system?.disk_percent ?? 0) >= 95
+  ) {
+    return "punitive";
+  }
+  if (
+    module.health_status === "warn" ||
+    (system?.cpu_percent ?? 0) >= 75 ||
+    (system?.memory_percent ?? 0) >= 85 ||
+    (system?.disk_percent ?? 0) >= 88
+  ) {
+    return "severity-high";
+  }
+  return "status-resolved";
+}
 
 export function OverviewPage({ session }: { session?: Session }) {
   const { t, language } = useI18n();
-  const [data, setData] = useState<OverviewMetricsResponse | null>(null);
+  const [overview, setOverview] = useState<OverviewMetricsResponse | null>(null);
+  const [modules, setModules] = useState<ModuleListResponse | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [lastLoadedAt, setLastLoadedAt] = useState<string>("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResult, setSearchResult] = useState<UserSearchResponse | null>(null);
+  const [searchError, setSearchError] = useState("");
+  const [searchPending, setSearchPending] = useState(false);
   const canReadData = session ? hasPermission(session, "data.read") : true;
 
   async function load() {
     try {
-      const payload = await api.getOverview();
-      setData(payload as OverviewMetricsResponse);
+      const [overviewPayload, modulesPayload] = await Promise.all([
+        api.getOverview(),
+        api.getModules(),
+      ]);
+      setOverview(overviewPayload as OverviewMetricsResponse);
+      setModules(modulesPayload as ModuleListResponse);
       setError("");
       setLastLoadedAt(new Date().toISOString());
     } catch (err) {
@@ -84,114 +143,113 @@ export function OverviewPage({ session }: { session?: Session }) {
 
   useVisiblePolling(true, load, OVERVIEW_REFRESH_MS, [t]);
 
-  const health = data?.health || null;
-  const quality = (data?.quality as QualityPayload | undefined) || null;
-  const queue = data?.latest_cases || null;
-  const pipeline = data?.pipeline || null;
-  const freshness = data?.freshness || null;
-  const automationStatus = data?.automation_status || null;
-  const enforcement = data?.enforcement || null;
-  const realtimeUsage = (data?.realtime_usage as RealtimeUsagePayload | undefined) || null;
-  const moduleConfig = data?.module_config || null;
+  async function searchUsers(event?: FormEvent) {
+    event?.preventDefault();
+    const query = searchQuery.trim();
+    if (!query) return;
+    setSearchPending(true);
+    setSearchError("");
+    try {
+      const payload = (await api.searchUsers(query)) as UserSearchResponse;
+      setSearchResult(payload);
+    } catch (err) {
+      setSearchError(err instanceof Error ? err.message : "Не удалось выполнить поиск");
+    } finally {
+      setSearchPending(false);
+    }
+  }
+
+  const freshness = overview?.freshness || null;
+  const queue = overview?.latest_cases || null;
+  const pipeline = overview?.pipeline || null;
+  const enforcement = overview?.enforcement || null;
+  const summary = modules?.summary;
   const overviewStale = Boolean(
     (freshness?.overview_age_seconds ?? 0) > OVERVIEW_STALE_AFTER_SECONDS,
   );
-  const pipelineStale = Boolean(pipeline?.stale);
 
-  const systemStatusClass =
-    health?.status === "ok"
-      ? "status-resolved"
-      : health?.status
-        ? "severity-high"
-        : "severity-low";
-
-  function formatAge(seconds?: number | null): string {
-    if (seconds === null || seconds === undefined || Number.isNaN(seconds)) {
-      return t("common.notAvailable");
+  const attentionItems = useMemo(() => {
+    const items: string[] = [];
+    if (overviewStale) {
+      items.push(t("overview.attentionItems.overviewStale"));
     }
-    const total = Math.max(Math.round(seconds), 0);
-    if (total < 60) return `${total}s`;
-    if (total < 3600) return `${Math.round(total / 60)}m`;
-    return `${Math.round(total / 3600)}h`;
+    if ((pipeline?.failed_count ?? 0) > 0) {
+      items.push(
+        t("overview.attentionItems.failedQueue", {
+          count: pipeline?.failed_count ?? 0,
+        }),
+      );
+    }
+    if ((summary?.stale_modules ?? 0) > 0) {
+      items.push(t("overview.attentionItems.staleModules", { count: summary?.stale_modules ?? 0 }));
+    }
+    if ((summary?.warning_modules ?? 0) > 0 || (summary?.error_modules ?? 0) > 0) {
+      items.push(`Модули с риском: ${(summary?.warning_modules ?? 0) + (summary?.error_modules ?? 0)}`);
+    }
+    if ((enforcement?.active_total ?? 0) > 0) {
+      items.push(
+        t("overview.attentionItems.activeViolations", {
+          count: enforcement?.active_total ?? 0,
+        }),
+      );
+    }
+    if (!items.length) {
+      items.push(t("overview.attentionItems.quiet"));
+    }
+    return items;
+  }, [enforcement?.active_total, overviewStale, pipeline?.failed_count, summary?.error_modules, summary?.stale_modules, summary?.warning_modules, t]);
+
+  const topModules = useMemo(() => {
+    return [...(modules?.items || [])].sort((left, right) => {
+      const rank = (item: ModuleRecord) => {
+        const variant = moduleVariant(item);
+        if (variant === "punitive") return 0;
+        if (variant === "severity-high") return 1;
+        return 2;
+      };
+      const diff = rank(left) - rank(right);
+      if (diff !== 0) return diff;
+      return (right.runtime_metrics?.active_users ?? 0) - (left.runtime_metrics?.active_users ?? 0);
+    });
+  }, [modules?.items]);
+
+  function renderMetricMeter(label: string, value?: number | null, warn = 75, error = 90) {
+    const variant = metricVariant(value, warn, error);
+    return (
+      <div className="module-meter">
+        <div className="module-meter-head">
+          <span>{label}</span>
+          <strong>{formatPercent(value)}</strong>
+        </div>
+        <div className="module-meter-track">
+          <span
+            className={`module-meter-fill ${variant}`}
+            style={{ width: meterWidth(value) }}
+          />
+        </div>
+      </div>
+    );
   }
 
-  const attentionItems: string[] = [];
-  if (overviewStale) {
-    attentionItems.push(t("overview.attentionItems.overviewStale"));
-  }
-  if (pipelineStale) {
-    attentionItems.push(t("overview.attentionItems.pipelineStale"));
-  }
-  if ((pipeline?.failed_count ?? 0) > 0) {
-    attentionItems.push(
-      t("overview.attentionItems.failedQueue", {
-        count: pipeline?.failed_count ?? 0,
-      }),
-    );
-  }
-  if ((quality?.open_cases ?? 0) > 0) {
-    attentionItems.push(
-      t("overview.attentionItems.openCases", {
-        count: quality?.open_cases ?? 0,
-      }),
-    );
-  }
-  if ((quality?.mixed_providers.conflict_cases ?? 0) > 0) {
-    attentionItems.push(
-      t("overview.attentionItems.mixedConflicts", {
-        count: quality?.mixed_providers.conflict_cases ?? 0,
-      }),
-    );
-  }
-  if ((enforcement?.active_total ?? 0) > 0) {
-    attentionItems.push(
-      t("overview.attentionItems.activeViolations", {
-        count: enforcement?.active_total ?? 0,
-      }),
-    );
-  }
-  if ((moduleConfig?.lagging_healthy_count ?? 0) > 0) {
-    attentionItems.push(
-      t("overview.attentionItems.laggingConfigs", {
-        count: moduleConfig?.lagging_healthy_count ?? 0,
-      }),
-    );
-  }
-  if ((moduleConfig?.stale_count ?? 0) > 0) {
-    attentionItems.push(
-      t("overview.attentionItems.staleModules", {
-        count: moduleConfig?.stale_count ?? 0,
-      }),
-    );
-  }
-  if (!attentionItems.length) {
-    attentionItems.push(t("overview.attentionItems.quiet"));
-  }
-  const automationModeReasons = automationModeReasonLabels(t, automationStatus);
-  const automationGuardrails = automationGuardrailLabels(t, automationStatus);
   return (
     <section className="page">
       <div className="page-header page-header-stack">
         <div>
-          <h1>{t("overview.title")}</h1>
-          <p className="page-lede">{t("overview.description")}</p>
-          <span className={`status-badge ${systemStatusClass}`}>
-            {health?.status || t("common.loading")}
-          </span>
-          <div className="overview-pipeline-grid">
-            {overviewStale ? (
-              <span className="tag severity-high">
-                {t("overview.snapshotStale")}
-              </span>
-            ) : null}
-            {pipelineStale ? (
-              <span className="tag severity-high">
-                {t("overview.pipeline.stale")}
-              </span>
-            ) : null}
-          </div>
+          <h1>Главная</h1>
+          <p className="page-lede">
+            Состояние серверов и модулей, общий онлайн по активности, нагрузка и быстрый доступ к пользователям.
+          </p>
         </div>
         <div className="dashboard-meta">
+          <span className={`status-badge ${summary && (summary.error_modules > 0 || summary.stale_modules > 0) ? "punitive" : summary && summary.warning_modules > 0 ? "severity-high" : "status-resolved"}`}>
+            {summary
+              ? summary.error_modules > 0 || summary.stale_modules > 0
+                ? "Есть критические сигналы"
+                : summary.warning_modules > 0
+                  ? "Есть предупреждения"
+                  : "Все модули в норме"
+              : t("common.loading")}
+          </span>
           <span className="muted">
             {t("overview.lastUpdated", {
               value: formatDisplayDateTime(
@@ -207,7 +265,7 @@ export function OverviewPage({ session }: { session?: Session }) {
       {error ? (
         <div className="error-box">
           {error}
-          {data
+          {overview
             ? ` ${t("overview.errors.showingLastGood", {
                 value: formatAge(freshness?.overview_age_seconds),
               })}`
@@ -215,58 +273,85 @@ export function OverviewPage({ session }: { session?: Session }) {
         </div>
       ) : null}
 
-      <div className="dashboard-grid dashboard-grid-hero">
-        <div className="panel panel-hero overview-attention-panel">
+      <div className="stats-grid">
+        <div className="stat-card">
+          <span>Онлайн на модулях</span>
+          <strong>{summary?.active_users_total ?? "—"}</strong>
+        </div>
+        <div className="stat-card">
+          <span>Модули в норме</span>
+          <strong>{summary?.healthy_modules ?? "—"}</strong>
+        </div>
+        <div className="stat-card">
+          <span>Внимание / ошибки</span>
+          <strong>
+            {summary ? `${summary.warning_modules + summary.error_modules}` : "—"}
+          </strong>
+        </div>
+        <div className="stat-card">
+          <span>События за окно</span>
+          <strong>{summary?.recent_events_total ?? "—"}</strong>
+        </div>
+        <div className="stat-card">
+          <span>Средний CPU</span>
+          <strong>{formatPercent(summary?.avg_cpu_percent)}</strong>
+        </div>
+        <div className="stat-card">
+          <span>RAM</span>
+          <strong>{formatPercent(summaryPercent(summary?.memory_used_bytes, summary?.memory_total_bytes))}</strong>
+        </div>
+        <div className="stat-card">
+          <span>Диск</span>
+          <strong>{formatPercent(summaryPercent(summary?.disk_used_bytes, summary?.disk_total_bytes))}</strong>
+        </div>
+        <div className="stat-card">
+          <span>MobGuard RSS</span>
+          <strong>{formatBytes(summary?.mobguard_process_rss_bytes)}</strong>
+        </div>
+      </div>
+
+      <div className="dashboard-grid dashboard-grid-hero overview-split-grid">
+        <div className="panel panel-hero">
           <div className="panel-heading panel-heading-row">
             <div>
-              <h2>{t("overview.attentionTitle")}</h2>
-              <p className="muted">{t("overview.attentionDescription")}</p>
+              <h2>Ресурсы и состояние</h2>
+              <p className="muted">
+                Сводка по последним heartbeat’ам модулей и активности пользователей за окно {summary?.activity_window_seconds ? `${Math.round(summary.activity_window_seconds / 60)} минут` : "активности"}.
+              </p>
             </div>
-            {canReadData ? (
-              <Link
-                className="button button-secondary"
-                to="/data/console"
-                onMouseEnter={() => prefetchRouteModule("/data/console")}
-                onFocus={() => prefetchRouteModule("/data/console")}
-              >
-                {t("overview.quickLinks.events")}
-              </Link>
-            ) : null}
+            <Link
+              className="button-link"
+              to="/modules"
+              onMouseEnter={() => prefetchRouteModule("/modules")}
+              onFocus={() => prefetchRouteModule("/modules")}
+            >
+              Открыть модули
+            </Link>
           </div>
-          <div className="stats-grid">
-            <div className="stat-card">
-              <span>{t("overview.cards.openQueue")}</span>
-              <strong>{quality?.open_cases ?? queue?.count ?? "—"}</strong>
+          <div className="record-grid">
+            <div className="record-kv">
+              <strong>RAM</strong>
+              <span>{formatBytes(summary?.memory_used_bytes)} / {formatBytes(summary?.memory_total_bytes)}</span>
             </div>
-            <div className="stat-card">
-              <span>{t("overview.cards.activeViolations")}</span>
-              <strong>{enforcement?.active_total ?? "—"}</strong>
+            <div className="record-kv">
+              <strong>Диск</strong>
+              <span>{formatBytes(summary?.disk_used_bytes)} / {formatBytes(summary?.disk_total_bytes)}</span>
             </div>
-            <div className="stat-card">
-              <span>{t("overview.cards.activeWarnings")}</span>
-              <strong>{enforcement?.active_warning_count ?? "—"}</strong>
+            <div className="record-kv">
+              <strong>Пик CPU</strong>
+              <span>{formatPercent(summary?.peak_cpu_percent)}</span>
             </div>
-            <div className="stat-card">
-              <span>{t("overview.cards.activeBans")}</span>
-              <strong>{enforcement?.active_ban_count ?? "—"}</strong>
+            <div className="record-kv">
+              <strong>Очередь</strong>
+              <span>{pipeline?.queue_depth ?? "—"}</span>
             </div>
-            <div className="stat-card">
-              <span>{t("overview.cards.violatingNow")}</span>
-              <strong>
-                {realtimeUsage?.violating_users ?? "—"}
-              </strong>
+            <div className="record-kv">
+              <strong>Ошибки конвейера</strong>
+              <span>{pipeline?.failed_count ?? "—"}</span>
             </div>
-            <div className="stat-card">
-              <span>{t("overview.cards.compliantNow")}</span>
-              <strong>{realtimeUsage?.compliant_users ?? "—"}</strong>
-            </div>
-            <div className="stat-card">
-              <span>{t("overview.cards.failedQueue")}</span>
-              <strong>{pipeline?.failed_count ?? "—"}</strong>
-            </div>
-            <div className="stat-card">
-              <span>{t("overview.cards.automationMode")}</span>
-              <strong>{automationModeLabel(t, automationStatus)}</strong>
+            <div className="record-kv">
+              <strong>Активные ограничения</strong>
+              <span>{enforcement?.active_total ?? "—"}</span>
             </div>
           </div>
           <div className="record-list overview-signal-list">
@@ -278,185 +363,70 @@ export function OverviewPage({ session }: { session?: Session }) {
               </div>
             ))}
           </div>
-          <div className="dashboard-grid overview-pipeline-grid">
-            <div className="metric-list">
-              <div className="metric-row">
-                <div className="record-main">
-                  <span className="record-title">
-                    {t("overview.pipeline.queueDepth")}
-                  </span>
-                  <span>{pipeline?.queue_depth ?? "—"}</span>
-                </div>
-                <div className="record-meta">
-                  {t("overview.pipeline.queueMeta", {
-                    queued: pipeline?.queued_count ?? 0,
-                    processing: pipeline?.processing_count ?? 0,
-                  })}
-                </div>
-              </div>
-              <div className="metric-row">
-                <div className="record-main">
-                  <span className="record-title">
-                    {t("overview.pipeline.failed")}
-                  </span>
-                  <span>{pipeline?.failed_count ?? "—"}</span>
-                </div>
-                <div className="record-meta">
-                  {t("overview.pipeline.pendingRemote", {
-                    count: pipeline?.enforcement_pending_count ?? 0,
-                  })}
-                </div>
-              </div>
-            </div>
-            <div className="metric-list">
-              <div className="metric-row">
-                <div className="record-main">
-                  <span className="record-title">
-                    {t("overview.pipeline.lag")}
-                  </span>
-                  <span>{formatAge(pipeline?.current_lag_seconds)}</span>
-                </div>
-                <div className="record-meta">
-                  {t("overview.pipeline.oldestQueued", {
-                    value: formatAge(pipeline?.oldest_queued_age_seconds),
-                  })}
-                </div>
-              </div>
-              <div className="metric-row">
-                <div className="record-main">
-                  <span className="record-title">
-                    {t("overview.pipeline.lastDrain")}
-                  </span>
-                  <span>
-                    {formatDisplayDateTime(
-                      pipeline?.last_successful_drain_at || "",
-                      t("common.notAvailable"),
-                      language,
-                    )}
-                  </span>
-                </div>
-                <div className="record-meta">
-                  {formatDisplayDateTime(
-                    pipeline?.snapshot_updated_at ||
-                      freshness?.pipeline_updated_at ||
-                      "",
-                    t("common.notAvailable"),
-                    language,
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
         </div>
+
         <div className="panel">
           <div className="panel-heading panel-heading-row">
             <div>
-              <h2>{t("overview.healthTitle")}</h2>
-              <p className="muted">{t("overview.healthDescription")}</p>
+              <h2>Поиск пользователя</h2>
+              <p className="muted">
+                Поиск по UUID, username, Telegram ID или System ID в тех данных, которые уже есть в панели.
+              </p>
             </div>
           </div>
-          <div className="metric-list">
-            <div className="metric-row">
-              <div className="record-main">
-                <span className="record-title">
-                  {t("overview.health.enforcement")}
-                </span>
-                <span>{enforcement?.active_total ?? "—"}</span>
-              </div>
-              <div className="record-meta">
-                {t("overview.enforcement.activeSummary", {
-                  violations: enforcement?.active_total ?? 0,
-                  warnings: enforcement?.active_warning_count ?? 0,
-                  bans: enforcement?.active_ban_count ?? 0,
-                })}
-              </div>
+          <form className="search-strip compact-search-strip" onSubmit={searchUsers}>
+            <input
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder="UUID / username / Telegram ID / System ID"
+            />
+            <button type="submit" disabled={searchPending || !searchQuery.trim()}>
+              {searchPending ? "Ищу..." : "Найти"}
+            </button>
+          </form>
+          {searchError ? <div className="error-box">{searchError}</div> : null}
+          {searchResult?.panel_match ? (
+            <div className="tag overview-search-tag">
+              Panel match: {String(
+                (searchResult.panel_match as Record<string, unknown>).username ||
+                  (searchResult.panel_match as Record<string, unknown>).uuid ||
+                  (searchResult.panel_match as Record<string, unknown>).id ||
+                  "user"
+              )}
             </div>
-            <div className="metric-row">
-              <div className="record-main">
-                <span className="record-title">
-                  {t("overview.health.remoteDelivery")}
-                </span>
-                <span>{pipeline?.worker_status ?? t("common.notAvailable")}</span>
-              </div>
-              <div className="record-meta">
-                {t("overview.enforcement.remoteSummary", {
-                  pending: pipeline?.enforcement_pending_count ?? 0,
-                  failed: pipeline?.enforcement_failed_count ?? 0,
-                  worker: pipeline?.worker_status ?? t("common.notAvailable"),
-                })}
-              </div>
-            </div>
-            <div className="metric-row">
-              <div className="record-main">
-                <span className="record-title">
-                  {t("overview.cards.adminSessions")}
-                </span>
-                <span>{health?.admin_sessions ?? "—"}</span>
-              </div>
-              <div className="record-meta">
-                {t("overview.cards.ipinfo")} ·{" "}
-                {health?.ipinfo_token_present
-                  ? t("common.on")
-                  : t("common.off")}
-              </div>
-            </div>
-            <div className="metric-row">
-              <div className="record-main">
-                <span className="record-title">
-                  {t("overview.cards.activeUsers")}
-                </span>
-                <span>{realtimeUsage?.active_users ?? "—"}</span>
-              </div>
-              <div className="record-meta">
-                {t("overview.cards.activeUsersHint", {
-                  value: realtimeUsage?.active_window_seconds ?? 3600,
-                })}
-              </div>
-            </div>
-            <div className="metric-row">
-              <div className="record-main">
-                <span className="record-title">
-                  {t("overview.cards.scoreZeroRatio")}
-                </span>
-                <span>
-                  {health
-                    ? `${Math.round(health.analysis_24h.score_zero_ratio * 100)}%`
-                    : "—"}
-                </span>
-              </div>
-              <div className="record-meta">
-                {t("overview.cards.asnMissingRatio")} ·{" "}
-                {health
-                  ? `${Math.round(health.analysis_24h.asn_missing_ratio * 100)}%`
-                  : "—"}
-              </div>
-            </div>
-            <div className="metric-row">
-              <div className="record-main">
-                <span className="record-title">
-                  {t("overview.automation.modeTitle")}
-                </span>
-                <span>{automationModeLabel(t, automationStatus)}</span>
-              </div>
-              <div className="record-meta">
-                {automationModeReasons.length > 0
-                  ? automationModeReasons.join(", ")
-                  : t("overview.automation.noModeReasons")}
-              </div>
-            </div>
-            <div className="metric-row">
-              <div className="record-main">
-                <span className="record-title">
-                  {t("overview.automation.guardrailsTitle")}
-                </span>
-                <span>{automationGuardrails.length}</span>
-              </div>
-              <div className="record-meta">
-                {automationGuardrails.length > 0
-                  ? automationGuardrails.join(", ")
-                  : t("overview.automation.noGuardrails")}
-              </div>
-            </div>
+          ) : null}
+          <div className="record-list overview-search-results">
+            {(searchResult?.items || []).length ? (
+              searchResult?.items.map((item) => {
+                const identifier = String(item.uuid || item.system_id || item.telegram_id || "");
+                const queryValue = String(item.username || item.uuid || item.system_id || item.telegram_id || "");
+                return (
+                  <Link
+                    key={`${identifier}-${queryValue}`}
+                    to={`/data/users?identifier=${encodeURIComponent(identifier)}&query=${encodeURIComponent(queryValue)}`}
+                    className="record-item inline-link"
+                    onMouseEnter={() => prefetchRouteModule("/data/users")}
+                    onFocus={() => prefetchRouteModule("/data/users")}
+                  >
+                    <div className="record-main">
+                      <span className="record-title">
+                        {String(item.username || item.uuid || item.system_id || item.telegram_id)}
+                      </span>
+                      <span className="tag">Открыть карточку</span>
+                    </div>
+                    <div className="record-meta">
+                      <span>UUID: {String(item.uuid || "—")}</span>
+                      <span>System ID: {String(item.system_id ?? "—")}</span>
+                      <span>Telegram ID: {String(item.telegram_id || "—")}</span>
+                    </div>
+                  </Link>
+                );
+              })
+            ) : searchResult ? (
+              <div className="provider-empty">Совпадений не найдено</div>
+            ) : (
+              <div className="provider-empty">Введите идентификатор и выполните поиск</div>
+            )}
           </div>
         </div>
       </div>
@@ -476,133 +446,180 @@ export function OverviewPage({ session }: { session?: Session }) {
       ) : null}
 
       {!loading ? (
-        <div className="dashboard-grid">
+        <>
           <div className="panel">
             <div className="panel-heading panel-heading-row">
               <div>
-                <h2>{t("overview.mixedProvidersTitle")}</h2>
+                <h2>Модули и серверная нагрузка</h2>
                 <p className="muted">
-                  {t("overview.mixedProvidersDescription")}
+                  По каждому модулю: онлайн за окно активности, нагрузка сервера и использование ресурсов процессами MobGuard.
                 </p>
               </div>
             </div>
-            <div className="record-list">
-              {quality?.mixed_providers.top_open_cases.length ? (
-                quality.mixed_providers.top_open_cases
-                  .slice(0, 5)
-                  .map((item) => (
-                    <div className="record-item" key={item.provider_key}>
-                      <div className="record-main">
-                        <span className="record-title">
-                          {item.provider_key}
-                        </span>
+            <div className="queue-grid module-ops-grid-list">
+              {topModules.map((module) => {
+                const system = module.runtime_metrics?.system;
+                return (
+                  <div className={`queue-card module-ops-card`} key={module.module_id}>
+                    <div className="queue-card-top">
+                      <div>
+                        <strong>{module.module_name}</strong>
+                        <div className="queue-card-identifiers">
+                          <span>{module.module_id}</span>
+                          <span>{module.version || "—"}</span>
+                        </div>
                       </div>
-                      <div className="record-grid">
-                        <div className="record-kv">
-                          <strong>
-                            {t("overview.mixedProvidersMetrics.open")}
-                          </strong>
-                          <span>{item.open_cases}</span>
-                        </div>
-                        <div className="record-kv">
-                          <strong>
-                            {t("overview.mixedProvidersMetrics.conflicts")}
-                          </strong>
-                          <span>{item.conflict_cases}</span>
-                        </div>
-                        <div className="record-kv">
-                          <strong>
-                            {t("overview.mixedProvidersMetrics.home")}
-                          </strong>
-                          <span>{item.home_cases}</span>
-                        </div>
-                        <div className="record-kv">
-                          <strong>
-                            {t("overview.mixedProvidersMetrics.mobile")}
-                          </strong>
-                          <span>{item.mobile_cases}</span>
-                        </div>
+                      <span className={`status-badge ${moduleVariant(module)}`}>
+                        {module.install_state === "pending_install"
+                          ? "pending"
+                          : !module.healthy
+                          ? "offline"
+                          : module.health_status === "error"
+                            ? "error"
+                            : module.health_status === "warn"
+                              ? "warn"
+                              : "ok"}
+                      </span>
+                    </div>
+
+                    <div className="module-ops-grid">
+                      <div className="module-ops-chip">
+                        <span>Онлайн</span>
+                        <strong>{module.runtime_metrics?.active_users ?? 0}</strong>
+                      </div>
+                      <div className="module-ops-chip">
+                        <span>События</span>
+                        <strong>{module.runtime_metrics?.recent_events ?? 0}</strong>
+                      </div>
+                      <div className="module-ops-chip">
+                        <span>MobGuard RSS</span>
+                        <strong>{formatBytes(module.runtime_metrics?.processes?.rss_bytes)}</strong>
+                      </div>
+                      <div className="module-ops-chip">
+                        <span>Spool</span>
+                        <strong>{module.spool_depth}</strong>
                       </div>
                     </div>
-                  ))
-              ) : (
-                <div className="provider-empty">
-                  <span>{t("overview.emptyMixedProviders")}</span>
-                </div>
-              )}
-            </div>
-          </div>
 
-          <div className="panel">
-            <div className="panel-heading panel-heading-row">
-              <div>
-                <h2>{t("overview.noisyAsnTitle")}</h2>
-                <p className="muted">{t("overview.noisyAsnDescription")}</p>
-              </div>
-            </div>
-            <div className="record-list">
-              {quality?.top_noisy_asns.length ? (
-                quality.top_noisy_asns.slice(0, 6).map((item) => (
-                  <div className="record-item" key={item.asn_key}>
-                    <div className="record-main">
-                      <span className="record-title">{item.asn_key}</span>
-                      <span className="tag">
-                        {t("overview.noisyAsnItem", { count: item.cnt })}
-                      </span>
+                    <div className="module-meters">
+                      {renderMetricMeter("CPU", system?.cpu_percent)}
+                      {renderMetricMeter("RAM", system?.memory_percent)}
+                      {renderMetricMeter("Диск", system?.disk_percent, 80, 92)}
+                    </div>
+
+                    <div className="record-meta">
+                      <span>Load {system?.load_avg_1m?.toFixed(2) ?? "—"} / {system?.load_avg_5m?.toFixed(2) ?? "—"} / {system?.load_avg_15m?.toFixed(2) ?? "—"}</span>
+                      <span>RAM {formatBytes(system?.memory_used_bytes)} / {formatBytes(system?.memory_total_bytes)}</span>
+                      <span>Disk {formatBytes(system?.disk_used_bytes)} / {formatBytes(system?.disk_total_bytes)}</span>
+                      <span>I/O {formatRate(system?.disk_read_bps)} ↓ / {formatRate(system?.disk_write_bps)} ↑</span>
+                      <span>Heartbeat {formatAge(module.seconds_since_last_seen)}</span>
+                    </div>
+
+                    {module.error_text ? <div className="error-box">{module.error_text}</div> : null}
+
+                    <div className="action-row">
+                      <Link
+                        className="ghost button-link"
+                        to="/modules"
+                        onMouseEnter={() => prefetchRouteModule("/modules")}
+                        onFocus={() => prefetchRouteModule("/modules")}
+                      >
+                        Перейти к модулю
+                      </Link>
                     </div>
                   </div>
-                ))
-              ) : (
-                <div className="provider-empty">
-                  <span>{t("overview.emptyNoisyAsn")}</span>
-                </div>
-              )}
+                );
+              })}
             </div>
           </div>
 
-          <div className="panel">
-            <div className="panel-heading panel-heading-row">
-              <div>
-                <h2>{t("overview.latestCasesTitle")}</h2>
-                <p className="muted">{t("overview.latestCasesDescription")}</p>
+          <div className="dashboard-grid">
+            <div className="panel">
+              <div className="panel-heading panel-heading-row">
+                <div>
+                  <h2>Очередь и доставка</h2>
+                  <p className="muted">
+                    Состояние общего конвейера обработки и удалённых применений.
+                  </p>
+                </div>
+              </div>
+              <div className="metric-list">
+                <div className="metric-row">
+                  <div className="record-main">
+                    <span className="record-title">Глубина очереди</span>
+                    <span>{pipeline?.queue_depth ?? "—"}</span>
+                  </div>
+                  <div className="record-meta">
+                    {pipeline?.queued_count ?? 0} в очереди · {pipeline?.processing_count ?? 0} обрабатывается
+                  </div>
+                </div>
+                <div className="metric-row">
+                  <div className="record-main">
+                    <span className="record-title">Ошибки</span>
+                    <span>{pipeline?.failed_count ?? "—"}</span>
+                  </div>
+                  <div className="record-meta">
+                    Pending remote: {pipeline?.enforcement_pending_count ?? 0}
+                  </div>
+                </div>
+                <div className="metric-row">
+                  <div className="record-main">
+                    <span className="record-title">Лаг</span>
+                    <span>{formatAge(pipeline?.current_lag_seconds)}</span>
+                  </div>
+                  <div className="record-meta">
+                    Последний drain: {formatDisplayDateTime(
+                      pipeline?.last_successful_drain_at || "",
+                      t("common.notAvailable"),
+                      language,
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
-            <div className="record-list">
-              {queue?.items.length ? (
-                queue.items.map((item) => (
-                  <Link
-                    to={`/reviews/${item.id}`}
-                    className="record-item inline-link"
-                    key={item.id}
-                    onMouseEnter={() =>
-                      prefetchRouteModule(`/reviews/${item.id}`)
-                    }
-                    onFocus={() => prefetchRouteModule(`/reviews/${item.id}`)}
-                  >
-                    <div className="record-main">
-                      <span className="record-title">
-                        #{item.id} · {item.username || item.uuid || item.ip}
-                      </span>
-                      <span className="tag">{item.review_reason}</span>
-                    </div>
-                    <div className="record-meta">
-                      {item.review_reason} · {item.ip} ·{" "}
-                      {formatDisplayDateTime(
-                        item.updated_at,
-                        t("common.notAvailable"),
-                        language,
-                      )}
-                    </div>
-                  </Link>
-                ))
-              ) : (
-                <div className="provider-empty">
-                  <span>{t("overview.emptyLatestCases")}</span>
+
+            <div className="panel">
+              <div className="panel-heading panel-heading-row">
+                <div>
+                  <h2>Последние кейсы</h2>
+                  <p className="muted">
+                    Быстрый доступ к свежим спорным кейсам из очереди.
+                  </p>
                 </div>
-              )}
+              </div>
+              <div className="record-list">
+                {queue?.items.length ? (
+                  queue.items.map((item) => (
+                    <Link
+                      to={`/reviews/${item.id}`}
+                      className="record-item inline-link"
+                      key={item.id}
+                      onMouseEnter={() => prefetchRouteModule(`/reviews/${item.id}`)}
+                      onFocus={() => prefetchRouteModule(`/reviews/${item.id}`)}
+                    >
+                      <div className="record-main">
+                        <span className="record-title">
+                          #{item.id} · {item.username || item.uuid || item.ip}
+                        </span>
+                        <span className="tag">{item.review_reason}</span>
+                      </div>
+                      <div className="record-meta">
+                        <span>{item.ip}</span>
+                        <span>{formatDisplayDateTime(
+                          item.updated_at,
+                          t("common.notAvailable"),
+                          language,
+                        )}</span>
+                      </div>
+                    </Link>
+                  ))
+                ) : (
+                  <div className="provider-empty">Открытых кейсов сейчас нет</div>
+                )}
+              </div>
             </div>
           </div>
-        </div>
+        </>
       ) : null}
     </section>
   );

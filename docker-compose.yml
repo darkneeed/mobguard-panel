@@ -29,6 +29,8 @@ services:
     environment:
       BAN_SYSTEM_DIR: /opt/mobguard/runtime
       MOBGUARD_ENV_FILE: /opt/mobguard/.env
+      MOBGUARD_DB_BACKEND: postgres
+      MOBGUARD_POSTGRES_DSN: postgresql://mobguard:${MOBGUARD_POSTGRES_PASSWORD}@postgres:5432/mobguard
       DATABASE_URL: postgresql://mobguard:${MOBGUARD_POSTGRES_PASSWORD}@postgres:5432/mobguard
     volumes:
       - ./.env:/opt/mobguard/.env

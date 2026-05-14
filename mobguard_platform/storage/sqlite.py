@@ -55,6 +55,7 @@ class SQLiteStorage:
     db_path: str
     timeout: int = 30
     busy_timeout_ms: int = 30000
+    backend: str = "sqlite"
 
     def connect(
         self,
