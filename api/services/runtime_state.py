@@ -774,18 +774,15 @@ def list_analysis_events(store: Any, filters: dict[str, Any]) -> dict[str, Any]:
                 params,
             ).fetchone()["cnt"]
 
-    items = _apply_shared_account_flags(
-        store,
-        [
-            {
-                **_enrich_analysis_event_row(dict(row)),
-                "has_review_case": str(row["case_scope_key"] or "").strip() in review_case_map,
-                "review_case_id": review_case_map.get(str(row["case_scope_key"] or "").strip(), {}).get("review_case_id"),
-                "review_case_status": review_case_map.get(str(row["case_scope_key"] or "").strip(), {}).get("review_case_status"),
-            }
-            for row in rows
-        ],
-    )
+    items = [
+        {
+            **_enrich_analysis_event_row(dict(row)),
+            "has_review_case": str(row["case_scope_key"] or "").strip() in review_case_map,
+            "review_case_id": review_case_map.get(str(row["case_scope_key"] or "").strip(), {}).get("review_case_id"),
+            "review_case_status": review_case_map.get(str(row["case_scope_key"] or "").strip(), {}).get("review_case_status"),
+        }
+        for row in rows
+    ]
     for item in items:
         review_case_id = item.get("review_case_id")
         item["review_url"] = store.build_review_url(int(review_case_id)) if review_case_id not in (None, "") else ""
