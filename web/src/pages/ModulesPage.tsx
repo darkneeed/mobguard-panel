@@ -416,11 +416,11 @@ export function ModulesPage({ session }: { session?: Session }) {
             </div>
           </div>
           <div className="queue-card-flags">
-            <span className={`status-badge ${heartbeatVariant(item)}`}>
+            <span className={`status-badge module-status-pill ${heartbeatVariant(item)}`}>
               {t(heartbeatLabelKey(item))}
             </span>
             {item.install_state !== "pending_install" ? (
-              <span className={`tag ${validationVariant(item)}`}>
+              <span className={`tag module-status-pill ${validationVariant(item)}`}>
                 {t(`modules.health.${item.health_status}`)}
               </span>
             ) : null}

@@ -1236,13 +1236,6 @@ export function ReviewQueuePage({ session }: { session?: Session }) {
                       </div>
                     ) : null}
                     <div className="queue-card-bottom">
-                      <span title={t("reviewQueue.card.activityObservedHint")}>
-                        {t("reviewQueue.card.activityObserved", {
-                          value:
-                            item.usage_profile_ongoing_duration_text ||
-                            t("common.notAvailable"),
-                        })}
-                      </span>
                       <span>
                         {t("reviewQueue.card.opened", {
                           value: formatDisplayDateTime(

@@ -671,6 +671,7 @@ def build_user_card(store: Any, identity: dict[str, Any]) -> dict[str, Any]:
 def list_analysis_events(store: Any, filters: dict[str, Any]) -> dict[str, Any]:
     page = max(int(filters.get("page", 1) or 1), 1)
     page_size = min(max(int(filters.get("page_size", 50) or 50), 1), 200)
+    skip_count = str(filters.get("skip_count") or "").strip().lower() in {"1", "true", "yes", "on"}
     sort = str(filters.get("sort") or "created_desc").strip().lower()
     order_by = "ae.created_at ASC" if sort == "created_asc" else "ae.created_at DESC"
     clauses: list[str] = []
@@ -725,10 +726,6 @@ def list_analysis_events(store: Any, filters: dict[str, Any]) -> dict[str, Any]:
     where_sql = f"WHERE {' AND '.join(clauses)}" if clauses else ""
     with store._connect() as conn:
         select_sql = _analysis_event_select(conn, store)
-        count = conn.execute(
-            f"SELECT COUNT(*) AS cnt FROM analysis_events ae {where_sql}",
-            params,
-        ).fetchone()["cnt"]
         rows = conn.execute(
             f"""
             SELECT {select_sql},
@@ -758,6 +755,13 @@ def list_analysis_events(store: Any, filters: dict[str, Any]) -> dict[str, Any]:
             """,
             [*params, page_size, (page - 1) * page_size],
         ).fetchall()
+        if skip_count:
+            count = ((page - 1) * page_size) + len(rows) + (1 if len(rows) == page_size else 0)
+        else:
+            count = conn.execute(
+                f"SELECT COUNT(*) AS cnt FROM analysis_events ae {where_sql}",
+                params,
+            ).fetchone()["cnt"]
 
     items = _apply_shared_account_flags(
         store,

@@ -173,7 +173,11 @@
 }
 
 .module-ops-grid-list {
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+}
+
+.module-ops-card-compact {
+  gap: 1rem;
 }
 
 .module-ops-grid {
@@ -262,6 +266,21 @@
 
 .overview-search-tag {
   margin-top: 1rem;
+}
+
+.module-status-pill {
+  padding: 0.45rem 0.8rem;
+  font-size: 0.78rem;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.module-ops-meta {
+  margin-top: 0;
+}
+
+.module-inline-error {
+  padding: 0.75rem 0.9rem;
 }
 
 .module-card-active {
@@ -460,6 +479,10 @@
   color: var(--muted);
   font-size: 0.92rem;
   line-height: 1.5;
+}
+
+.compact-toolbar-meta {
+  align-items: center;
 }
 
 .detail-warning-box {
@@ -793,6 +816,10 @@
   border-radius: 18px;
   border: 1px solid var(--line);
   background: var(--surface-strong);
+}
+
+.metric-row {
+  background: color-mix(in srgb, var(--surface-soft) 80%, transparent 20%);
 }
 
 .record-main {

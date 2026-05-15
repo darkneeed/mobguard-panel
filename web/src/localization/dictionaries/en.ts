@@ -74,7 +74,7 @@ export const enDictionary: TranslationDictionary = {
       queue: "Queue",
       decisions: "Decisions",
       console: "Console",
-      rules: "Detection Rules",
+      rules: "Rules",
       telegram: "Telegram",
       access: "Access",
       data: "Data",
@@ -337,8 +337,8 @@ export const enDictionary: TranslationDictionary = {
       skip: "Skip",
       openCase: "Open case",
       openEvents: "Console",
-      bulkMobile: "Set selected to MOBILE",
-      bulkHome: "Set selected to HOME",
+      bulkMobile: "Mark as mobile",
+      bulkHome: "Mark as home",
       bulkSkip: "Skip selected",
       recheckVisible: "Recheck visible",
       recheckDone: "Rechecked {count} queue cases",
@@ -692,7 +692,7 @@ export const enDictionary: TranslationDictionary = {
   },
   rules: {
     eyebrow: "Live Rules",
-    title: "Readable live settings without editing raw keys",
+    title: "Rules",
     saveRules: "Save rules",
     rulesUpdated: "Rules updated",
     generalSaved: "General settings saved",
@@ -915,7 +915,7 @@ export const enDictionary: TranslationDictionary = {
   },
   data: {
     eyebrow: "Data",
-    title: "Operational runtime data admin",
+    title: "Data",
     sectionDescriptions: {
       console: "Unified operator console with panel system logs, module heartbeats, and incoming module payloads.",
       users: "Primary operator workflow for user lookup, card inspection, exemptions, restrictions, and export snapshots.",
@@ -962,6 +962,7 @@ export const enDictionary: TranslationDictionary = {
       calibrationExportReady: "Calibration archive generated"
     },
     users: {
+      pageTitle: "User search",
       searchPlaceholder: "Search uuid / system id / telegram id / username",
       search: "Search",
       searching: "Searching…",

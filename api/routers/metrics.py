@@ -11,6 +11,7 @@ from ..services.automation_status import (
     build_automation_status,
     build_enforcement_summary,
 )
+from ..services.panel_server import collect_panel_server_snapshot
 
 
 router = APIRouter(prefix="/admin", tags=["metrics"])
@@ -34,6 +35,7 @@ def get_overview(
         payload = container.store.get_overview_metrics(fast_read=True)
         payload["automation_status"] = build_automation_status(container)
         payload["enforcement"] = build_enforcement_summary(container)
+        payload["panel_server"] = collect_panel_server_snapshot()
         return payload
     except ReadSnapshotUnavailableError as exc:
         raise HTTPException(

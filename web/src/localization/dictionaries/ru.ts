@@ -76,7 +76,7 @@ export const ruDictionary: TranslationDictionary = {
       queue: "Очередь",
       decisions: "Решения",
       console: "Консоль",
-      rules: "Правила детекта",
+      rules: "Правила",
       telegram: "Telegram",
       access: "Доступ",
       data: "Данные",
@@ -409,13 +409,13 @@ export const ruDictionary: TranslationDictionary = {
       option: "{value}",
     },
     actions: {
-      mobile: "Мобильный доступ",
-      home: "Домашний доступ",
+      mobile: "Мобильный",
+      home: "Домашний",
       skip: "Пропустить",
       openCase: "Открыть кейс",
       openEvents: "Консоль",
-      bulkMobile: "Пометить выбранные как мобильные",
-      bulkHome: "Пометить выбранные как домашние",
+      bulkMobile: "Пометить как мобильные",
+      bulkHome: "Пометить как домашние",
       bulkSkip: "Пропустить выбранные",
       recheckVisible: "Перепроверить видимые",
       recheckDone: "Перепроверено {count} кейсов очереди",
@@ -732,7 +732,7 @@ export const ruDictionary: TranslationDictionary = {
   },
   rules: {
     eyebrow: "Живые правила",
-    title: "Настройки и правила детекта",
+    title: "Правила",
     saveRules: "Сохранить правила",
     rulesUpdated: "Правила обновлены",
     generalSaved: "Общие настройки сохранены",
@@ -986,7 +986,7 @@ export const ruDictionary: TranslationDictionary = {
   },
   data: {
     eyebrow: "Данные",
-    title: "Оперативное управление данными",
+    title: "Данные",
     sectionDescriptions: {
       console:
         "Единая операторская консоль с системными логами панели, heartbeat модулей и входящими данными от модулей.",
@@ -1043,6 +1043,7 @@ export const ruDictionary: TranslationDictionary = {
       calibrationExportReady: "Архив калибровки сформирован",
     },
     users: {
+      pageTitle: "Поиск пользователя",
       searchPlaceholder: "Поиск по UUID / system ID / Telegram ID / имени пользователя",
       search: "Искать",
       searching: "Ищу…",

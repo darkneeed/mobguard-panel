@@ -133,6 +133,8 @@ class MetricsAPITests(unittest.TestCase):
         self.assertEqual(payload["realtime_usage"]["active_users"], 2)
         self.assertEqual(payload["realtime_usage"]["violating_users"], 1)
         self.assertEqual(payload["realtime_usage"]["compliant_users"], 1)
+        self.assertIn("panel_server", payload)
+        self.assertIn("memory_total_bytes", payload["panel_server"])
 
     def test_admin_modules_includes_runtime_summary_and_latest_heartbeat_metrics(self):
         self.store.create_managed_module(
@@ -197,47 +199,83 @@ class MetricsAPITests(unittest.TestCase):
         with self.store._connect() as conn:
             conn.execute(
                 """
-                INSERT INTO ingested_raw_events (
-                    event_uid, module_id, module_name, received_at, occurred_at, log_offset,
-                    subject_uuid, username, system_id, telegram_id, ip, tag, raw_payload_json
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO analysis_events (
+                    created_at, module_id, module_name, source_event_uid, decision_source,
+                    case_scope_key, device_scope_key, scope_type, subject_key,
+                    uuid, username, system_id, telegram_id, ip, tag,
+                    verdict, confidence_band, score, isp, asn,
+                    asn_source, provider_source, hard_flags_json,
+                    punitive_eligible, reasons_json, signal_flags_json, bundle_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
-                    "evt-1",
+                    "9999-04-11T10:00:00",
                     "node-metrics",
                     "Node Metrics",
-                    "2026-04-11T10:00:10",
-                    "9999-04-11T10:00:00",
-                    1,
+                    "evt-1",
+                    "rule_engine",
+                    "scope-1",
+                    "device-1",
+                    "subject_ip",
+                    "subject-1",
                     "uuid-1",
                     "alice",
                     None,
                     None,
                     "1.2.3.4",
                     "SELFSTEAL_RU-YANDEX_TCP",
+                    "MOBILE",
+                    "UNSURE",
+                    0,
+                    "",
+                    None,
+                    "unknown",
+                    "unknown",
+                    "[]",
+                    0,
+                    "[]",
+                    "{}",
                     "{}",
                 ),
             )
             conn.execute(
                 """
-                INSERT INTO ingested_raw_events (
-                    event_uid, module_id, module_name, received_at, occurred_at, log_offset,
-                    subject_uuid, username, system_id, telegram_id, ip, tag, raw_payload_json
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO analysis_events (
+                    created_at, module_id, module_name, source_event_uid, decision_source,
+                    case_scope_key, device_scope_key, scope_type, subject_key,
+                    uuid, username, system_id, telegram_id, ip, tag,
+                    verdict, confidence_band, score, isp, asn,
+                    asn_source, provider_source, hard_flags_json,
+                    punitive_eligible, reasons_json, signal_flags_json, bundle_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
-                    "evt-2",
+                    "9999-04-11T10:00:01",
                     "node-metrics",
                     "Node Metrics",
-                    "2026-04-11T10:00:10",
-                    "9999-04-11T10:00:01",
-                    2,
+                    "evt-2",
+                    "rule_engine",
+                    "scope-2",
+                    "device-2",
+                    "subject_ip",
+                    "subject-2",
                     "uuid-2",
                     "bob",
                     None,
                     None,
                     "1.2.3.5",
                     "SELFSTEAL_RU-YANDEX_TCP",
+                    "MOBILE",
+                    "UNSURE",
+                    0,
+                    "",
+                    None,
+                    "unknown",
+                    "unknown",
+                    "[]",
+                    0,
+                    "[]",
+                    "{}",
                     "{}",
                 ),
             )

@@ -73,7 +73,7 @@ export function describeScopeContext(
     contextValue: t("common.scopeLabels.ipOnlyContext"),
     detailContextValue: t("common.scopeLabels.ipOnlyContext"),
     historyTitle: t("common.scopeLabels.ipOnlyHistoryTitle"),
-    historyLabel: t("common.scopeLabels.ipOnlyHistoryTitle"),
+    historyLabel: t("common.scopeLabels.ipOnlyHistory", historyParams),
     scopeMeta: t("common.scopeLabels.ipOnlyScope"),
     sharedAccessWarning: ""
   };

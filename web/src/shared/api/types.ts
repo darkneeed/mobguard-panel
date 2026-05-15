@@ -572,6 +572,25 @@ export type OverviewRealtimeUsageSummary = {
   active_window_seconds?: number;
 };
 
+export type OverviewPanelServerSummary = {
+  host?: string | null;
+  platform?: string | null;
+  cpu_percent?: number | null;
+  cpu_cores?: number | null;
+  load_avg_1m?: number | null;
+  load_avg_5m?: number | null;
+  load_avg_15m?: number | null;
+  memory_total_bytes?: number | null;
+  memory_used_bytes?: number | null;
+  memory_percent?: number | null;
+  disk_total_bytes?: number | null;
+  disk_used_bytes?: number | null;
+  disk_percent?: number | null;
+  uptime_seconds?: number | null;
+  api_process_rss_bytes?: number | null;
+  collected_at?: string | null;
+};
+
 export type OverviewMetricsResponse = {
   health: HealthSnapshot;
   quality: Record<string, unknown>;
@@ -582,6 +601,7 @@ export type OverviewMetricsResponse = {
   module_config?: OverviewModuleConfigSummary;
   enforcement?: OverviewEnforcementSummary;
   realtime_usage?: OverviewRealtimeUsageSummary;
+  panel_server?: OverviewPanelServerSummary;
 };
 
 export type ViolationsResponse = {

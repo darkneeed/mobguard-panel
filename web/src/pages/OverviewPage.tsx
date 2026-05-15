@@ -1,59 +1,41 @@
-import { FormEvent, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
-import { hasPermission } from "../app/permissions";
-import { prefetchRouteModule } from "../app/routeModules";
 import {
   api,
   ModuleListResponse,
   ModuleRecord,
   OverviewMetricsResponse,
   Session,
-  UserSearchResponse,
 } from "../api/client";
+import { prefetchRouteModule } from "../app/routeModules";
 import { useI18n } from "../localization";
 import { useVisiblePolling } from "../shared/useVisiblePolling";
 import { formatDisplayDateTime } from "../utils/datetime";
+import { useState, useMemo } from "react";
 
-const OVERVIEW_REFRESH_MS = 30000;
-const OVERVIEW_STALE_AFTER_SECONDS = 15;
+const OVERVIEW_REFRESH_MS = 10000;
 
 function formatBytes(value?: number | null): string {
-  if (value === null || value === undefined || Number.isNaN(value)) {
-    return "—";
-  }
+  if (value === null || value === undefined || Number.isNaN(value)) return "—";
   const units = ["B", "KiB", "MiB", "GiB", "TiB"];
   let size = Math.max(value, 0);
   let unit = units[0];
   for (const candidate of units) {
     unit = candidate;
-    if (size < 1024 || candidate === units[units.length - 1]) {
-      break;
-    }
+    if (size < 1024 || candidate === units[units.length - 1]) break;
     size /= 1024;
   }
   const digits = size >= 100 ? 0 : size >= 10 ? 1 : 2;
   return `${size.toFixed(digits)} ${unit}`;
 }
 
-function formatRate(value?: number | null): string {
-  if (value === null || value === undefined || Number.isNaN(value)) {
-    return "—";
-  }
-  return `${formatBytes(value)}/s`;
-}
-
 function formatPercent(value?: number | null): string {
-  if (value === null || value === undefined || Number.isNaN(value)) {
-    return "—";
-  }
+  if (value === null || value === undefined || Number.isNaN(value)) return "—";
   return `${value.toFixed(1)}%`;
 }
 
 function formatAge(seconds?: number | null): string {
-  if (seconds === null || seconds === undefined || Number.isNaN(seconds)) {
-    return "—";
-  }
+  if (seconds === null || seconds === undefined || Number.isNaN(seconds)) return "—";
   const total = Math.max(Math.round(seconds), 0);
   if (total < 60) return `${total}s`;
   if (total < 3600) return `${Math.round(total / 60)}m`;
@@ -61,7 +43,18 @@ function formatAge(seconds?: number | null): string {
   return `${Math.round(total / 86400)}d`;
 }
 
-function summaryPercent(used?: number | null, total?: number | null): number | null {
+function formatDuration(seconds?: number | null): string {
+  if (seconds === null || seconds === undefined || Number.isNaN(seconds)) return "—";
+  const total = Math.max(Math.round(seconds), 0);
+  const days = Math.floor(total / 86400);
+  const hours = Math.floor((total % 86400) / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  if (days > 0) return `${days}д ${hours}ч`;
+  if (hours > 0) return `${hours}ч ${minutes}м`;
+  return `${minutes}м`;
+}
+
+function percent(used?: number | null, total?: number | null): number | null {
   if (used === null || used === undefined || total === null || total === undefined || total <= 0) {
     return null;
   }
@@ -69,26 +62,20 @@ function summaryPercent(used?: number | null, total?: number | null): number | n
 }
 
 function metricVariant(value?: number | null, warn = 75, error = 90): string {
-  if (value === null || value === undefined || Number.isNaN(value)) {
-    return "severity-low";
-  }
+  if (value === null || value === undefined || Number.isNaN(value)) return "severity-low";
   if (value >= error) return "severity-critical";
   if (value >= warn) return "severity-high";
   return "status-resolved";
 }
 
 function meterWidth(value?: number | null): string {
-  if (value === null || value === undefined || Number.isNaN(value)) {
-    return "0%";
-  }
+  if (value === null || value === undefined || Number.isNaN(value)) return "0%";
   return `${Math.min(Math.max(value, 0), 100)}%`;
 }
 
 function moduleVariant(module: ModuleRecord): string {
+  if (module.install_state === "pending_install") return "review-only";
   const system = module.runtime_metrics?.system;
-  if (module.install_state === "pending_install") {
-    return "review-only";
-  }
   if (
     !module.healthy ||
     module.health_status === "error" ||
@@ -109,18 +96,21 @@ function moduleVariant(module: ModuleRecord): string {
   return "status-resolved";
 }
 
-export function OverviewPage({ session }: { session?: Session }) {
+function moduleStatusText(module: ModuleRecord): string {
+  if (module.install_state === "pending_install") return "Ожидает установку";
+  if (!module.healthy) return "Не отвечает";
+  if (module.health_status === "error") return "Ошибка";
+  if (module.health_status === "warn") return "Предупреждение";
+  return "Норма";
+}
+
+export function OverviewPage({ session: _session }: { session?: Session }) {
   const { t, language } = useI18n();
   const [overview, setOverview] = useState<OverviewMetricsResponse | null>(null);
   const [modules, setModules] = useState<ModuleListResponse | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
-  const [lastLoadedAt, setLastLoadedAt] = useState<string>("");
-  const [searchQuery, setSearchQuery] = useState("");
-  const [searchResult, setSearchResult] = useState<UserSearchResponse | null>(null);
-  const [searchError, setSearchError] = useState("");
-  const [searchPending, setSearchPending] = useState(false);
-  const canReadData = session ? hasPermission(session, "data.read") : true;
+  const [lastLoadedAt, setLastLoadedAt] = useState("");
 
   async function load() {
     try {
@@ -133,9 +123,7 @@ export function OverviewPage({ session }: { session?: Session }) {
       setError("");
       setLastLoadedAt(new Date().toISOString());
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : t("overview.errors.loadFailed"),
-      );
+      setError(err instanceof Error ? err.message : t("overview.errors.loadFailed"));
     } finally {
       setLoading(false);
     }
@@ -143,77 +131,34 @@ export function OverviewPage({ session }: { session?: Session }) {
 
   useVisiblePolling(true, load, OVERVIEW_REFRESH_MS, [t]);
 
-  async function searchUsers(event?: FormEvent) {
-    event?.preventDefault();
-    const query = searchQuery.trim();
-    if (!query) return;
-    setSearchPending(true);
-    setSearchError("");
-    try {
-      const payload = (await api.searchUsers(query)) as UserSearchResponse;
-      setSearchResult(payload);
-    } catch (err) {
-      setSearchError(err instanceof Error ? err.message : "Не удалось выполнить поиск");
-    } finally {
-      setSearchPending(false);
-    }
-  }
-
-  const freshness = overview?.freshness || null;
   const queue = overview?.latest_cases || null;
   const pipeline = overview?.pipeline || null;
   const enforcement = overview?.enforcement || null;
-  const summary = modules?.summary;
-  const overviewStale = Boolean(
-    (freshness?.overview_age_seconds ?? 0) > OVERVIEW_STALE_AFTER_SECONDS,
+  const panelServer = overview?.panel_server || null;
+  const summary = modules?.summary || null;
+  const staleSnapshot = (overview?.freshness?.overview_age_seconds ?? 0) > 20;
+  const staleModules = modules?.items.filter((item) => !item.healthy) || [];
+  const warningModules = modules?.items.filter((item) => moduleVariant(item) === "severity-high") || [];
+  const topModules = useMemo(
+    () =>
+      [...(modules?.items || [])]
+        .sort((left, right) => {
+          const rank = (item: ModuleRecord) => {
+            const variant = moduleVariant(item);
+            if (variant === "punitive") return 0;
+            if (variant === "severity-high") return 1;
+            if (variant === "review-only") return 2;
+            return 3;
+          };
+          const diff = rank(left) - rank(right);
+          if (diff !== 0) return diff;
+          return (right.runtime_metrics?.active_users ?? 0) - (left.runtime_metrics?.active_users ?? 0);
+        })
+        .slice(0, 3),
+    [modules?.items],
   );
 
-  const attentionItems = useMemo(() => {
-    const items: string[] = [];
-    if (overviewStale) {
-      items.push(t("overview.attentionItems.overviewStale"));
-    }
-    if ((pipeline?.failed_count ?? 0) > 0) {
-      items.push(
-        t("overview.attentionItems.failedQueue", {
-          count: pipeline?.failed_count ?? 0,
-        }),
-      );
-    }
-    if ((summary?.stale_modules ?? 0) > 0) {
-      items.push(t("overview.attentionItems.staleModules", { count: summary?.stale_modules ?? 0 }));
-    }
-    if ((summary?.warning_modules ?? 0) > 0 || (summary?.error_modules ?? 0) > 0) {
-      items.push(`Модули с риском: ${(summary?.warning_modules ?? 0) + (summary?.error_modules ?? 0)}`);
-    }
-    if ((enforcement?.active_total ?? 0) > 0) {
-      items.push(
-        t("overview.attentionItems.activeViolations", {
-          count: enforcement?.active_total ?? 0,
-        }),
-      );
-    }
-    if (!items.length) {
-      items.push(t("overview.attentionItems.quiet"));
-    }
-    return items;
-  }, [enforcement?.active_total, overviewStale, pipeline?.failed_count, summary?.error_modules, summary?.stale_modules, summary?.warning_modules, t]);
-
-  const topModules = useMemo(() => {
-    return [...(modules?.items || [])].sort((left, right) => {
-      const rank = (item: ModuleRecord) => {
-        const variant = moduleVariant(item);
-        if (variant === "punitive") return 0;
-        if (variant === "severity-high") return 1;
-        return 2;
-      };
-      const diff = rank(left) - rank(right);
-      if (diff !== 0) return diff;
-      return (right.runtime_metrics?.active_users ?? 0) - (left.runtime_metrics?.active_users ?? 0);
-    });
-  }, [modules?.items]);
-
-  function renderMetricMeter(label: string, value?: number | null, warn = 75, error = 90) {
+  function renderMeter(label: string, value?: number | null, warn = 75, error = 90) {
     const variant = metricVariant(value, warn, error);
     return (
       <div className="module-meter">
@@ -222,10 +167,7 @@ export function OverviewPage({ session }: { session?: Session }) {
           <strong>{formatPercent(value)}</strong>
         </div>
         <div className="module-meter-track">
-          <span
-            className={`module-meter-fill ${variant}`}
-            style={{ width: meterWidth(value) }}
-          />
+          <span className={`module-meter-fill ${variant}`} style={{ width: meterWidth(value) }} />
         </div>
       </div>
     );
@@ -237,7 +179,7 @@ export function OverviewPage({ session }: { session?: Session }) {
         <div>
           <h1>Главная</h1>
           <p className="page-lede">
-            Состояние серверов и модулей, общий онлайн по активности, нагрузка и быстрый доступ к пользователям.
+            Состояние сервера панели, модулей и очереди. Данные обновляются автоматически.
           </p>
         </div>
         <div className="dashboard-meta">
@@ -251,62 +193,49 @@ export function OverviewPage({ session }: { session?: Session }) {
               : t("common.loading")}
           </span>
           <span className="muted">
-            {t("overview.lastUpdated", {
-              value: formatDisplayDateTime(
-                freshness?.overview_updated_at || lastLoadedAt,
-                t("common.notAvailable"),
-                language,
-              ),
-            })}
+            Последняя синхронизация {formatDisplayDateTime(
+              panelServer?.collected_at || lastLoadedAt,
+              t("common.notAvailable"),
+              language,
+            )}
           </span>
         </div>
       </div>
 
-      {error ? (
-        <div className="error-box">
-          {error}
-          {overview
-            ? ` ${t("overview.errors.showingLastGood", {
-                value: formatAge(freshness?.overview_age_seconds),
-              })}`
-            : ""}
-        </div>
-      ) : null}
+      {error ? <div className="error-box">{error}</div> : null}
 
-      <div className="stats-grid">
+      <div className="stats-grid overview-top-stats">
+        <div className="stat-card stat-card-emphasis">
+          <span>CPU сервера</span>
+          <strong>{formatPercent(panelServer?.cpu_percent)}</strong>
+        </div>
+        <div className="stat-card stat-card-emphasis">
+          <span>RAM сервера</span>
+          <strong>{formatPercent(panelServer?.memory_percent)}</strong>
+        </div>
+        <div className="stat-card stat-card-emphasis">
+          <span>Диск сервера</span>
+          <strong>{formatPercent(panelServer?.disk_percent)}</strong>
+        </div>
+        <div className="stat-card">
+          <span>Uptime панели</span>
+          <strong>{formatDuration(panelServer?.uptime_seconds)}</strong>
+        </div>
+        <div className="stat-card">
+          <span>RSS API</span>
+          <strong>{formatBytes(panelServer?.api_process_rss_bytes)}</strong>
+        </div>
         <div className="stat-card">
           <span>Онлайн на модулях</span>
           <strong>{summary?.active_users_total ?? "—"}</strong>
-        </div>
-        <div className="stat-card">
-          <span>Модули в норме</span>
-          <strong>{summary?.healthy_modules ?? "—"}</strong>
-        </div>
-        <div className="stat-card">
-          <span>Внимание / ошибки</span>
-          <strong>
-            {summary ? `${summary.warning_modules + summary.error_modules}` : "—"}
-          </strong>
         </div>
         <div className="stat-card">
           <span>События за окно</span>
           <strong>{summary?.recent_events_total ?? "—"}</strong>
         </div>
         <div className="stat-card">
-          <span>Средний CPU</span>
-          <strong>{formatPercent(summary?.avg_cpu_percent)}</strong>
-        </div>
-        <div className="stat-card">
-          <span>RAM</span>
-          <strong>{formatPercent(summaryPercent(summary?.memory_used_bytes, summary?.memory_total_bytes))}</strong>
-        </div>
-        <div className="stat-card">
-          <span>Диск</span>
-          <strong>{formatPercent(summaryPercent(summary?.disk_used_bytes, summary?.disk_total_bytes))}</strong>
-        </div>
-        <div className="stat-card">
-          <span>MobGuard RSS</span>
-          <strong>{formatBytes(summary?.mobguard_process_rss_bytes)}</strong>
+          <span>Очередь</span>
+          <strong>{pipeline?.queue_depth ?? "—"}</strong>
         </div>
       </div>
 
@@ -314,119 +243,84 @@ export function OverviewPage({ session }: { session?: Session }) {
         <div className="panel panel-hero">
           <div className="panel-heading panel-heading-row">
             <div>
-              <h2>Ресурсы и состояние</h2>
+              <h2>Сервер панели</h2>
               <p className="muted">
-                Сводка по последним heartbeat’ам модулей и активности пользователей за окно {summary?.activity_window_seconds ? `${Math.round(summary.activity_window_seconds / 60)} минут` : "активности"}.
+                Ядра {panelServer?.cpu_cores ?? "—"} · load {panelServer?.load_avg_1m?.toFixed(2) ?? "—"} / {panelServer?.load_avg_5m?.toFixed(2) ?? "—"} / {panelServer?.load_avg_15m?.toFixed(2) ?? "—"}
               </p>
             </div>
             <Link
               className="button-link"
-              to="/modules"
-              onMouseEnter={() => prefetchRouteModule("/modules")}
-              onFocus={() => prefetchRouteModule("/modules")}
+              to="/data/users"
+              onMouseEnter={() => prefetchRouteModule("/data/users")}
+              onFocus={() => prefetchRouteModule("/data/users")}
             >
-              Открыть модули
+              Поиск пользователя
             </Link>
           </div>
-          <div className="record-grid">
-            <div className="record-kv">
-              <strong>RAM</strong>
-              <span>{formatBytes(summary?.memory_used_bytes)} / {formatBytes(summary?.memory_total_bytes)}</span>
+          <div className="overview-server-grid">
+            <div className="module-ops-chip">
+              <span>RAM</span>
+              <strong>{formatBytes(panelServer?.memory_used_bytes)} / {formatBytes(panelServer?.memory_total_bytes)}</strong>
             </div>
-            <div className="record-kv">
-              <strong>Диск</strong>
-              <span>{formatBytes(summary?.disk_used_bytes)} / {formatBytes(summary?.disk_total_bytes)}</span>
+            <div className="module-ops-chip">
+              <span>Диск</span>
+              <strong>{formatBytes(panelServer?.disk_used_bytes)} / {formatBytes(panelServer?.disk_total_bytes)}</strong>
             </div>
-            <div className="record-kv">
-              <strong>Пик CPU</strong>
-              <span>{formatPercent(summary?.peak_cpu_percent)}</span>
+            <div className="module-ops-chip">
+              <span>Активные ограничения</span>
+              <strong>{enforcement?.active_total ?? "—"}</strong>
             </div>
-            <div className="record-kv">
-              <strong>Очередь</strong>
-              <span>{pipeline?.queue_depth ?? "—"}</span>
-            </div>
-            <div className="record-kv">
-              <strong>Ошибки конвейера</strong>
-              <span>{pipeline?.failed_count ?? "—"}</span>
-            </div>
-            <div className="record-kv">
-              <strong>Активные ограничения</strong>
-              <span>{enforcement?.active_total ?? "—"}</span>
+            <div className="module-ops-chip">
+              <span>Проблемных модулей</span>
+              <strong>{(summary?.warning_modules ?? 0) + (summary?.error_modules ?? 0) + (summary?.stale_modules ?? 0)}</strong>
             </div>
           </div>
-          <div className="record-list overview-signal-list">
-            {attentionItems.map((item) => (
-              <div className="record-item" key={item}>
-                <div className="record-main">
-                  <span className="record-title">{item}</span>
-                </div>
-              </div>
-            ))}
+          <div className="module-meters">
+            {renderMeter("CPU", panelServer?.cpu_percent, 70, 90)}
+            {renderMeter("RAM", panelServer?.memory_percent, 78, 90)}
+            {renderMeter("Диск", panelServer?.disk_percent, 82, 92)}
+          </div>
+          <div className="overview-alert-strip">
+            {staleSnapshot ? <span className="tag severity-high">Снимок обзора устарел</span> : null}
+            {staleModules.length > 0 ? <span className="tag punitive">{staleModules.length} модулей не отвечают</span> : null}
+            {warningModules.length > 0 ? <span className="tag severity-high">{warningModules.length} модулей требуют внимания</span> : null}
+            {(pipeline?.failed_count ?? 0) > 0 ? <span className="tag punitive">Ошибки очереди: {pipeline?.failed_count ?? 0}</span> : null}
+            {!staleSnapshot && staleModules.length === 0 && warningModules.length === 0 && (pipeline?.failed_count ?? 0) === 0 ? (
+              <span className="tag status-resolved">Фоновые сервисы выглядят стабильно</span>
+            ) : null}
           </div>
         </div>
 
         <div className="panel">
-          <div className="panel-heading panel-heading-row">
-            <div>
-              <h2>Поиск пользователя</h2>
-              <p className="muted">
-                Поиск по UUID, username, Telegram ID или System ID в тех данных, которые уже есть в панели.
-              </p>
+          <div className="panel-heading">
+            <h2>Поток обработки</h2>
+            <p className="muted">
+              Очередь, лаг и активные санкции без тяжёлых вспомогательных карточек.
+            </p>
+          </div>
+          <div className="stats-grid overview-flow-grid">
+            <div className="stat-card">
+              <span>Открытая очередь</span>
+              <strong>{queue?.count ?? "—"}</strong>
+            </div>
+            <div className="stat-card">
+              <span>Глубина очереди</span>
+              <strong>{pipeline?.queue_depth ?? "—"}</strong>
+            </div>
+            <div className="stat-card">
+              <span>Лаг</span>
+              <strong>{formatAge(pipeline?.current_lag_seconds)}</strong>
+            </div>
+            <div className="stat-card">
+              <span>Pending remote</span>
+              <strong>{pipeline?.enforcement_pending_count ?? "—"}</strong>
             </div>
           </div>
-          <form className="search-strip compact-search-strip" onSubmit={searchUsers}>
-            <input
-              value={searchQuery}
-              onChange={(event) => setSearchQuery(event.target.value)}
-              placeholder="UUID / username / Telegram ID / System ID"
-            />
-            <button type="submit" disabled={searchPending || !searchQuery.trim()}>
-              {searchPending ? "Ищу..." : "Найти"}
-            </button>
-          </form>
-          {searchError ? <div className="error-box">{searchError}</div> : null}
-          {searchResult?.panel_match ? (
-            <div className="tag overview-search-tag">
-              Panel match: {String(
-                (searchResult.panel_match as Record<string, unknown>).username ||
-                  (searchResult.panel_match as Record<string, unknown>).uuid ||
-                  (searchResult.panel_match as Record<string, unknown>).id ||
-                  "user"
-              )}
-            </div>
-          ) : null}
-          <div className="record-list overview-search-results">
-            {(searchResult?.items || []).length ? (
-              searchResult?.items.map((item) => {
-                const identifier = String(item.uuid || item.system_id || item.telegram_id || "");
-                const queryValue = String(item.username || item.uuid || item.system_id || item.telegram_id || "");
-                return (
-                  <Link
-                    key={`${identifier}-${queryValue}`}
-                    to={`/data/users?identifier=${encodeURIComponent(identifier)}&query=${encodeURIComponent(queryValue)}`}
-                    className="record-item inline-link"
-                    onMouseEnter={() => prefetchRouteModule("/data/users")}
-                    onFocus={() => prefetchRouteModule("/data/users")}
-                  >
-                    <div className="record-main">
-                      <span className="record-title">
-                        {String(item.username || item.uuid || item.system_id || item.telegram_id)}
-                      </span>
-                      <span className="tag">Открыть карточку</span>
-                    </div>
-                    <div className="record-meta">
-                      <span>UUID: {String(item.uuid || "—")}</span>
-                      <span>System ID: {String(item.system_id ?? "—")}</span>
-                      <span>Telegram ID: {String(item.telegram_id || "—")}</span>
-                    </div>
-                  </Link>
-                );
-              })
-            ) : searchResult ? (
-              <div className="provider-empty">Совпадений не найдено</div>
-            ) : (
-              <div className="provider-empty">Введите идентификатор и выполните поиск</div>
-            )}
+          <div className="record-meta overview-flow-meta">
+            <span>{pipeline?.queued_count ?? 0} в очереди</span>
+            <span>{pipeline?.processing_count ?? 0} обрабатывается</span>
+            <span>Ошибок {pipeline?.failed_count ?? 0}</span>
+            <span>Последний drain {formatDisplayDateTime(pipeline?.last_successful_drain_at || "", t("common.notAvailable"), language)}</span>
           </div>
         </div>
       </div>
@@ -450,17 +344,25 @@ export function OverviewPage({ session }: { session?: Session }) {
           <div className="panel">
             <div className="panel-heading panel-heading-row">
               <div>
-                <h2>Модули и серверная нагрузка</h2>
+                <h2>Модули</h2>
                 <p className="muted">
-                  По каждому модулю: онлайн за окно активности, нагрузка сервера и использование ресурсов процессами MobGuard.
+                  Общий онлайн по модулям и текущая нагрузка по каждому.
                 </p>
               </div>
+              <Link
+                className="button-link ghost"
+                to="/modules"
+                onMouseEnter={() => prefetchRouteModule("/modules")}
+                onFocus={() => prefetchRouteModule("/modules")}
+              >
+                Все модули
+              </Link>
             </div>
             <div className="queue-grid module-ops-grid-list">
               {topModules.map((module) => {
                 const system = module.runtime_metrics?.system;
                 return (
-                  <div className={`queue-card module-ops-card`} key={module.module_id}>
+                  <div className="queue-card module-ops-card module-ops-card-compact" key={module.module_id}>
                     <div className="queue-card-top">
                       <div>
                         <strong>{module.module_name}</strong>
@@ -469,19 +371,10 @@ export function OverviewPage({ session }: { session?: Session }) {
                           <span>{module.version || "—"}</span>
                         </div>
                       </div>
-                      <span className={`status-badge ${moduleVariant(module)}`}>
-                        {module.install_state === "pending_install"
-                          ? "pending"
-                          : !module.healthy
-                          ? "offline"
-                          : module.health_status === "error"
-                            ? "error"
-                            : module.health_status === "warn"
-                              ? "warn"
-                              : "ok"}
+                      <span className={`status-badge module-status-pill ${moduleVariant(module)}`}>
+                        {moduleStatusText(module)}
                       </span>
                     </div>
-
                     <div className="module-ops-grid">
                       <div className="module-ops-chip">
                         <span>Онлайн</span>
@@ -491,42 +384,18 @@ export function OverviewPage({ session }: { session?: Session }) {
                         <span>События</span>
                         <strong>{module.runtime_metrics?.recent_events ?? 0}</strong>
                       </div>
-                      <div className="module-ops-chip">
-                        <span>MobGuard RSS</span>
-                        <strong>{formatBytes(module.runtime_metrics?.processes?.rss_bytes)}</strong>
-                      </div>
-                      <div className="module-ops-chip">
-                        <span>Spool</span>
-                        <strong>{module.spool_depth}</strong>
-                      </div>
                     </div>
-
                     <div className="module-meters">
-                      {renderMetricMeter("CPU", system?.cpu_percent)}
-                      {renderMetricMeter("RAM", system?.memory_percent)}
-                      {renderMetricMeter("Диск", system?.disk_percent, 80, 92)}
+                      {renderMeter("CPU", system?.cpu_percent, 75, 90)}
+                      {renderMeter("RAM", system?.memory_percent, 80, 92)}
+                      {renderMeter("Диск", system?.disk_percent, 82, 92)}
                     </div>
-
-                    <div className="record-meta">
-                      <span>Load {system?.load_avg_1m?.toFixed(2) ?? "—"} / {system?.load_avg_5m?.toFixed(2) ?? "—"} / {system?.load_avg_15m?.toFixed(2) ?? "—"}</span>
-                      <span>RAM {formatBytes(system?.memory_used_bytes)} / {formatBytes(system?.memory_total_bytes)}</span>
-                      <span>Disk {formatBytes(system?.disk_used_bytes)} / {formatBytes(system?.disk_total_bytes)}</span>
-                      <span>I/O {formatRate(system?.disk_read_bps)} ↓ / {formatRate(system?.disk_write_bps)} ↑</span>
+                    <div className="record-meta module-ops-meta">
+                      <span>RSS {formatBytes(module.runtime_metrics?.processes?.rss_bytes)}</span>
+                      <span>Spool {module.spool_depth}</span>
                       <span>Heartbeat {formatAge(module.seconds_since_last_seen)}</span>
                     </div>
-
-                    {module.error_text ? <div className="error-box">{module.error_text}</div> : null}
-
-                    <div className="action-row">
-                      <Link
-                        className="ghost button-link"
-                        to="/modules"
-                        onMouseEnter={() => prefetchRouteModule("/modules")}
-                        onFocus={() => prefetchRouteModule("/modules")}
-                      >
-                        Перейти к модулю
-                      </Link>
-                    </div>
+                    {module.error_text ? <div className="error-box module-inline-error">{module.error_text}</div> : null}
                   </div>
                 );
               })}
@@ -535,87 +404,45 @@ export function OverviewPage({ session }: { session?: Session }) {
 
           <div className="dashboard-grid">
             <div className="panel">
-              <div className="panel-heading panel-heading-row">
-                <div>
-                  <h2>Очередь и доставка</h2>
-                  <p className="muted">
-                    Состояние общего конвейера обработки и удалённых применений.
-                  </p>
-                </div>
-              </div>
-              <div className="metric-list">
-                <div className="metric-row">
-                  <div className="record-main">
-                    <span className="record-title">Глубина очереди</span>
-                    <span>{pipeline?.queue_depth ?? "—"}</span>
-                  </div>
-                  <div className="record-meta">
-                    {pipeline?.queued_count ?? 0} в очереди · {pipeline?.processing_count ?? 0} обрабатывается
-                  </div>
-                </div>
-                <div className="metric-row">
-                  <div className="record-main">
-                    <span className="record-title">Ошибки</span>
-                    <span>{pipeline?.failed_count ?? "—"}</span>
-                  </div>
-                  <div className="record-meta">
-                    Pending remote: {pipeline?.enforcement_pending_count ?? 0}
-                  </div>
-                </div>
-                <div className="metric-row">
-                  <div className="record-main">
-                    <span className="record-title">Лаг</span>
-                    <span>{formatAge(pipeline?.current_lag_seconds)}</span>
-                  </div>
-                  <div className="record-meta">
-                    Последний drain: {formatDisplayDateTime(
-                      pipeline?.last_successful_drain_at || "",
-                      t("common.notAvailable"),
-                      language,
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="panel">
-              <div className="panel-heading panel-heading-row">
-                <div>
-                  <h2>Последние кейсы</h2>
-                  <p className="muted">
-                    Быстрый доступ к свежим спорным кейсам из очереди.
-                  </p>
-                </div>
+              <div className="panel-heading">
+                <h2>Последние кейсы</h2>
+                <p className="muted">Свежие спорные кейсы без лишнего служебного шума.</p>
               </div>
               <div className="record-list">
                 {queue?.items.length ? (
-                  queue.items.map((item) => (
+                  queue.items.slice(0, 5).map((item) => (
                     <Link
+                      key={item.id}
                       to={`/reviews/${item.id}`}
                       className="record-item inline-link"
-                      key={item.id}
                       onMouseEnter={() => prefetchRouteModule(`/reviews/${item.id}`)}
                       onFocus={() => prefetchRouteModule(`/reviews/${item.id}`)}
                     >
                       <div className="record-main">
-                        <span className="record-title">
-                          #{item.id} · {item.username || item.uuid || item.ip}
-                        </span>
+                        <span className="record-title">#{item.id} · {item.username || item.uuid || item.ip}</span>
                         <span className="tag">{item.review_reason}</span>
                       </div>
                       <div className="record-meta">
                         <span>{item.ip}</span>
-                        <span>{formatDisplayDateTime(
-                          item.updated_at,
-                          t("common.notAvailable"),
-                          language,
-                        )}</span>
+                        <span>{formatDisplayDateTime(item.updated_at, t("common.notAvailable"), language)}</span>
                       </div>
                     </Link>
                   ))
                 ) : (
                   <div className="provider-empty">Открытых кейсов сейчас нет</div>
                 )}
+              </div>
+            </div>
+            <div className="panel">
+              <div className="panel-heading">
+                <h2>Быстрые действия</h2>
+                <p className="muted">Переходы в основные операторские сценарии.</p>
+              </div>
+              <div className="overview-quick-actions">
+                <Link className="button-link" to="/queue">Очередь</Link>
+                <Link className="button-link ghost" to="/data/users">Поиск пользователя</Link>
+                <Link className="button-link ghost" to="/modules">Модули</Link>
+                <Link className="button-link ghost" to="/rules/general">Правила</Link>
               </div>
             </div>
           </div>

@@ -5,30 +5,18 @@ import { hasPermission } from "../app/permissions";
 import {
   AnalysisEventListResponse,
   api,
-  AuditTrailResponse,
-  CacheAdminResponse,
-  CalibrationExportPreview,
-  CalibrationReadinessCheck,
   ConsoleListResponse,
-  LearningAdminResponse,
-  OverridesResponse,
-  ReviewListResponse,
   Session,
   UserCardExportResponse,
   UserCardResponse,
   UserSearchResponse,
-  ViolationsResponse,
 } from "../api/client";
 import { useToast } from "../components/ToastProvider";
 import { useI18n } from "../localization";
 import { downloadBlob } from "../shared/api/request";
 import { useVisiblePolling } from "../shared/useVisiblePolling";
-import { ExportsDataSection } from "./data/ExportsDataSection";
-import { AuditTrailSection } from "./data/AuditTrailSection";
-import { ConsoleDataSection } from "./data/ConsoleDataSection";
 import { EventsDataSection } from "./data/EventsDataSection";
-import { LearningCasesSection } from "./data/LearningCasesSection";
-import { OperationsDataSection } from "./data/OperationsDataSection";
+import { ConsoleDataSection } from "./data/ConsoleDataSection";
 import { UserDataSection } from "./data/UserDataSection";
 
 type DataTab =
@@ -42,6 +30,7 @@ type DataTab =
   | "events"
   | "exports"
   | "audit";
+type DataView = "users" | "events";
 type ConsoleFilters = {
   q: string;
   source: string;
@@ -99,6 +88,11 @@ export function DataPage({ session }: { session?: Session }) {
       ? (section as DataTab)
       : "users";
   }, [section]);
+  const dataView = useMemo<DataView>(() => {
+    return tab === "events" || tab === "console" || tab === "cases" || tab === "audit" || tab === "exports"
+      ? "events"
+      : "users";
+  }, [tab]);
   const [pageError, setPageError] = useState("");
   const [pending, setPending] = useState<Partial<Record<PendingKey, boolean>>>(
     {},
@@ -114,16 +108,10 @@ export function DataPage({ session }: { session?: Session }) {
   const [strikeCount, setStrikeCount] = useState("1");
   const [warningCount, setWarningCount] = useState("1");
 
-  const [violations, setViolations] = useState<ViolationsResponse | null>(null);
-  const [overrides, setOverrides] = useState<OverridesResponse | null>(null);
-  const [cache, setCache] = useState<CacheAdminResponse | null>(null);
-  const [learning, setLearning] = useState<LearningAdminResponse | null>(null);
-  const [cases, setCases] = useState<ReviewListResponse | null>(null);
   const [events, setEvents] = useState<AnalysisEventListResponse | null>(null);
   const [consoleData, setConsoleData] = useState<ConsoleListResponse | null>(
     null,
   );
-  const [audit, setAudit] = useState<AuditTrailResponse | null>(null);
   const canWriteData = hasPermission(session, "data.write");
   const [consoleFilters, setConsoleFilters] = useState<ConsoleFilters>({
     q: "",
@@ -131,7 +119,7 @@ export function DataPage({ session }: { session?: Session }) {
     level: "",
     module_id: "",
     page: 1,
-    page_size: 100,
+    page_size: 50,
   });
   const [eventFilters, setEventFilters] = useState<EventFilters>({
     q: "",
@@ -145,32 +133,12 @@ export function DataPage({ session }: { session?: Session }) {
     confidence_band: "",
     has_review_case: "",
     page: 1,
-    page_size: 50,
+    page_size: 20,
   });
 
-  const [exactOverrideIp, setExactOverrideIp] = useState("");
-  const [exactOverrideDecision, setExactOverrideDecision] = useState("HOME");
-  const [unsureOverrideIp, setUnsureOverrideIp] = useState("");
-  const [unsureOverrideDecision, setUnsureOverrideDecision] = useState("HOME");
-  const [selectedCacheIp, setSelectedCacheIp] = useState("");
-  const [cacheDraft, setCacheDraft] = useState<Record<string, string>>({});
-
-  const [calibrationFilters, setCalibrationFilters] = useState<
-    Record<string, string | boolean>
-  >({
-    opened_from: "",
-    opened_to: "",
-    review_reason: "",
-    provider_key: "",
-    include_unknown: false,
-    status: "resolved_only",
-  });
-  const [lastCalibrationManifest, setLastCalibrationManifest] =
-    useState<CalibrationExportPreview | null>(null);
-  const [lastCalibrationFilename, setLastCalibrationFilename] = useState("");
-  const [previewError, setPreviewError] = useState("");
   const handledQueryRef = useRef("");
   const handledIdentifierRef = useRef("");
+  const pageTitle = dataView === "users" ? t("data.users.pageTitle") : t("data.tabs.events");
 
   async function loadConsoleTab() {
     try {
@@ -245,22 +213,6 @@ export function DataPage({ session }: { session?: Session }) {
     }
   }
 
-  function parseManifestHeader(
-    header: string | null,
-  ): Record<string, unknown> | null {
-    if (!header) return null;
-    try {
-      const binary = atob(header);
-      const bytes = Uint8Array.from(binary, (item) => item.charCodeAt(0));
-      return JSON.parse(new TextDecoder().decode(bytes)) as Record<
-        string,
-        unknown
-      >;
-    } catch {
-      return null;
-    }
-  }
-
   useEffect(() => {
     let cancelled = false;
     setPageError("");
@@ -269,30 +221,15 @@ export function DataPage({ session }: { session?: Session }) {
       try {
         if (tab === "console") {
           return;
-        } else if (tab === "violations") {
-          const payload = await api.getViolations();
-          if (!cancelled) setViolations(payload);
-        } else if (tab === "overrides") {
-          const payload = await api.getOverrides();
-          if (!cancelled) setOverrides(payload);
-        } else if (tab === "cache") {
-          const payload = await api.getCache();
-          if (!cancelled) setCache(payload);
-        } else if (tab === "learning") {
-          const payload = await api.getLearningAdmin();
-          if (!cancelled) setLearning(payload);
-        } else if (tab === "cases") {
-          const payload = await api.listCases({ page: 1, page_size: 50 });
-          if (!cancelled) setCases(payload);
-        } else if (tab === "events") {
-          const payload = await api.getAnalysisEvents({
-            ...eventFilters,
-            sort: "created_desc",
-          });
-          if (!cancelled) setEvents(payload);
-        } else if (tab === "audit") {
-          const payload = await api.getAuditTrail();
-          if (!cancelled) setAudit(payload);
+        }
+        const eventsPayload = await api.getAnalysisEvents({
+          ...eventFilters,
+          page_size: Math.min(eventFilters.page_size, 20),
+          skip_count: true,
+          sort: "created_desc",
+        });
+        if (!cancelled) {
+          setEvents(eventsPayload);
         }
       } catch (err) {
         if (!cancelled) {
@@ -309,52 +246,30 @@ export function DataPage({ session }: { session?: Session }) {
     };
   }, [consoleFilters, eventFilters, tab, t]);
 
-  useVisiblePolling(tab === "console", loadConsoleTab, 3000, [
+  useVisiblePolling(dataView === "events", loadConsoleTab, 5000, [
     consoleFilters,
     t,
   ]);
 
-  useEffect(() => {
-    if (tab !== "exports") return undefined;
-
-    let cancelled = false;
-    const timer = window.setTimeout(async () => {
-      try {
-        const payload = await withPending("calibrationPreview", () =>
-          api.previewCalibration(
-            calibrationFilters as Record<
-              string,
-              string | number | boolean | undefined
-            >,
-          ),
-        );
-        if (cancelled) return;
-        setLastCalibrationManifest(payload);
-        setPreviewError("");
-      } catch (err) {
-        if (cancelled) return;
-        setPreviewError(
-          err instanceof Error
-            ? err.message
-            : t("data.errors.exportCalibrationFailed"),
-        );
-      }
-    }, 220);
-
-    return () => {
-      cancelled = true;
-      window.clearTimeout(timer);
-    };
-  }, [tab, calibrationFilters, t]);
-
-  async function searchUsers(queryOverride?: string) {
-    const targetQuery = (queryOverride ?? userQuery).trim();
+  async function searchUsers(queryOverride?: unknown) {
+    const targetQuery =
+      typeof queryOverride === "string" ? queryOverride.trim() : userQuery.trim();
     if (!targetQuery) return;
     try {
       const payload = await withPending("userSearch", () =>
         api.searchUsers(targetQuery),
       );
       setUserSearch(payload);
+      const panelMatch = payload.panel_match as Record<string, unknown> | null;
+      const fallbackIdentifier = String(
+        (panelMatch?.uuid as string | undefined) ||
+          (panelMatch?.id as number | undefined) ||
+          (panelMatch?.username as string | undefined) ||
+          "",
+      ).trim();
+      if (payload.items.length === 0 && fallbackIdentifier) {
+        await loadUser(fallbackIdentifier);
+      }
     } catch (err) {
       pushToast(
         "error",
@@ -394,61 +309,6 @@ export function DataPage({ session }: { session?: Session }) {
     }
   }
 
-  async function saveExactOverride() {
-    try {
-      await withPending("exactOverride", () =>
-        api.upsertExactOverride(exactOverrideIp, exactOverrideDecision),
-      );
-      setOverrides(await api.getOverrides());
-      pushToast("success", t("data.saved.exactOverride"));
-    } catch (err) {
-      pushToast(
-        "error",
-        err instanceof Error
-          ? err.message
-          : t("data.errors.saveExactOverrideFailed"),
-      );
-    }
-  }
-
-  async function saveUnsureOverride() {
-    try {
-      await withPending("unsureOverride", () =>
-        api.upsertUnsureOverride(unsureOverrideIp, unsureOverrideDecision),
-      );
-      setOverrides(await api.getOverrides());
-      pushToast("success", t("data.saved.unsureOverride"));
-    } catch (err) {
-      pushToast(
-        "error",
-        err instanceof Error
-          ? err.message
-          : t("data.errors.saveUnsureOverrideFailed"),
-      );
-    }
-  }
-
-  async function saveCachePatch() {
-    if (!selectedCacheIp) return;
-    try {
-      await withPending("cacheSave", () =>
-        api.patchCache(selectedCacheIp, {
-          status: cacheDraft.status,
-          confidence: cacheDraft.confidence,
-          details: cacheDraft.details,
-          asn: cacheDraft.asn ? Number(cacheDraft.asn) : null,
-        }),
-      );
-      setCache(await api.getCache());
-      pushToast("success", t("data.saved.cacheUpdated"));
-    } catch (err) {
-      pushToast(
-        "error",
-        err instanceof Error ? err.message : t("data.errors.saveCacheFailed"),
-      );
-    }
-  }
-
   async function buildUserExport(identifier: string) {
     try {
       const payload = await withPending("userExport", () =>
@@ -482,38 +342,6 @@ export function DataPage({ session }: { session?: Session }) {
     pushToast("info", t("data.saved.exportDownloaded"));
   }
 
-  async function generateCalibrationExport() {
-    try {
-      const response = await withPending("calibrationExport", () =>
-        api.exportCalibration(
-          calibrationFilters as Record<
-            string,
-            string | number | boolean | undefined
-          >,
-        ),
-      );
-      const manifest = parseManifestHeader(
-        response.headers.get("X-MobGuard-Export-Manifest"),
-      );
-      setLastCalibrationManifest(
-        (manifest as CalibrationExportPreview | null) ?? null,
-      );
-      setLastCalibrationFilename(response.filename);
-      downloadBlob(response.filename, response.blob);
-      pushToast("success", t("data.saved.calibrationExportReady"));
-      if (manifest && manifest.dataset_ready === false) {
-        pushToast("warning", t("data.exports.notReadyToast"));
-      }
-    } catch (err) {
-      pushToast(
-        "error",
-        err instanceof Error
-          ? err.message
-          : t("data.errors.exportCalibrationFailed"),
-      );
-    }
-  }
-
   function renderProviderEvidence(
     providerEvidence: Record<string, unknown> | undefined,
   ) {
@@ -540,36 +368,8 @@ export function DataPage({ session }: { session?: Session }) {
     );
   }
 
-  function formatExportWarning(code: string): string {
-    const translated = t(`data.exports.warnings.${code}`);
-    return translated === `data.exports.warnings.${code}` ? code : translated;
-  }
-
-  function formatDecisionLabel(value: unknown): string {
-    const key = `data.decisions.${String(value || "").toLowerCase()}`;
-    const translated = t(key);
-    return translated === key ? displayValue(value) : translated;
-  }
-
-  function formatReadinessCheckLabel(key: string): string {
-    const translated = t(`data.exports.readiness.checks.${key}`);
-    return translated === `data.exports.readiness.checks.${key}`
-      ? key.replace(/_/g, " ")
-      : translated;
-  }
-
-  function formatReadinessCheckValue(check: CalibrationReadinessCheck): string {
-    if (check.key === "provider_profiles_present") {
-      return `${check.current > 0 ? t("common.yes") : t("common.no")} / ${check.target > 0 ? t("common.yes") : t("common.no")}`;
-    }
-    if (check.key === "min_provider_support") {
-      return `${displayValue(check.current)} / ${displayValue(check.target)}`;
-    }
-    return `${Math.round(check.current * 100)}% / ${Math.round(check.target * 100)}%`;
-  }
-
   useEffect(() => {
-    if (tab !== "users") return;
+    if (dataView !== "users") return;
     const queryFromUrl = searchParams.get("query")?.trim() || "";
     const identifierFromUrl = searchParams.get("identifier")?.trim() || "";
 
@@ -584,20 +384,22 @@ export function DataPage({ session }: { session?: Session }) {
       handledIdentifierRef.current = identifierFromUrl;
       void loadUser(identifierFromUrl);
     }
-  }, [loadUser, searchParams, searchUsers, tab, userQuery]);
+  }, [dataView, loadUser, searchParams, searchUsers, userQuery]);
 
   return (
     <section className="page">
       <div className="page-header page-header-stack">
         <div>
-          <h1>{t("data.title")}</h1>
-          <p className="page-lede">{t(`data.sectionDescriptions.${tab}`)}</p>
+          <h1>{pageTitle}</h1>
+          <p className="page-lede">
+            {dataView === "users" ? t("data.sectionDescriptions.users") : t("data.sectionDescriptions.events")}
+          </p>
         </div>
       </div>
 
       {pageError ? <div className="error-box">{pageError}</div> : null}
 
-      {tab === "users" ? (
+      {dataView === "users" ? (
         <UserDataSection
           t={t}
           language={language}
@@ -627,86 +429,22 @@ export function DataPage({ session }: { session?: Session }) {
           renderProviderEvidence={renderProviderEvidence}
         />
       ) : null}
-      {tab === "console" ? (
-        <ConsoleDataSection
-          t={t}
-          consoleData={consoleData}
-          filters={consoleFilters}
-          setFilters={(updater) => setConsoleFilters((prev) => updater(prev))}
-        />
-      ) : null}
-      {tab === "violations" || tab === "overrides" || tab === "cache" ? (
-        <OperationsDataSection
-          mode={tab}
-          t={t}
-          language={language}
-          violations={violations}
-          overrides={overrides}
-          cache={cache}
-          exactOverrideIp={exactOverrideIp}
-          setExactOverrideIp={setExactOverrideIp}
-          exactOverrideDecision={exactOverrideDecision}
-          setExactOverrideDecision={setExactOverrideDecision}
-          unsureOverrideIp={unsureOverrideIp}
-          setUnsureOverrideIp={setUnsureOverrideIp}
-          unsureOverrideDecision={unsureOverrideDecision}
-          setUnsureOverrideDecision={setUnsureOverrideDecision}
-          selectedCacheIp={selectedCacheIp}
-          setSelectedCacheIp={setSelectedCacheIp}
-          cacheDraft={cacheDraft}
-          setCacheDraft={setCacheDraft}
-          canWriteData={canWriteData}
-          saveExactOverride={saveExactOverride}
-          saveUnsureOverride={saveUnsureOverride}
-          saveCachePatch={saveCachePatch}
-          setOverrides={setOverrides}
-          setCache={setCache}
-          pushToast={pushToast}
-          withPending={withPending}
-          isPending={isPending}
-          displayValue={displayValue}
-          formatDecisionLabel={formatDecisionLabel}
-        />
-      ) : null}
-      {tab === "learning" || tab === "cases" ? (
-        <LearningCasesSection
-          mode={tab}
-          t={t}
-          language={language}
-          learning={learning}
-          cases={cases}
-          canWriteData={canWriteData}
-          setLearning={setLearning}
-          pushToast={pushToast}
-        />
-      ) : null}
-      {tab === "events" ? (
-        <EventsDataSection
-          t={t}
-          language={language}
-          events={events}
-          filters={eventFilters}
-          setFilters={(updater) => setEventFilters((prev) => updater(prev))}
-        />
-      ) : null}
-      {tab === "exports" ? (
-        <ExportsDataSection
-          t={t}
-          isPending={isPending}
-          calibrationFilters={calibrationFilters}
-          setCalibrationFilters={setCalibrationFilters}
-          generateCalibrationExport={generateCalibrationExport}
-          lastCalibrationManifest={lastCalibrationManifest}
-          lastCalibrationFilename={lastCalibrationFilename}
-          previewError={previewError}
-          displayValue={displayValue}
-          formatExportWarning={formatExportWarning}
-          formatReadinessCheckLabel={formatReadinessCheckLabel}
-          formatReadinessCheckValue={formatReadinessCheckValue}
-        />
-      ) : null}
-      {tab === "audit" ? (
-        <AuditTrailSection t={t} language={language} audit={audit} />
+      {dataView === "events" ? (
+        <>
+          <ConsoleDataSection
+            t={t}
+            consoleData={consoleData}
+            filters={consoleFilters}
+            setFilters={(updater) => setConsoleFilters((prev) => updater(prev))}
+          />
+          <EventsDataSection
+            t={t}
+            language={language}
+            events={events}
+            filters={eventFilters}
+            setFilters={(updater) => setEventFilters((prev) => updater(prev))}
+          />
+        </>
       ) : null}
     </section>
   );

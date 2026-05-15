@@ -8,6 +8,7 @@ import os
 import secrets
 import sqlite3
 import textwrap
+import time
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -46,6 +47,10 @@ MODULE_ACTIVITY_WINDOW_SECONDS = 900
 
 MODULE_INGEST_LOCK = asyncio.Lock()
 MODULE_INGEST_BUSY_DETAIL = "Storage is temporarily busy; retry shortly"
+HEARTBEAT_DETAIL_CACHE_TTL_SECONDS = 45.0
+ACTIVITY_SNAPSHOT_CACHE_TTL_SECONDS = 60.0
+_HEARTBEAT_DETAIL_CACHE: dict[str, tuple[float, dict[str, dict[str, Any]]]] = {}
+_ACTIVITY_SNAPSHOT_CACHE: tuple[float, dict[str, Any]] | None = None
 
 
 def _container_runtime_dir(container: APIContainer) -> str:
@@ -321,24 +326,35 @@ def _coerce_int(value: Any) -> int | None:
 
 
 def _heartbeat_detail_map(container: APIContainer, module_ids: list[str]) -> dict[str, dict[str, Any]]:
+    global _HEARTBEAT_DETAIL_CACHE
     if not module_ids:
         return {}
-    placeholders = ", ".join("?" for _ in module_ids)
+    normalized_module_ids = tuple(sorted(set(module_ids)))
+    cache_key = "|".join(normalized_module_ids)
+    cached = _HEARTBEAT_DETAIL_CACHE.get(cache_key)
+    if cached and cached[0] > time.monotonic():
+        return copy.deepcopy(cached[1])
+    placeholders = ", ".join("?" for _ in normalized_module_ids)
     query = f"""
-        SELECT mh.module_id, mh.details_json
-        FROM module_heartbeats mh
-        JOIN (
-            SELECT module_id, MAX(id) AS max_id
-            FROM module_heartbeats
-            WHERE module_id IN ({placeholders})
-            GROUP BY module_id
-        ) latest ON latest.module_id = mh.module_id AND latest.max_id = mh.id
+        SELECT module_id, details_json
+        FROM (
+            SELECT
+                mh.module_id,
+                mh.details_json,
+                ROW_NUMBER() OVER (
+                    PARTITION BY mh.module_id
+                    ORDER BY mh.created_at DESC, mh.id DESC
+                ) AS rn
+            FROM module_heartbeats mh
+            WHERE mh.module_id IN ({placeholders})
+        ) ranked
+        WHERE rn = 1
     """
     try:
         with container.store._snapshot_connect(fast_read=True) as conn:
-            rows = conn.execute(query, module_ids).fetchall()
+            rows = conn.execute(query, list(normalized_module_ids)).fetchall()
     except sqlite3.OperationalError:
-        return {}
+        return copy.deepcopy(cached[1]) if cached else {}
     payload: dict[str, dict[str, Any]] = {}
     for row in rows:
         raw_details = str(row["details_json"] or "").strip() or "{}"
@@ -348,6 +364,10 @@ def _heartbeat_detail_map(container: APIContainer, module_ids: list[str]) -> dic
             details = {}
         if isinstance(details, dict):
             payload[str(row["module_id"] or "").strip()] = details
+    _HEARTBEAT_DETAIL_CACHE[cache_key] = (
+        time.monotonic() + HEARTBEAT_DETAIL_CACHE_TTL_SECONDS,
+        copy.deepcopy(payload),
+    )
     return payload
 
 
@@ -368,10 +388,23 @@ def _activity_snapshot(
     *,
     window_seconds: int = MODULE_ACTIVITY_WINDOW_SECONDS,
 ) -> dict[str, Any]:
-    occurred_from = (
+    global _ACTIVITY_SNAPSHOT_CACHE
+    cached = _ACTIVITY_SNAPSHOT_CACHE
+    if cached and cached[0] > time.monotonic():
+        return copy.deepcopy(cached[1])
+    created_from = (
         datetime.utcnow().replace(microsecond=0) - timedelta(seconds=max(int(window_seconds), 60))
     ).isoformat()
-    identity_sql = _activity_identity_sql()
+    identity_sql = """
+        COALESCE(
+            NULLIF(subject_key, ''),
+            NULLIF(uuid, ''),
+            CASE WHEN system_id IS NOT NULL THEN 'sys:' || CAST(system_id AS TEXT) END,
+            CASE WHEN telegram_id IS NOT NULL AND telegram_id != '' THEN 'tg:' || telegram_id END,
+            CASE WHEN username IS NOT NULL AND username != '' THEN 'usr:' || username END,
+            'ip:' || ip
+        )
+    """
     try:
         with container.store._snapshot_connect(fast_read=True) as conn:
             module_rows = conn.execute(
@@ -380,24 +413,26 @@ def _activity_snapshot(
                     module_id,
                     COUNT(*) AS recent_events,
                     COUNT(DISTINCT {identity_sql}) AS active_users
-                FROM ingested_raw_events
-                WHERE occurred_at >= ?
+                FROM analysis_events
+                WHERE created_at >= ?
                 GROUP BY module_id
                 """,
-                (occurred_from,),
+                (created_from,),
             ).fetchall()
             total_row = conn.execute(
                 f"""
                 SELECT
                     COUNT(*) AS recent_events_total,
                     COUNT(DISTINCT {identity_sql}) AS active_users_total
-                FROM ingested_raw_events
-                WHERE occurred_at >= ?
+                FROM analysis_events
+                WHERE created_at >= ?
                 """,
-                (occurred_from,),
+                (created_from,),
             ).fetchone()
     except sqlite3.OperationalError:
-        return {
+        if cached:
+            return copy.deepcopy(cached[1])
+        payload = {
             "window_seconds": int(window_seconds),
             "modules": {},
             "totals": {
@@ -405,7 +440,12 @@ def _activity_snapshot(
                 "active_users_total": 0,
             },
         }
-    return {
+        _ACTIVITY_SNAPSHOT_CACHE = (
+            time.monotonic() + ACTIVITY_SNAPSHOT_CACHE_TTL_SECONDS,
+            copy.deepcopy(payload),
+        )
+        return payload
+    payload = {
         "window_seconds": int(window_seconds),
         "modules": {
             str(row["module_id"] or "").strip(): {
@@ -420,6 +460,11 @@ def _activity_snapshot(
             "active_users_total": int(total_row["active_users_total"] or 0) if total_row else 0,
         },
     }
+    _ACTIVITY_SNAPSHOT_CACHE = (
+        time.monotonic() + ACTIVITY_SNAPSHOT_CACHE_TTL_SECONDS,
+        copy.deepcopy(payload),
+    )
+    return payload
 
 
 def _normalize_runtime_metrics(
