@@ -728,26 +728,7 @@ def list_analysis_events(store: Any, filters: dict[str, Any]) -> dict[str, Any]:
         select_sql = _analysis_event_select(conn, store)
         rows = conn.execute(
             f"""
-            SELECT {select_sql},
-                   EXISTS (
-                       SELECT 1
-                       FROM review_cases rc
-                       WHERE rc.case_scope_key = ae.case_scope_key AND rc.status != 'MERGED'
-                   ) AS has_review_case,
-                   (
-                       SELECT rc.id
-                       FROM review_cases rc
-                       WHERE rc.case_scope_key = ae.case_scope_key AND rc.status != 'MERGED'
-                       ORDER BY CASE rc.status WHEN 'OPEN' THEN 0 ELSE 1 END, rc.updated_at DESC, rc.id DESC
-                       LIMIT 1
-                   ) AS review_case_id,
-                   (
-                       SELECT rc.status
-                       FROM review_cases rc
-                       WHERE rc.case_scope_key = ae.case_scope_key AND rc.status != 'MERGED'
-                       ORDER BY CASE rc.status WHEN 'OPEN' THEN 0 ELSE 1 END, rc.updated_at DESC, rc.id DESC
-                       LIMIT 1
-                   ) AS review_case_status
+            SELECT {select_sql}
             FROM analysis_events ae
             {where_sql}
             ORDER BY {order_by}
@@ -755,6 +736,36 @@ def list_analysis_events(store: Any, filters: dict[str, Any]) -> dict[str, Any]:
             """,
             [*params, page_size, (page - 1) * page_size],
         ).fetchall()
+        review_case_map: dict[str, dict[str, Any]] = {}
+        case_scope_keys = sorted(
+            {
+                str(row["case_scope_key"] or "").strip()
+                for row in rows
+                if str(row["case_scope_key"] or "").strip()
+            }
+        )
+        if case_scope_keys:
+            placeholders = ", ".join("?" for _ in case_scope_keys)
+            review_rows = conn.execute(
+                f"""
+                SELECT case_scope_key, id, status, updated_at
+                FROM review_cases
+                WHERE status != 'MERGED' AND case_scope_key IN ({placeholders})
+                ORDER BY
+                    case_scope_key ASC,
+                    CASE status WHEN 'OPEN' THEN 0 ELSE 1 END,
+                    updated_at DESC,
+                    id DESC
+                """,
+                case_scope_keys,
+            ).fetchall()
+            for review_row in review_rows:
+                scope_key = str(review_row["case_scope_key"] or "").strip()
+                if scope_key and scope_key not in review_case_map:
+                    review_case_map[scope_key] = {
+                        "review_case_id": int(review_row["id"]),
+                        "review_case_status": str(review_row["status"] or "").strip() or None,
+                    }
         if skip_count:
             count = ((page - 1) * page_size) + len(rows) + (1 if len(rows) == page_size else 0)
         else:
@@ -765,7 +776,15 @@ def list_analysis_events(store: Any, filters: dict[str, Any]) -> dict[str, Any]:
 
     items = _apply_shared_account_flags(
         store,
-        [_enrich_analysis_event_row(dict(row)) for row in rows],
+        [
+            {
+                **_enrich_analysis_event_row(dict(row)),
+                "has_review_case": str(row["case_scope_key"] or "").strip() in review_case_map,
+                "review_case_id": review_case_map.get(str(row["case_scope_key"] or "").strip(), {}).get("review_case_id"),
+                "review_case_status": review_case_map.get(str(row["case_scope_key"] or "").strip(), {}).get("review_case_status"),
+            }
+            for row in rows
+        ],
     )
     for item in items:
         review_case_id = item.get("review_case_id")
