@@ -223,6 +223,7 @@ export function DataPage({ session }: { session?: Session }) {
           return;
         }
         const eventsPayload = await api.getAnalysisEvents({
+          compact: true,
           ...eventFilters,
           page_size: Math.min(eventFilters.page_size, 20),
           skip_count: true,

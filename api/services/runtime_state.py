@@ -407,7 +407,7 @@ def _coerce_datetime_filter(value: Any, *, end_of_day: bool = False) -> str:
     return raw
 
 
-def _analysis_event_select(conn: Any, store: Any) -> str:
+def _analysis_event_select(conn: Any, store: Any, *, include_payload_fields: bool = True) -> str:
     analysis_event_columns = {
         row["name"] for row in conn.execute("PRAGMA table_info(analysis_events)").fetchall()
     } if store._table_exists(conn, "analysis_events") else set()
@@ -448,11 +448,20 @@ def _analysis_event_select(conn: Any, store: Any) -> str:
             fields.append(optional_column)
         else:
             fields.append(f"NULL AS {optional_column}")
-    for optional_column in ("reasons_json", "signal_flags_json", "bundle_json"):
-        if optional_column in analysis_event_columns:
-            fields.append(optional_column)
-        else:
-            fields.append(f"NULL AS {optional_column}")
+    if include_payload_fields:
+        for optional_column in ("reasons_json", "signal_flags_json", "bundle_json"):
+            if optional_column in analysis_event_columns:
+                fields.append(optional_column)
+            else:
+                fields.append(f"NULL AS {optional_column}")
+    else:
+        fields.extend(
+            [
+                "'[]' AS reasons_json",
+                "'{}' AS signal_flags_json",
+                "NULL AS bundle_json",
+            ]
+        )
     return ", ".join(fields)
 
 
@@ -672,6 +681,7 @@ def list_analysis_events(store: Any, filters: dict[str, Any]) -> dict[str, Any]:
     page = max(int(filters.get("page", 1) or 1), 1)
     page_size = min(max(int(filters.get("page_size", 50) or 50), 1), 200)
     skip_count = str(filters.get("skip_count") or "").strip().lower() in {"1", "true", "yes", "on"}
+    compact = str(filters.get("compact") or "").strip().lower() in {"1", "true", "yes", "on"}
     sort = str(filters.get("sort") or "created_desc").strip().lower()
     order_by = "ae.created_at ASC" if sort == "created_asc" else "ae.created_at DESC"
     clauses: list[str] = []
@@ -725,7 +735,7 @@ def list_analysis_events(store: Any, filters: dict[str, Any]) -> dict[str, Any]:
 
     where_sql = f"WHERE {' AND '.join(clauses)}" if clauses else ""
     with store._connect() as conn:
-        select_sql = _analysis_event_select(conn, store)
+        select_sql = _analysis_event_select(conn, store, include_payload_fields=not compact)
         rows = conn.execute(
             f"""
             SELECT {select_sql}
