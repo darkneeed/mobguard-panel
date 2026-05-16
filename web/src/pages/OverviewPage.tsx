@@ -9,6 +9,11 @@ import {
 } from "../api/client";
 import { prefetchRouteModule } from "../app/routeModules";
 import { useI18n } from "../localization";
+import {
+  automationGuardrailLabels,
+  automationModeLabel,
+  automationModeReasonLabels,
+} from "../shared/automationStatus";
 import { useVisiblePolling } from "../shared/useVisiblePolling";
 import { formatDisplayDateTime } from "../utils/datetime";
 import { useState, useMemo } from "react";
@@ -134,11 +139,14 @@ export function OverviewPage({ session: _session }: { session?: Session }) {
   const queue = overview?.latest_cases || null;
   const pipeline = overview?.pipeline || null;
   const enforcement = overview?.enforcement || null;
+  const realtimeUsage = overview?.realtime_usage || null;
   const panelServer = overview?.panel_server || null;
   const summary = modules?.summary || null;
   const staleSnapshot = (overview?.freshness?.overview_age_seconds ?? 0) > 20;
   const staleModules = modules?.items.filter((item) => !item.healthy) || [];
   const warningModules = modules?.items.filter((item) => moduleVariant(item) === "severity-high") || [];
+  const automationModeReasons = automationModeReasonLabels(t, overview?.automation_status);
+  const automationGuardrails = automationGuardrailLabels(t, overview?.automation_status);
   const topModules = useMemo(
     () =>
       [...(modules?.items || [])]
@@ -227,7 +235,15 @@ export function OverviewPage({ session: _session }: { session?: Session }) {
         </div>
         <div className="stat-card">
           <span>Онлайн на модулях</span>
-          <strong>{summary?.active_users_total ?? "—"}</strong>
+          <strong>{realtimeUsage?.active_users ?? summary?.active_users_total ?? "—"}</strong>
+        </div>
+        <div className="stat-card">
+          <span>В нарушении</span>
+          <strong>{realtimeUsage?.violating_users ?? "—"}</strong>
+        </div>
+        <div className="stat-card">
+          <span>Без нарушения</span>
+          <strong>{realtimeUsage?.compliant_users ?? "—"}</strong>
         </div>
         <div className="stat-card">
           <span>События за окно</span>
@@ -248,14 +264,6 @@ export function OverviewPage({ session: _session }: { session?: Session }) {
                 Ядра {panelServer?.cpu_cores ?? "—"} · load {panelServer?.load_avg_1m?.toFixed(2) ?? "—"} / {panelServer?.load_avg_5m?.toFixed(2) ?? "—"} / {panelServer?.load_avg_15m?.toFixed(2) ?? "—"}
               </p>
             </div>
-            <Link
-              className="button-link"
-              to="/data/users"
-              onMouseEnter={() => prefetchRouteModule("/data/users")}
-              onFocus={() => prefetchRouteModule("/data/users")}
-            >
-              Поиск пользователя
-            </Link>
           </div>
           <div className="overview-server-grid">
             <div className="module-ops-chip">
@@ -269,6 +277,14 @@ export function OverviewPage({ session: _session }: { session?: Session }) {
             <div className="module-ops-chip">
               <span>Активные ограничения</span>
               <strong>{enforcement?.active_total ?? "—"}</strong>
+            </div>
+            <div className="module-ops-chip">
+              <span>Сейчас нарушают</span>
+              <strong>{realtimeUsage?.violating_users ?? "—"}</strong>
+            </div>
+            <div className="module-ops-chip">
+              <span>Сейчас по правилам</span>
+              <strong>{realtimeUsage?.compliant_users ?? "—"}</strong>
             </div>
             <div className="module-ops-chip">
               <span>Проблемных модулей</span>
@@ -342,6 +358,45 @@ export function OverviewPage({ session: _session }: { session?: Session }) {
       {!loading ? (
         <>
           <div className="panel">
+            <div className="panel-heading">
+              <h2>Автоматические решения</h2>
+              <p className="muted">
+                Текущие решения принимаются на основе настроек и обучения.
+              </p>
+            </div>
+              <div className="detail-list">
+                <div>
+                  <dt>Эффективный режим</dt>
+                  <dd>{automationModeLabel(t, overview?.automation_status)}</dd>
+                </div>
+                <div>
+                  <dt>Почему сейчас так</dt>
+                  <dd>
+                    {automationModeReasons.length
+                      ? automationModeReasons.join(", ")
+                      : "Блокирующих режим факторов нет"}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Ограничители</dt>
+                  <dd>
+                    {automationGuardrails.length
+                      ? automationGuardrails.join(", ")
+                      : "Дополнительные guardrail-флаги не включены"}
+                  </dd>
+                </div>
+              </div>
+            <div className="action-row">
+              <Link className="button-link ghost" to="/rules/general">
+                Настроить правила
+              </Link>
+              <Link className="button-link ghost" to="/decisions">
+                Открыть решения
+              </Link>
+            </div>
+          </div>
+
+          <div className="panel">
             <div className="panel-heading panel-heading-row">
               <div>
                 <h2>Модули</h2>
@@ -401,49 +456,34 @@ export function OverviewPage({ session: _session }: { session?: Session }) {
               })}
             </div>
           </div>
-
-          <div className="dashboard-grid">
-            <div className="panel">
-              <div className="panel-heading">
-                <h2>Последние кейсы</h2>
-                <p className="muted">Свежие спорные кейсы без лишнего служебного шума.</p>
-              </div>
-              <div className="record-list">
-                {queue?.items.length ? (
-                  queue.items.slice(0, 5).map((item) => (
-                    <Link
-                      key={item.id}
-                      to={`/reviews/${item.id}`}
-                      className="record-item inline-link"
-                      onMouseEnter={() => prefetchRouteModule(`/reviews/${item.id}`)}
-                      onFocus={() => prefetchRouteModule(`/reviews/${item.id}`)}
-                    >
-                      <div className="record-main">
-                        <span className="record-title">#{item.id} · {item.username || item.uuid || item.ip}</span>
-                        <span className="tag">{item.review_reason}</span>
-                      </div>
-                      <div className="record-meta">
-                        <span>{item.ip}</span>
-                        <span>{formatDisplayDateTime(item.updated_at, t("common.notAvailable"), language)}</span>
-                      </div>
-                    </Link>
-                  ))
-                ) : (
-                  <div className="provider-empty">Открытых кейсов сейчас нет</div>
-                )}
-              </div>
+          <div className="panel">
+            <div className="panel-heading">
+              <h2>Последние кейсы</h2>
+              <p className="muted">Свежие спорные кейсы без лишнего служебного шума.</p>
             </div>
-            <div className="panel">
-              <div className="panel-heading">
-                <h2>Быстрые действия</h2>
-                <p className="muted">Переходы в основные операторские сценарии.</p>
-              </div>
-              <div className="overview-quick-actions">
-                <Link className="button-link" to="/queue">Очередь</Link>
-                <Link className="button-link ghost" to="/data/users">Поиск пользователя</Link>
-                <Link className="button-link ghost" to="/modules">Модули</Link>
-                <Link className="button-link ghost" to="/rules/general">Правила</Link>
-              </div>
+            <div className="record-list">
+              {queue?.items.length ? (
+                queue.items.slice(0, 5).map((item) => (
+                  <Link
+                    key={item.id}
+                    to={`/reviews/${item.id}`}
+                    className="record-item inline-link"
+                    onMouseEnter={() => prefetchRouteModule(`/reviews/${item.id}`)}
+                    onFocus={() => prefetchRouteModule(`/reviews/${item.id}`)}
+                  >
+                    <div className="record-main">
+                      <span className="record-title">#{item.id} · {item.username || item.uuid || item.ip}</span>
+                      <span className="tag">{item.review_reason}</span>
+                    </div>
+                    <div className="record-meta">
+                      <span>{item.ip}</span>
+                      <span>{formatDisplayDateTime(item.updated_at, t("common.notAvailable"), language)}</span>
+                    </div>
+                  </Link>
+                ))
+              ) : (
+                <div className="provider-empty">Открытых кейсов сейчас нет</div>
+              )}
             </div>
           </div>
         </>

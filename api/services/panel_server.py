@@ -90,6 +90,25 @@ def _read_uptime_seconds() -> int | None:
         return None
 
 
+def _read_process_uptime_seconds() -> int | None:
+    system_uptime = _read_uptime_seconds()
+    stat_raw = _safe_read_text("/proc/self/stat").strip()
+    if system_uptime is None or not stat_raw:
+        return system_uptime
+    try:
+        _, remainder = stat_raw.split(") ", 1)
+        parts = remainder.split()
+        if len(parts) < 20:
+            return system_uptime
+        start_ticks = int(parts[19])
+        clock_ticks = int(os.sysconf("SC_CLK_TCK"))
+        if clock_ticks <= 0:
+            return system_uptime
+        return max(int(system_uptime - (start_ticks / clock_ticks)), 0)
+    except (OSError, ValueError):
+        return system_uptime
+
+
 def _read_process_memory() -> int | None:
     raw = _safe_read_text("/proc/self/statm").strip()
     if not raw:
@@ -128,7 +147,7 @@ def collect_panel_server_snapshot() -> dict[str, Any]:
         "disk_total_bytes": disk_total,
         "disk_used_bytes": disk_used,
         "disk_percent": disk_percent,
-        "uptime_seconds": _read_uptime_seconds(),
+        "uptime_seconds": _read_process_uptime_seconds(),
         "api_process_rss_bytes": _read_process_memory(),
         "collected_at": time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime()),
     }

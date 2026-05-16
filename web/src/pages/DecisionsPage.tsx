@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 
 import { AnalysisEventItem, api, Session } from "../api/client";
 import { describeScopeContext } from "../features/reviews/lib/scopeContext";
@@ -20,7 +20,7 @@ type DecisionFilters = {
   sort: string;
 };
 
-const PAGE_SIZE_OPTIONS = [25, 50, 100];
+const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
 const DECISIONS_REFRESH_MS = 15000;
 
 const DEFAULT_FILTERS: DecisionFilters = {
@@ -31,7 +31,7 @@ const DEFAULT_FILTERS: DecisionFilters = {
   decision_source: "",
   enforcement_status: "",
   page: 1,
-  page_size: 50,
+  page_size: 20,
   sort: "created_desc",
 };
 
@@ -128,6 +128,36 @@ export function DecisionsPage({ session: _session }: { session?: Session }) {
       parts.push(t("decisions.enforcement.attempts", { count: attempts }));
     }
     return parts.join(" · ");
+  }
+
+  function userIdentifier(item: AnalysisEventItem): string {
+    return String(
+      item.uuid || item.system_id || item.telegram_id || item.username || "",
+    ).trim();
+  }
+
+  function decisionHighlights(item: AnalysisEventItem): string[] {
+    const highlights: string[] = [];
+    const reasons = Array.isArray(item.reasons) ? item.reasons : [];
+    for (const reason of reasons) {
+      if (!reason || typeof reason !== "object") continue;
+      const label = String(
+        (reason as Record<string, unknown>).label ||
+          (reason as Record<string, unknown>).code ||
+          "",
+      ).trim();
+      if (label) {
+        highlights.push(label);
+      }
+      if (highlights.length >= 3) break;
+    }
+    if (highlights.length === 0 && Array.isArray(item.hard_flags)) {
+      return item.hard_flags
+        .map((flag) => String(flag || "").trim())
+        .filter(Boolean)
+        .slice(0, 3);
+    }
+    return highlights;
   }
 
   return (
@@ -260,8 +290,18 @@ export function DecisionsPage({ session: _session }: { session?: Session }) {
                   scopeContext.scopeType === "ip_device"
                     ? item.device_display || t("common.notAvailable")
                     : scopeContext.contextValue;
+                const identifier = userIdentifier(item);
+                const highlights = decisionHighlights(item);
+                const targetTo = identifier
+                  ? `/data/users?identifier=${encodeURIComponent(identifier)}`
+                  : "";
+                const CardTag = targetTo ? Link : "div";
                 return (
-                  <div className="record-item" key={String(item.id)}>
+                  <CardTag
+                    className={`record-item ${targetTo ? "inline-link" : ""}`}
+                    key={String(item.id)}
+                    {...(targetTo ? { to: targetTo } : {})}
+                  >
                     <div className="record-main">
                       <span className="record-title">
                         {item.target_ip || item.ip} · {contextDisplay}
@@ -315,10 +355,28 @@ export function DecisionsPage({ session: _session }: { session?: Session }) {
                         })}
                       </span>
                     </div>
+                    <div className="record-meta">
+                      <span>
+                        Пользователь {identifier || t("common.notAvailable")}
+                      </span>
+                      <span>
+                        Балл {item.score}
+                      </span>
+                      <span>
+                        HWID {item.hwid_device_count_exact ?? "—"} / {item.hwid_device_limit ?? "—"}
+                      </span>
+                    </div>
+                    {highlights.length > 0 ? (
+                      <div className="provider-evidence">
+                        {highlights.map((highlight) => (
+                          <span key={highlight}>{highlight}</span>
+                        ))}
+                      </div>
+                    ) : null}
                     {item.last_error ? (
                       <div className="error-box">{item.last_error}</div>
                     ) : null}
-                  </div>
+                  </CardTag>
                 );
               })
             : null}

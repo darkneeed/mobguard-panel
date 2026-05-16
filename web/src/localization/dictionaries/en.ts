@@ -1538,7 +1538,7 @@ export const enDictionary: TranslationDictionary = {
       },
       provider_conflict_review_only: {
         label: "Review mixed provider conflicts only",
-        description: "Keep mixed-provider conflicts, missing service markers, and single-factor carrier hints in manual review.",
+        description: "If provider evidence conflicts across sources, block automatic action and send the case to review.",
         recommendation: "Recommended for review-first rollout of ambiguous carriers."
       },
       review_ui_base_url: {
@@ -1621,7 +1621,7 @@ export const enDictionary: TranslationDictionary = {
       },
       manual_review_mixed_home_enabled: {
         label: "Review mixed HOME cases manually",
-        description: "Send mixed HOME outcomes to manual review before action."
+        description: "Require manual review when the final outcome is HOME but the overall pattern still looks mixed."
       },
       manual_ban_approval_enabled: {
         label: "Require approval for restrictions",

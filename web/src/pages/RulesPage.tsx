@@ -1184,16 +1184,15 @@ export function RulesPage() {
   function renderSectionContent() {
     if (!draft && activeSection !== "general") return null;
     if (activeSection === "general") {
-      return (
-        <>
-          {renderGeneralSaveBar()}
-          {renderAutomationControlsPanel()}
-          {renderPolicyPanel()}
-          {renderAutomationStatusPanel()}
-          {renderGeneralPanel()}
-        </>
-      );
-    }
+        return (
+          <>
+            {renderGeneralSaveBar()}
+            {renderAutomationControlsPanel()}
+            {renderPolicyPanel()}
+            {renderGeneralPanel()}
+          </>
+        );
+      }
     return (
       <>
         {renderRulesSaveBar()}

@@ -1686,7 +1686,7 @@ export const ruDictionary: TranslationDictionary = {
       provider_conflict_review_only: {
         label: "Конфликты mixed-провайдеров только через review",
         description:
-          "Отправлять спорные кейсы mixed-провайдеров в ручную проверку вместо автоматической реакции.",
+          "Если источники и маркеры провайдера конфликтуют, блокировать авто-решение и отправлять кейс в review.",
         recommendation:
           "Рекомендуется для review-first rollout по неоднозначным операторам.",
       },
@@ -1788,7 +1788,7 @@ export const ruDictionary: TranslationDictionary = {
       manual_review_mixed_home_enabled: {
         label: "Смешанные домашние кейсы только вручную",
         description:
-          "Отправлять смешанные HOME-результаты в ручное ревью до действия.",
+          "Если итог остаётся HOME, но сам паттерн выглядит смешанным, всё равно требовать ручную проверку.",
       },
       manual_ban_approval_enabled: {
         label: "Требовать одобрение ограничения",

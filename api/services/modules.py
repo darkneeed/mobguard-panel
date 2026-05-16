@@ -42,7 +42,7 @@ DEFAULT_ACCESS_LOG_PATH = "/var/log/remnanode/access.log"
 DEFAULT_STATE_DIR = "./state"
 DEFAULT_SPOOL_DIR = "./state/spool"
 DEFAULT_MODULE_EVENT_BATCH_SIZE = 25
-MODULE_ACTIVITY_WINDOW_SECONDS = 900
+MODULE_ACTIVITY_WINDOW_SECONDS = 3600
 
 
 MODULE_INGEST_LOCK = asyncio.Lock()
@@ -407,12 +407,12 @@ def _activity_snapshot(
     """
     try:
         with container.store._snapshot_connect(fast_read=True) as conn:
-            module_rows = conn.execute(
+            event_rows = conn.execute(
                 f"""
                 SELECT
                     module_id,
                     COUNT(*) AS recent_events,
-                    COUNT(DISTINCT {identity_sql}) AS active_users
+                    COUNT(DISTINCT {identity_sql}) AS recent_active_users
                 FROM analysis_events
                 WHERE created_at >= ?
                 GROUP BY module_id
@@ -423,12 +423,55 @@ def _activity_snapshot(
                 f"""
                 SELECT
                     COUNT(*) AS recent_events_total,
-                    COUNT(DISTINCT {identity_sql}) AS active_users_total
+                    COUNT(DISTINCT {identity_sql}) AS recent_active_users_total
                 FROM analysis_events
                 WHERE created_at >= ?
                 """,
                 (created_from,),
             ).fetchone()
+            has_active_trackers = container.store._table_exists(conn, "active_trackers")
+            module_activity_rows = conn.execute(
+                """
+                WITH active_tracker_keys AS (
+                    SELECT DISTINCT
+                        SUBSTR(key, 1, INSTR(key, ':') - 1) AS uuid,
+                        SUBSTR(key, INSTR(key, ':') + 1) AS ip
+                    FROM active_trackers
+                    WHERE INSTR(key, ':') > 0 AND last_seen >= ?
+                ),
+                ranked_events AS (
+                    SELECT
+                        atk.uuid,
+                        atk.ip,
+                        ae.module_id,
+                        ROW_NUMBER() OVER (
+                            PARTITION BY atk.uuid, atk.ip
+                            ORDER BY ae.created_at DESC, ae.id DESC
+                        ) AS rn
+                    FROM active_tracker_keys atk
+                    INNER JOIN analysis_events ae
+                        ON ae.uuid = atk.uuid
+                       AND ae.ip = atk.ip
+                    WHERE ae.module_id IS NOT NULL AND ae.module_id != ''
+                )
+                SELECT module_id, COUNT(*) AS active_users
+                FROM ranked_events
+                WHERE rn = 1
+                GROUP BY module_id
+                """,
+                (created_from,),
+            ).fetchall() if has_active_trackers else []
+            active_total_row = conn.execute(
+                """
+                SELECT COUNT(*) AS active_users_total
+                FROM (
+                    SELECT DISTINCT SUBSTR(key, 1, INSTR(key, ':') - 1) AS uuid
+                    FROM active_trackers
+                    WHERE INSTR(key, ':') > 0 AND last_seen >= ?
+                )
+                """,
+                (created_from,),
+            ).fetchone() if has_active_trackers else None
     except sqlite3.OperationalError:
         if cached:
             return copy.deepcopy(cached[1])
@@ -447,19 +490,37 @@ def _activity_snapshot(
         return payload
     payload = {
         "window_seconds": int(window_seconds),
-        "modules": {
-            str(row["module_id"] or "").strip(): {
-                "recent_events": int(row["recent_events"] or 0),
-                "active_users": int(row["active_users"] or 0),
-            }
-            for row in module_rows
-            if str(row["module_id"] or "").strip()
-        },
+        "modules": {},
         "totals": {
             "recent_events_total": int(total_row["recent_events_total"] or 0) if total_row else 0,
-            "active_users_total": int(total_row["active_users_total"] or 0) if total_row else 0,
+            "active_users_total": 0,
         },
     }
+    tracker_active_total = int(active_total_row["active_users_total"] or 0) if active_total_row else 0
+    recent_active_total = int(total_row["recent_active_users_total"] or 0) if total_row else 0
+    payload["totals"]["active_users_total"] = (
+        tracker_active_total if tracker_active_total > 0 else recent_active_total
+    )
+    for row in event_rows:
+        module_id = str(row["module_id"] or "").strip()
+        if not module_id:
+            continue
+        payload["modules"][module_id] = {
+            "recent_events": int(row["recent_events"] or 0),
+            "active_users": int(row["recent_active_users"] or 0) if not module_activity_rows else 0,
+        }
+    for row in module_activity_rows:
+        module_id = str(row["module_id"] or "").strip()
+        if not module_id:
+            continue
+        module_payload = payload["modules"].setdefault(
+            module_id,
+            {
+                "recent_events": 0,
+                "active_users": 0,
+            },
+        )
+        module_payload["active_users"] = int(row["active_users"] or 0)
     _ACTIVITY_SNAPSHOT_CACHE = (
         time.monotonic() + ACTIVITY_SNAPSHOT_CACHE_TTL_SECONDS,
         copy.deepcopy(payload),

@@ -95,7 +95,7 @@ describe("RulesPage retention settings", () => {
     expect(await screen.findByText("Rules updated")).toBeInTheDocument();
   });
 
-  it("shows the derived automation status on the general section", async () => {
+  it("keeps automation controls on the general section without the moved status panel", async () => {
     const detectionPayload = buildRulesPayload();
     vi.mocked(api.getDetectionSettings).mockResolvedValue({
       ...detectionPayload,
@@ -123,9 +123,9 @@ describe("RulesPage retention settings", () => {
       path: "/rules/:section",
     });
 
-    expect(await screen.findByText("Automation status")).toBeInTheDocument();
-    expect(screen.getByText("Observe only")).toBeInTheDocument();
-    expect(screen.getByText(/dry-run remote actions/)).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Save automation controls" })).toBeInTheDocument();
+    expect(screen.queryByText("Automation status")).not.toBeInTheDocument();
+    expect(screen.getByDisplayValue("Observe")).toBeInTheDocument();
   });
 
   it("saves automation controls and moved policy settings from the general section", async () => {

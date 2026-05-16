@@ -7,7 +7,8 @@ import { renderWithProviders } from "../test/renderWithProviders";
 
 vi.mock("../api/client", () => ({
   api: {
-    getOverview: vi.fn()
+    getOverview: vi.fn(),
+    getModules: vi.fn(),
   }
 }));
 
@@ -164,16 +165,66 @@ describe("OverviewPage", () => {
         last_event_at: "2026-04-12T03:20:00Z"
       }
     });
+    vi.mocked(api.getModules).mockResolvedValue({
+      items: [
+        {
+          module_id: "node-a",
+          module_name: "Node A",
+          status: "online",
+          version: "1.0.0",
+          protocol_version: "v1",
+          config_revision_applied: 7,
+          install_state: "online",
+          managed: true,
+          inbound_tags: ["TAG-A"],
+          health_status: "ok",
+          error_text: "",
+          last_validation_at: "2026-04-12T03:25:00Z",
+          spool_depth: 0,
+          access_log_exists: true,
+          last_seen_at: "2026-04-12T03:25:00Z",
+          healthy: true,
+          runtime_metrics: {
+            activity_window_seconds: 3600,
+            active_users: 5,
+            recent_events: 7,
+            system: {},
+            processes: { match_count: 1, top: [] },
+            collected_at: "2026-04-12T03:25:00Z",
+          },
+        },
+      ],
+      count: 1,
+      summary: {
+        activity_window_seconds: 3600,
+        total_modules: 1,
+        pending_modules: 0,
+        healthy_modules: 1,
+        warning_modules: 0,
+        error_modules: 0,
+        stale_modules: 0,
+        modules_with_metrics: 1,
+        active_users_total: 5,
+        recent_events_total: 7,
+        avg_cpu_percent: 12.5,
+        peak_cpu_percent: 12.5,
+        memory_total_bytes: 1024,
+        memory_used_bytes: 512,
+        disk_total_bytes: 2048,
+        disk_used_bytes: 256,
+        mobguard_process_cpu_percent: 1.5,
+        mobguard_process_rss_bytes: 4096,
+      },
+    });
 
     renderWithProviders(<OverviewPage session={session} />, { route: "/overview" });
 
     expect(await screen.findByText("provider_conflict")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /alpha/i })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Open console" })).toHaveAttribute("href", "/data/console");
-    expect(screen.getByText("Active violations")).toBeInTheDocument();
-    expect(screen.getByText("Violating now")).toBeInTheDocument();
-    expect(screen.getByText("Compliant now")).toBeInTheDocument();
+    expect(screen.getByText("В нарушении")).toBeInTheDocument();
+    expect(screen.getByText("Без нарушения")).toBeInTheDocument();
     expect(api.getOverview).toHaveBeenCalledTimes(1);
+    expect(api.getModules).toHaveBeenCalledTimes(1);
   });
 
   it("keeps the last successful snapshot visible when polling fails", async () => {
@@ -323,12 +374,34 @@ describe("OverviewPage", () => {
         }
       })
       .mockRejectedValueOnce(new Error("temporary refresh failure"));
+    vi.mocked(api.getModules).mockResolvedValue({
+      items: [],
+      count: 0,
+      summary: {
+        activity_window_seconds: 3600,
+        total_modules: 0,
+        pending_modules: 0,
+        healthy_modules: 0,
+        warning_modules: 0,
+        error_modules: 0,
+        stale_modules: 0,
+        modules_with_metrics: 0,
+        active_users_total: 0,
+        recent_events_total: 0,
+        memory_total_bytes: 0,
+        memory_used_bytes: 0,
+        disk_total_bytes: 0,
+        disk_used_bytes: 0,
+        mobguard_process_cpu_percent: 0,
+        mobguard_process_rss_bytes: 0,
+      },
+    });
 
     renderWithProviders(<OverviewPage session={session} />, { route: "/overview" });
 
     expect(await screen.findByText("provider_conflict")).toBeInTheDocument();
 
-    const refreshInterval = intervalCallbacks.find((entry) => entry.delay === 30000);
+    const refreshInterval = intervalCallbacks.find((entry) => entry.delay === 10000);
     expect(refreshInterval).toBeTruthy();
     (refreshInterval?.callback as () => void)();
 

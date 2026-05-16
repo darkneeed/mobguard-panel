@@ -433,6 +433,10 @@ export type AnalysisEventItem = {
   id: number;
   created_at: string;
   ip: string;
+  uuid?: string | null;
+  username?: string | null;
+  system_id?: number | null;
+  telegram_id?: string | null;
   tag?: string | null;
   decision_source?: string | null;
   inbound_tag?: string | null;
