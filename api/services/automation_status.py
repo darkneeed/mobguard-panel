@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timedelta
 from typing import Any
 
 from mobguard_platform.runtime_admin_defaults import ENFORCEMENT_SETTINGS_DEFAULTS
@@ -76,6 +77,10 @@ def build_enforcement_summary(container: APIContainer) -> dict[str, Any]:
         )
         or ENFORCEMENT_SETTINGS_DEFAULTS["warning_timeout_seconds"]
     )
+    warning_cutoff = (
+        datetime.utcnow().replace(microsecond=0) - timedelta(seconds=max(warning_timeout_seconds, 1))
+    ).isoformat()
+    now_iso = datetime.utcnow().replace(microsecond=0).isoformat()
     if store is None:
         return {
             "active_total": 0,
@@ -108,19 +113,19 @@ def build_enforcement_summary(container: APIContainer) -> dict[str, Any]:
                     SUM(
                         CASE
                             WHEN warning_time IS NOT NULL
-                             AND warning_time >= datetime('now', ?)
-                             AND (unban_time IS NULL OR unban_time <= datetime('now'))
+                             AND warning_time >= ?
+                             AND (unban_time IS NULL OR unban_time <= ?)
                             THEN 1 ELSE 0
                         END
                     ),
                     0
                 ) AS active_warning_count,
-                COALESCE(SUM(CASE WHEN unban_time IS NOT NULL AND unban_time > datetime('now') THEN 1 ELSE 0 END), 0)
+                COALESCE(SUM(CASE WHEN unban_time IS NOT NULL AND unban_time > ? THEN 1 ELSE 0 END), 0)
                     AS active_ban_count,
                 MAX(CASE WHEN warning_time IS NOT NULL THEN warning_time END) AS last_warning_at
             FROM violations
             """,
-            (f"-{warning_timeout_seconds} seconds",),
+            (warning_cutoff, now_iso, now_iso),
         ).fetchone()
 
         last_ban_row = None
