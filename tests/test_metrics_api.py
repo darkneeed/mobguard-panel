@@ -280,6 +280,9 @@ class MetricsAPITests(unittest.TestCase):
                 ),
             )
             conn.commit()
+        from api.services import modules as modules_service
+        modules_service._ACTIVITY_SNAPSHOT_CACHE = None
+        modules_service._HEARTBEAT_DETAIL_CACHE.clear()
 
         payload = modules_router.admin_list_modules(_={}, container=self.container)
 

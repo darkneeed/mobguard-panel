@@ -112,6 +112,36 @@ class ModuleProtocolTests(unittest.TestCase):
         self.assertEqual(payload["items"][0]["spool_depth"], 2)
         self.assertFalse(payload["items"][0]["access_log_exists"])
 
+    def test_heartbeat_does_not_backfill_module_name_history(self):
+        self.store.create_managed_module(
+            "node-heartbeat",
+            "token-heartbeat",
+            "encrypted-token-heartbeat",
+            module_name="Node Heartbeat",
+            metadata={"inbound_tags": ["SELFSTEAL_RU-YANDEX_TCP"]},
+        )
+        self.store.register_module(
+            "node-heartbeat",
+            "token-heartbeat",
+            module_name="Node Heartbeat",
+            version="1.0.0",
+            protocol_version="v1",
+            auto_create=False,
+        )
+        repo = self.store.modules_admin
+
+        with patch.object(repo, "_backfill_module_name", wraps=repo._backfill_module_name) as mocked_backfill:
+            repo.record_module_heartbeat(
+                "node-heartbeat",
+                status="online",
+                version="1.0.1",
+                protocol_version="v1",
+                config_revision_applied=3,
+                details={"health_status": "ok"},
+            )
+
+        self.assertEqual(mocked_backfill.call_count, 0)
+
     def test_event_batch_deduplicates_by_event_uid(self):
         self.store.create_managed_module(
             "node-a",

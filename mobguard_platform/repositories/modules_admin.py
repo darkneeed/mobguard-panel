@@ -215,7 +215,6 @@ class ModuleAdminRepository(SQLiteRepository):
                     metadata_json,
                 ),
             )
-            self._backfill_module_name(conn, normalized_id, normalized_name)
             conn.commit()
         module = self.get_module(normalized_id)
         if not module:
@@ -322,11 +321,6 @@ class ModuleAdminRepository(SQLiteRepository):
                             normalized_id,
                         ),
                     )
-                    self._backfill_module_name(
-                        conn,
-                        normalized_id,
-                        normalized_name or str(existing["module_name"] or normalized_id).strip() or normalized_id,
-                    )
                 else:
                     if not auto_create:
                         raise ValueError("Module is not registered")
@@ -350,7 +344,6 @@ class ModuleAdminRepository(SQLiteRepository):
                             metadata_json,
                         ),
                     )
-                    self._backfill_module_name(conn, normalized_id, normalized_name or normalized_id)
                 conn.commit()
 
         self._run_retryable_module_write(_operation)
@@ -440,7 +433,6 @@ class ModuleAdminRepository(SQLiteRepository):
                         normalized_id,
                     ),
                 )
-                self._backfill_module_name(conn, normalized_id, str(row["module_name"] or "").strip())
                 conn.execute(
                     """
                     INSERT INTO module_heartbeats (
