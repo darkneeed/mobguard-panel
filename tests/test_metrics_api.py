@@ -4,6 +4,7 @@ import sqlite3
 import tempfile
 import time
 import unittest
+from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -135,6 +136,19 @@ class MetricsAPITests(unittest.TestCase):
         self.assertEqual(payload["realtime_usage"]["compliant_users"], 1)
         self.assertIn("panel_server", payload)
         self.assertIn("memory_total_bytes", payload["panel_server"])
+
+    def test_refresh_overview_snapshot_serializes_decimal_values(self):
+        original_builder = self.store._build_quality_metrics
+
+        def wrapped_builder(*args, **kwargs):
+            payload = original_builder(*args, **kwargs)
+            payload["decimal_probe"] = Decimal("12.5")
+            return payload
+
+        with patch.object(self.store, "_build_quality_metrics", side_effect=wrapped_builder):
+            snapshot = self.store.refresh_overview_snapshot()
+
+        self.assertEqual(snapshot["quality"]["decimal_probe"], 12.5)
 
     def test_admin_modules_includes_runtime_summary_and_latest_heartbeat_metrics(self):
         self.store.create_managed_module(

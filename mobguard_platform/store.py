@@ -10,6 +10,7 @@ import sqlite3
 import threading
 import time
 from datetime import datetime, timedelta
+from decimal import Decimal
 from typing import Any, Optional
 
 from .models import DecisionBundle, ReviewCaseSummary
@@ -183,6 +184,18 @@ def _coerce_positive_int(value: Any, default: int, *, minimum: int = 1) -> int:
 
 def _sha256_hex(value: str) -> str:
     return hashlib.sha256(str(value).encode("utf-8")).hexdigest()
+
+
+def _json_safe_value(value: Any) -> Any:
+    if isinstance(value, Decimal):
+        if value == value.to_integral_value():
+            return int(value)
+        return float(value)
+    if isinstance(value, dict):
+        return {str(key): _json_safe_value(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_safe_value(item) for item in value]
+    return value
 
 
 def _execute_with_changes(
@@ -665,6 +678,7 @@ class PlatformStore:
         updated_at: str | None = None,
     ) -> None:
         now = str(updated_at or _utcnow())
+        normalized_payload = _json_safe_value(payload)
         conn.execute(
             """
             INSERT INTO read_model_snapshots (
@@ -677,7 +691,7 @@ class PlatformStore:
             (
                 str(snapshot_type or "").strip(),
                 str(scope_key or "").strip(),
-                json.dumps(payload, ensure_ascii=False),
+                json.dumps(normalized_payload, ensure_ascii=False),
                 now,
             ),
         )
