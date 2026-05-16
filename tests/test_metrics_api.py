@@ -13,6 +13,7 @@ from fastapi import HTTPException
 
 from api.routers import metrics as metrics_router
 from api.routers import modules as modules_router
+from api.services.automation_status import build_enforcement_summary
 from api.services import modules as module_service
 from mobguard_platform import AnalysisStore, PlatformStore
 
@@ -136,6 +137,32 @@ class MetricsAPITests(unittest.TestCase):
         self.assertEqual(payload["realtime_usage"]["compliant_users"], 1)
         self.assertIn("panel_server", payload)
         self.assertIn("memory_total_bytes", payload["panel_server"])
+
+    def test_enforcement_summary_ignores_stale_warning_rows(self):
+        with self.store._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO violations (
+                    uuid, strikes, unban_time, last_forgiven, last_strike_time, warning_time, warning_count
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                ("uuid-stale-warning", 0, None, None, "2026-04-01T00:00:00", "2026-04-01T00:00:00", 5),
+            )
+            conn.execute(
+                """
+                INSERT INTO violations (
+                    uuid, strikes, unban_time, last_forgiven, last_strike_time, warning_time, warning_count
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                ("uuid-active-ban", 1, "9999-04-01T00:00:00", None, "2026-04-12T03:18:00", None, 0),
+            )
+            conn.commit()
+
+        summary = build_enforcement_summary(self.container)
+
+        self.assertEqual(summary["active_warning_count"], 0)
+        self.assertEqual(summary["active_ban_count"], 1)
+        self.assertEqual(summary["active_total"], 1)
 
     def test_refresh_overview_snapshot_serializes_decimal_values(self):
         original_builder = self.store._build_quality_metrics

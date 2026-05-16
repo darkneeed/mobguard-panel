@@ -66,6 +66,16 @@ def build_automation_status(container: APIContainer) -> dict[str, Any]:
 
 def build_enforcement_summary(container: APIContainer) -> dict[str, Any]:
     store = getattr(container, "store", None)
+    automation_status = build_automation_status(container)
+    runtime_config = load_runtime_config(container)
+    runtime_settings = runtime_config.get("settings", {}) if isinstance(runtime_config, dict) else {}
+    warning_timeout_seconds = int(
+        runtime_settings.get(
+            "warning_timeout_seconds",
+            ENFORCEMENT_SETTINGS_DEFAULTS["warning_timeout_seconds"],
+        )
+        or ENFORCEMENT_SETTINGS_DEFAULTS["warning_timeout_seconds"]
+    )
     if store is None:
         return {
             "active_total": 0,
@@ -94,13 +104,23 @@ def build_enforcement_summary(container: APIContainer) -> dict[str, Any]:
         active = conn.execute(
             """
             SELECT
-                COUNT(*) AS active_total,
-                COALESCE(SUM(CASE WHEN warning_time IS NOT NULL THEN 1 ELSE 0 END), 0) AS active_warning_count,
+                COALESCE(
+                    SUM(
+                        CASE
+                            WHEN warning_time IS NOT NULL
+                             AND warning_time >= datetime('now', ?)
+                             AND (unban_time IS NULL OR unban_time <= datetime('now'))
+                            THEN 1 ELSE 0
+                        END
+                    ),
+                    0
+                ) AS active_warning_count,
                 COALESCE(SUM(CASE WHEN unban_time IS NOT NULL AND unban_time > datetime('now') THEN 1 ELSE 0 END), 0)
                     AS active_ban_count,
                 MAX(CASE WHEN warning_time IS NOT NULL THEN warning_time END) AS last_warning_at
             FROM violations
-            """
+            """,
+            (f"-{warning_timeout_seconds} seconds",),
         ).fetchone()
 
         last_ban_row = None
@@ -126,10 +146,13 @@ def build_enforcement_summary(container: APIContainer) -> dict[str, Any]:
         last_event_type = "ban"
         last_event_at = last_ban_at
 
+    active_warning_count = int(active["active_warning_count"] or 0)
+    active_ban_count = int(active["active_ban_count"] or 0)
+
     return {
-        "active_total": int(active["active_total"] or 0),
-        "active_warning_count": int(active["active_warning_count"] or 0),
-        "active_ban_count": int(active["active_ban_count"] or 0),
+        "active_total": active_warning_count + active_ban_count,
+        "active_warning_count": active_warning_count,
+        "active_ban_count": active_ban_count,
         "last_warning_at": last_warning_at,
         "last_ban_at": last_ban_at,
         "last_ban_duration_minutes": (
@@ -137,4 +160,6 @@ def build_enforcement_summary(container: APIContainer) -> dict[str, Any]:
         ),
         "last_event_type": last_event_type,
         "last_event_at": last_event_at,
+        "automation_mode": automation_status.get("mode"),
+        "warning_timeout_seconds": warning_timeout_seconds,
     }
