@@ -374,6 +374,31 @@ def _heartbeat_activity(details: dict[str, Any]) -> dict[str, int | None]:
     }
 
 
+def _panel_nodes_online_map(container: APIContainer) -> dict[str, int]:
+    try:
+        client = _remnawave_client(container)
+        if not client.enabled:
+            return {}
+        rows = client.get_nodes_online_usage()
+    except Exception:
+        return {}
+    payload: dict[str, int] = {}
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        try:
+            users_online = max(int(row.get("users_online") or 0), 0)
+        except (TypeError, ValueError):
+            users_online = 0
+        uuid_key = str(row.get("uuid") or "").strip().lower()
+        name_key = str(row.get("name") or "").strip().lower()
+        if uuid_key:
+            payload[uuid_key] = users_online
+        if name_key:
+            payload[name_key] = users_online
+    return payload
+
+
 def _heartbeat_detail_map(container: APIContainer, module_ids: list[str]) -> dict[str, dict[str, Any]]:
     global _HEARTBEAT_DETAIL_CACHE
     if not module_ids:
@@ -653,6 +678,7 @@ def _attach_runtime_metrics(
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     module_ids = [str(item.get("module_id") or "").strip() for item in modules if str(item.get("module_id") or "").strip()]
     heartbeat_details = _heartbeat_detail_map(container, module_ids)
+    panel_online_map = _panel_nodes_online_map(container)
     activity = _activity_snapshot(container)
     per_module_activity = activity.get("modules", {})
     activity_window_seconds = int(activity.get("window_seconds") or MODULE_ACTIVITY_WINDOW_SECONDS)
@@ -677,13 +703,17 @@ def _attach_runtime_metrics(
         module_id = str(payload.get("module_id") or "").strip()
         module_activity = per_module_activity.get(module_id, {})
         details = heartbeat_details.get(module_id, {})
+        panel_online = max(
+            int(panel_online_map.get(module_id.lower()) or 0),
+            int(panel_online_map.get(str(payload.get("module_name") or "").strip().lower()) or 0),
+        )
         heartbeat_metrics = _heartbeat_activity(details)
         activity_active_users = int(module_activity.get("active_users") or 0)
         activity_recent_events = int(module_activity.get("recent_events") or 0)
         heartbeat_active_users = int(heartbeat_metrics.get("active_users") or 0)
         heartbeat_recent_events = int(heartbeat_metrics.get("recent_events") or 0)
         heartbeat_window_seconds = int(heartbeat_metrics.get("window_seconds") or 0)
-        resolved_active_users = max(activity_active_users, heartbeat_active_users)
+        resolved_active_users = max(activity_active_users, heartbeat_active_users, panel_online)
         resolved_recent_events = max(activity_recent_events, heartbeat_recent_events)
         resolved_window_seconds = (
             heartbeat_window_seconds

@@ -405,3 +405,52 @@ class MetricsAPITests(unittest.TestCase):
         self.assertEqual(payload["summary"]["recent_events_total"], 41)
         self.assertEqual(payload["items"][0]["runtime_metrics"]["active_users"], 17)
         self.assertEqual(payload["items"][0]["runtime_metrics"]["recent_events"], 41)
+
+    def test_admin_modules_uses_panel_nodes_online_fallback(self):
+        self.store.create_managed_module(
+            "module-remote-1",
+            "token-remote-1",
+            "encrypted-token-remote-1",
+            module_name="Node Remote",
+            metadata={"inbound_tags": ["SELFSTEAL_RU-YANDEX_TCP"]},
+        )
+        module_service.register_module(
+            self.container,
+            {
+                "module_id": "module-remote-1",
+                "module_name": "Node Remote",
+                "version": "1.0.0",
+                "protocol_version": "v1",
+            },
+            "token-remote-1",
+        )
+        module_service.record_module_heartbeat(
+            self.container,
+            {
+                "module_id": "module-remote-1",
+                "status": "online",
+                "version": "1.0.1",
+                "protocol_version": "v1",
+                "config_revision_applied": 3,
+                "details": {
+                    "health_status": "ok",
+                    "error_text": "",
+                    "last_validation_at": "2026-04-11T10:01:00",
+                    "spool_depth": 0,
+                    "access_log_exists": True,
+                    "system": {},
+                    "processes": {"match_count": 1, "top": []},
+                    "collected_at": "2026-04-11T10:01:00",
+                },
+            },
+            "token-remote-1",
+        )
+        from api.services import modules as modules_service
+        modules_service._ACTIVITY_SNAPSHOT_CACHE = None
+        modules_service._HEARTBEAT_DETAIL_CACHE.clear()
+
+        with patch.object(modules_service, "_panel_nodes_online_map", return_value={"module-remote-1": 12}):
+            payload = modules_router.admin_list_modules(_={}, container=self.container)
+
+        self.assertEqual(payload["summary"]["active_users_total"], 12)
+        self.assertEqual(payload["items"][0]["runtime_metrics"]["active_users"], 12)

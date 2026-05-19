@@ -80,6 +80,7 @@ class RemnawaveClient:
     NEGATIVE_USER_CACHE_TTL_SECONDS = 10.0
     DEVICE_CACHE_TTL_SECONDS = 30.0
     TRAFFIC_CACHE_TTL_SECONDS = 30.0
+    NODES_CACHE_TTL_SECONDS = 20.0
 
     def __init__(self, base_url: str, token: str):
         self.base_url = base_url.rstrip("/")
@@ -90,6 +91,7 @@ class RemnawaveClient:
         self._user_cache: dict[str, tuple[float, Any]] = {}
         self._devices_cache: dict[str, tuple[float, Any]] = {}
         self._traffic_cache: dict[str, tuple[float, Any]] = {}
+        self._nodes_cache: tuple[float, list[dict[str, Any]]] | None = None
 
     @property
     def enabled(self) -> bool:
@@ -273,6 +275,49 @@ class RemnawaveClient:
             }
         )
         return result
+
+    def get_nodes_online_usage(self) -> list[dict[str, Any]]:
+        if not self.enabled:
+            self.last_error = "Panel client is disabled"
+            return []
+        self.last_error = None
+        if self._nodes_cache is not None:
+            expires_at, cached = self._nodes_cache
+            if expires_at > time.monotonic():
+                return [dict(item) for item in cached]
+        payload = self._request("GET", "/api/nodes")
+        response = payload.get("response", payload) if payload else None
+        rows: list[dict[str, Any]]
+        if isinstance(response, dict):
+            items = response.get("items")
+            rows = [item for item in items if isinstance(item, dict)] if isinstance(items, list) else []
+        elif isinstance(response, list):
+            rows = [item for item in response if isinstance(item, dict)]
+        else:
+            rows = []
+        normalized: list[dict[str, Any]] = []
+        for row in rows:
+            online_raw = (
+                row.get("users_online")
+                if row.get("users_online") is not None
+                else row.get("usersOnline")
+            )
+            try:
+                users_online = max(int(online_raw or 0), 0)
+            except (TypeError, ValueError):
+                users_online = 0
+            normalized.append(
+                {
+                    "uuid": str(row.get("uuid") or "").strip(),
+                    "name": str(row.get("name") or "").strip(),
+                    "users_online": users_online,
+                }
+            )
+        self._nodes_cache = (
+            time.monotonic() + self.NODES_CACHE_TTL_SECONDS,
+            [dict(item) for item in normalized],
+        )
+        return normalized
 
     def resolve_internal_squad_uuid(self, squad_name: str) -> Optional[str]:
         normalized_name = str(squad_name or "").strip()
