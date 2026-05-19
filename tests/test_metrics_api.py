@@ -337,3 +337,71 @@ class MetricsAPITests(unittest.TestCase):
         self.assertEqual(payload["items"][0]["runtime_metrics"]["recent_events"], 2)
         self.assertEqual(payload["items"][0]["runtime_metrics"]["system"]["cpu_percent"], 23.5)
         self.assertEqual(payload["items"][0]["runtime_metrics"]["processes"]["match_count"], 1)
+
+    def test_admin_modules_prefers_heartbeat_activity_counters_for_realtime_online(self):
+        self.store.create_managed_module(
+            "node-realtime",
+            "token-realtime",
+            "encrypted-token-realtime",
+            module_name="Node Realtime",
+            metadata={"inbound_tags": ["SELFSTEAL_RU-YANDEX_TCP"]},
+        )
+        module_service.register_module(
+            self.container,
+            {
+                "module_id": "node-realtime",
+                "module_name": "Node Realtime",
+                "version": "1.0.0",
+                "protocol_version": "v1",
+            },
+            "token-realtime",
+        )
+        module_service.record_module_heartbeat(
+            self.container,
+            {
+                "module_id": "node-realtime",
+                "status": "online",
+                "version": "1.0.1",
+                "protocol_version": "v1",
+                "config_revision_applied": 3,
+                "details": {
+                    "health_status": "ok",
+                    "error_text": "",
+                    "last_validation_at": "2026-04-11T10:01:00",
+                    "spool_depth": 0,
+                    "access_log_exists": True,
+                    "activity": {
+                        "window_seconds": 300,
+                        "active_users": 17,
+                        "recent_events": 41,
+                    },
+                    "system": {
+                        "cpu_percent": 12.0,
+                        "memory_total_bytes": 4096,
+                        "memory_used_bytes": 1024,
+                        "memory_percent": 25.0,
+                        "disk_total_bytes": 8192,
+                        "disk_used_bytes": 4096,
+                        "disk_percent": 50.0,
+                    },
+                    "processes": {
+                        "match_count": 1,
+                        "cpu_percent": 0.3,
+                        "rss_bytes": 1024,
+                        "top": [],
+                    },
+                    "collected_at": "2026-04-11T10:01:00",
+                },
+            },
+            "token-realtime",
+        )
+        from api.services import modules as modules_service
+        modules_service._ACTIVITY_SNAPSHOT_CACHE = None
+        modules_service._HEARTBEAT_DETAIL_CACHE.clear()
+
+        payload = modules_router.admin_list_modules(_={}, container=self.container)
+
+        self.assertEqual(payload["summary"]["active_users_total"], 17)
+        self.assertEqual(payload["summary"]["recent_events_total"], 41)
+        self.assertEqual(payload["items"][0]["runtime_metrics"]["active_users"], 17)
+        self.assertEqual(payload["items"][0]["runtime_metrics"]["recent_events"], 41)

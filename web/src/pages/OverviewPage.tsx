@@ -142,10 +142,27 @@ export function OverviewPage({ session: _session }: { session?: Session }) {
   const realtimeUsage = overview?.realtime_usage || null;
   const panelServer = overview?.panel_server || null;
   const summary = modules?.summary || null;
+  const modulesOnlineFromItems = useMemo(
+    () =>
+      (modules?.items || []).reduce(
+        (total, item) => total + Math.max(Number(item.runtime_metrics?.active_users ?? 0), 0),
+        0,
+      ),
+    [modules?.items],
+  );
   const modulesOnline = Math.max(
     Number(realtimeUsage?.active_users ?? 0),
     Number(summary?.active_users_total ?? 0),
+    modulesOnlineFromItems,
   );
+  const violatingNowRaw = Number(realtimeUsage?.violating_users ?? 0);
+  const compliantNowRaw = Number(realtimeUsage?.compliant_users ?? 0);
+  const violatingNow = Math.max(Math.min(violatingNowRaw, modulesOnline), 0);
+  const classifiedNow = violatingNowRaw + compliantNowRaw;
+  const compliantNow =
+    classifiedNow > 0
+      ? Math.max(Math.min(compliantNowRaw, modulesOnline - violatingNow), 0)
+      : Math.max(modulesOnline - violatingNow, 0);
   const staleSnapshot = (overview?.freshness?.overview_age_seconds ?? 0) > 20;
   const staleModules = modules?.items.filter((item) => !item.healthy) || [];
   const warningModules = modules?.items.filter((item) => moduleVariant(item) === "severity-high") || [];
@@ -243,11 +260,11 @@ export function OverviewPage({ session: _session }: { session?: Session }) {
         </div>
         <div className="stat-card">
           <span>В нарушении</span>
-          <strong>{realtimeUsage?.violating_users ?? "—"}</strong>
+          <strong>{violatingNow}</strong>
         </div>
         <div className="stat-card">
           <span>Без нарушения</span>
-          <strong>{realtimeUsage?.compliant_users ?? "—"}</strong>
+          <strong>{compliantNow}</strong>
         </div>
         <div className="stat-card">
           <span>События за окно</span>
@@ -284,11 +301,11 @@ export function OverviewPage({ session: _session }: { session?: Session }) {
             </div>
             <div className="module-ops-chip">
               <span>Сейчас нарушают</span>
-              <strong>{realtimeUsage?.violating_users ?? "—"}</strong>
+              <strong>{violatingNow}</strong>
             </div>
             <div className="module-ops-chip">
               <span>Сейчас по правилам</span>
-              <strong>{realtimeUsage?.compliant_users ?? "—"}</strong>
+              <strong>{compliantNow}</strong>
             </div>
             <div className="module-ops-chip">
               <span>Проблемных модулей</span>

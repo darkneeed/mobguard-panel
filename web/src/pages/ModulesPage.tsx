@@ -226,6 +226,14 @@ export function ModulesPage({ session }: { session?: Session }) {
     (item) => validationVariant(item) === "punitive",
   ).length;
   const staleCount = installedItems.filter((item) => !item.healthy).length;
+  const modulesOnlineFromItems = useMemo(
+    () =>
+      (data?.items || []).reduce(
+        (total, item) => total + Math.max(Number(item.runtime_metrics?.active_users ?? 0), 0),
+        0,
+      ),
+    [data?.items],
+  );
 
   async function loadInitialState() {
     try {
@@ -553,7 +561,14 @@ export function ModulesPage({ session }: { session?: Session }) {
         </div>
         <div className="stat-card">
           <span>Онлайн модулей</span>
-          <strong>{summary?.active_users_total ?? "—"}</strong>
+          <strong>
+            {summary
+              ? Math.max(
+                  Number(summary.active_users_total ?? 0),
+                  modulesOnlineFromItems,
+                )
+              : "—"}
+          </strong>
         </div>
         <div className="stat-card">
           <span>События за окно</span>

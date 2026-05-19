@@ -326,6 +326,54 @@ def _coerce_int(value: Any) -> int | None:
         return None
 
 
+def _heartbeat_activity(details: dict[str, Any]) -> dict[str, int | None]:
+    def _value_by_path(root: dict[str, Any], path: tuple[str, ...]) -> Any:
+        current: Any = root
+        for segment in path:
+            if not isinstance(current, dict):
+                return None
+            current = current.get(segment)
+        return current
+
+    def _pick_int(paths: list[tuple[str, ...]]) -> int | None:
+        for path in paths:
+            value = _coerce_int(_value_by_path(details, path))
+            if value is not None:
+                return max(value, 0)
+        return None
+
+    return {
+        "active_users": _pick_int(
+            [
+                ("activity", "active_users"),
+                ("active_users",),
+                ("runtime_metrics", "active_users"),
+                ("metrics", "active_users"),
+                ("users", "online"),
+                ("online_users",),
+                ("users_online",),
+            ]
+        ),
+        "recent_events": _pick_int(
+            [
+                ("activity", "recent_events"),
+                ("recent_events",),
+                ("runtime_metrics", "recent_events"),
+                ("metrics", "recent_events"),
+                ("events", "recent"),
+                ("events_recent",),
+            ]
+        ),
+        "window_seconds": _pick_int(
+            [
+                ("activity", "window_seconds"),
+                ("activity_window_seconds",),
+                ("window_seconds",),
+            ]
+        ),
+    }
+
+
 def _heartbeat_detail_map(container: APIContainer, module_ids: list[str]) -> dict[str, dict[str, Any]]:
     global _HEARTBEAT_DETAIL_CACHE
     if not module_ids:
@@ -382,6 +430,22 @@ def _activity_identity_sql() -> str:
             'ip:' || ip
         )
     """
+
+
+def _tracker_identity(user_data: dict[str, Any], payload: dict[str, Any], raw_ip: str) -> str:
+    uuid_value = str(user_data.get("uuid") or payload.get("uuid") or "").strip()
+    if uuid_value:
+        return uuid_value
+    system_id = user_data.get("id")
+    if system_id not in (None, ""):
+        return f"sys_{system_id}"
+    telegram_id = user_data.get("telegramId")
+    if telegram_id not in (None, ""):
+        return f"tg_{telegram_id}"
+    username = str(user_data.get("username") or payload.get("username") or "").strip()
+    if username:
+        return f"usr_{username}"
+    return f"ip_{raw_ip}"
 
 
 def _activity_snapshot(
@@ -605,19 +669,36 @@ def _attach_runtime_metrics(
     disk_used_bytes = 0
     mobguard_process_cpu_percent = 0.0
     mobguard_process_rss_bytes = 0
+    resolved_active_users_total = 0
+    resolved_recent_events_total = 0
 
     for module in modules:
         payload = dict(module)
         module_id = str(payload.get("module_id") or "").strip()
         module_activity = per_module_activity.get(module_id, {})
         details = heartbeat_details.get(module_id, {})
+        heartbeat_metrics = _heartbeat_activity(details)
+        activity_active_users = int(module_activity.get("active_users") or 0)
+        activity_recent_events = int(module_activity.get("recent_events") or 0)
+        heartbeat_active_users = int(heartbeat_metrics.get("active_users") or 0)
+        heartbeat_recent_events = int(heartbeat_metrics.get("recent_events") or 0)
+        heartbeat_window_seconds = int(heartbeat_metrics.get("window_seconds") or 0)
+        resolved_active_users = max(activity_active_users, heartbeat_active_users)
+        resolved_recent_events = max(activity_recent_events, heartbeat_recent_events)
+        resolved_window_seconds = (
+            heartbeat_window_seconds
+            if heartbeat_window_seconds > 0 and (heartbeat_active_users > 0 or heartbeat_recent_events > 0)
+            else activity_window_seconds
+        )
         payload["runtime_metrics"] = _normalize_runtime_metrics(
             details,
-            activity_window_seconds=activity_window_seconds,
-            active_users=int(module_activity.get("active_users") or 0),
-            recent_events=int(module_activity.get("recent_events") or 0),
+            activity_window_seconds=resolved_window_seconds,
+            active_users=resolved_active_users,
+            recent_events=resolved_recent_events,
         )
         enriched.append(payload)
+        resolved_active_users_total += resolved_active_users
+        resolved_recent_events_total += resolved_recent_events
 
         if payload.get("install_state") == "pending_install":
             pending_count += 1
@@ -651,8 +732,14 @@ def _attach_runtime_metrics(
         "error_modules": error_count,
         "stale_modules": stale_count,
         "modules_with_metrics": sum(1 for item in enriched if item.get("runtime_metrics", {}).get("collected_at")),
-        "active_users_total": int(activity.get("totals", {}).get("active_users_total") or 0),
-        "recent_events_total": int(activity.get("totals", {}).get("recent_events_total") or 0),
+        "active_users_total": max(
+            int(activity.get("totals", {}).get("active_users_total") or 0),
+            int(resolved_active_users_total),
+        ),
+        "recent_events_total": max(
+            int(activity.get("totals", {}).get("recent_events_total") or 0),
+            int(resolved_recent_events_total),
+        ),
         "avg_cpu_percent": round(sum(cpu_values) / len(cpu_values), 1) if cpu_values else None,
         "peak_cpu_percent": round(max(cpu_values), 1) if cpu_values else None,
         "memory_total_bytes": memory_total_bytes,
@@ -991,15 +1078,16 @@ async def _process_module_event(
     else:
         bundle = await _analyze_event(runtime, user_data, payload)
         await container.analysis_store.cache_decision(raw_ip, bundle.to_cache_payload())
-    uuid_value = str(user_data.get("uuid") or "").strip()
-    if uuid_value:
-        await container.analysis_store.update_ip_history(uuid_value, raw_ip)
+    tracker_identity = _tracker_identity(user_data, payload, raw_ip)
+    if tracker_identity:
+        await container.analysis_store.update_ip_history(tracker_identity, raw_ip)
         await container.analysis_store.update_session(
-            uuid_value,
+            tracker_identity,
             raw_ip,
             str(payload.get("tag") or ""),
         )
-        if bundle.verdict in {"MOBILE", "HOME"}:
+        uuid_value = str(user_data.get("uuid") or "").strip()
+        if uuid_value and bundle.verdict in {"MOBILE", "HOME"}:
             await container.analysis_store.record_subnet_signal(raw_ip, uuid_value, bundle.verdict)
 
     event_id = await container.store.async_record_analysis_event(
