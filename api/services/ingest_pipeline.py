@@ -542,7 +542,7 @@ async def _process_claimed_event(
 
         if live_analyzed:
             _cache_decision_tx(conn, raw_ip, bundle)
-            _persist_behavior_state_tx(conn, user_data, payload, bundle)
+        _persist_behavior_state_tx(conn, user_data, payload, bundle)
 
         event_id = container.store.review_admin._record_analysis_event(
             conn,

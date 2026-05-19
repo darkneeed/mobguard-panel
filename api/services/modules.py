@@ -991,6 +991,16 @@ async def _process_module_event(
     else:
         bundle = await _analyze_event(runtime, user_data, payload)
         await container.analysis_store.cache_decision(raw_ip, bundle.to_cache_payload())
+    uuid_value = str(user_data.get("uuid") or "").strip()
+    if uuid_value:
+        await container.analysis_store.update_ip_history(uuid_value, raw_ip)
+        await container.analysis_store.update_session(
+            uuid_value,
+            raw_ip,
+            str(payload.get("tag") or ""),
+        )
+        if bundle.verdict in {"MOBILE", "HOME"}:
+            await container.analysis_store.record_subnet_signal(raw_ip, uuid_value, bundle.verdict)
 
     event_id = await container.store.async_record_analysis_event(
         user_data,
