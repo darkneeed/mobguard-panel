@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
 import { AnalysisEventItem, api, Session } from "../api/client";
@@ -22,6 +22,8 @@ type DecisionFilters = {
 
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
 const DECISIONS_REFRESH_MS = 15000;
+const INITIAL_VISIBLE_CARDS = 12;
+const VISIBLE_CARDS_STEP = 12;
 
 const DEFAULT_FILTERS: DecisionFilters = {
   q: "",
@@ -71,6 +73,8 @@ export function DecisionsPage({ session: _session }: { session?: Session }) {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [lastUpdatedAt, setLastUpdatedAt] = useState("");
+  const [visibleCardsCount, setVisibleCardsCount] = useState(INITIAL_VISIBLE_CARDS);
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const nextFilters = normalizeFilters(searchParams);
@@ -90,10 +94,17 @@ export function DecisionsPage({ session: _session }: { session?: Session }) {
     1,
     Math.ceil((data.count || 0) / Math.max(data.page_size || 1, 1)),
   );
+  const visibleItems = useMemo(
+    () => data.items.slice(0, visibleCardsCount),
+    [data.items, visibleCardsCount],
+  );
 
   async function load() {
     try {
-      const payload = await api.getAutoDecisions(effectiveFilters);
+      const payload = await api.getAutoDecisions({
+        ...effectiveFilters,
+        compact: true,
+      });
       setData(payload);
       setError("");
       setLastUpdatedAt(new Date().toISOString());
@@ -105,6 +116,35 @@ export function DecisionsPage({ session: _session }: { session?: Session }) {
   }
 
   useVisiblePolling(true, load, DECISIONS_REFRESH_MS, [effectiveFilters, t]);
+
+  useEffect(() => {
+    setVisibleCardsCount(INITIAL_VISIBLE_CARDS);
+  }, [data.items]);
+
+  useEffect(() => {
+    if (loading) {
+      return;
+    }
+    if (visibleCardsCount >= data.items.length) {
+      return;
+    }
+    const node = loadMoreRef.current;
+    if (!node) {
+      return;
+    }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          setVisibleCardsCount((prev) =>
+            Math.min(prev + VISIBLE_CARDS_STEP, data.items.length),
+          );
+        }
+      },
+      { rootMargin: "240px 0px" },
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [data.items.length, loading, visibleCardsCount]);
 
   function updateFilter<K extends keyof DecisionFilters>(
     key: K,
@@ -280,7 +320,7 @@ export function DecisionsPage({ session: _session }: { session?: Session }) {
             </div>
           ) : null}
           {!loading
-            ? data.items.map((item) => {
+            ? visibleItems.map((item) => {
                 const scopeContext = describeScopeContext(
                   t,
                   item.target_scope_type,
@@ -295,13 +335,8 @@ export function DecisionsPage({ session: _session }: { session?: Session }) {
                 const targetTo = identifier
                   ? `/data/users?identifier=${encodeURIComponent(identifier)}`
                   : "";
-                const CardTag = targetTo ? Link : "div";
-                return (
-                  <CardTag
-                    className={`record-item ${targetTo ? "inline-link" : ""}`}
-                    key={String(item.id)}
-                    {...(targetTo ? { to: targetTo } : {})}
-                  >
+                const cardBody = (
+                  <>
                     <div className="record-main">
                       <span className="record-title">
                         {item.target_ip || item.ip} · {contextDisplay}
@@ -376,10 +411,30 @@ export function DecisionsPage({ session: _session }: { session?: Session }) {
                     {item.last_error ? (
                       <div className="error-box">{item.last_error}</div>
                     ) : null}
-                  </CardTag>
+                  </>
+                );
+                return (
+                  targetTo ? (
+                    <Link
+                      className="record-item inline-link"
+                      key={String(item.id)}
+                      to={targetTo}
+                    >
+                      {cardBody}
+                    </Link>
+                  ) : (
+                    <div className="record-item" key={String(item.id)}>
+                      {cardBody}
+                    </div>
+                  )
                 );
               })
             : null}
+          {!loading && visibleItems.length < data.items.length ? (
+            <div className="provider-empty muted" ref={loadMoreRef}>
+              <span>{t("common.loading")}</span>
+            </div>
+          ) : null}
         </div>
         <div className="record-actions">
           <button

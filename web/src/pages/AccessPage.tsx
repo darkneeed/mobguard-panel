@@ -19,7 +19,9 @@ import { Language, useI18n } from "../localization";
 import { RULE_LIST_FIELDS } from "../rulesMeta";
 
 const ACCESS_FIELDS = RULE_LIST_FIELDS.filter(
-  (field) => field.sectionKey === "access",
+  (field) =>
+    field.sectionKey === "access"
+    && !["moderator_tg_ids", "viewer_tg_ids"].includes(field.key),
 );
 
 type AccessPageProps = {

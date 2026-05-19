@@ -78,7 +78,8 @@ export const enDictionary: TranslationDictionary = {
       telegram: "Telegram",
       access: "Access",
       data: "Data",
-      quality: "Quality"
+      quality: "Quality",
+      bedolaga: "Bedolaga"
     },
     subnav: {
       rules: {
@@ -1650,6 +1651,70 @@ export const enDictionary: TranslationDictionary = {
       traffic_cap_threshold_gb: {
         label: "Traffic cap threshold (GB)",
         description: "If the user has already spent at least this amount, apply traffic cap instead of hiding mobile configs."
+      },
+      limiter_enabled: {
+        label: "Enable limiter",
+        description: "Turn on limiter threshold/window/cooldown controls in enforcement."
+      },
+      limiter_threshold_count: {
+        label: "Limiter threshold",
+        description: "How many violations are required in a window before limiter triggers."
+      },
+      limiter_window_seconds: {
+        label: "Limiter window (sec)",
+        description: "Rolling time window used to count limiter violations."
+      },
+      limiter_cooldown_seconds: {
+        label: "Limiter cooldown (sec)",
+        description: "Cooldown before limiter allows the next enforcement action."
+      },
+      limiter_tolerance: {
+        label: "Limiter tolerance",
+        description: "Additional tolerated events before threshold is considered reached."
+      },
+      limiter_tolerance_multiplier: {
+        label: "Tolerance multiplier",
+        description: "Multiplier applied to limiter tolerance before final threshold."
+      },
+      limiter_ignore_ttl_seconds: {
+        label: "Ignore TTL (sec)",
+        description: "After limiter trigger, temporarily ignore this scope for the configured TTL."
+      },
+      limiter_group_by_subnet: {
+        label: "Group by subnet",
+        description: "Use subnet as limiter scope when account identity is missing."
+      },
+      limiter_group_by_asn: {
+        label: "Group by ASN",
+        description: "Use ASN as limiter scope when account identity is missing."
+      },
+      limiter_rollout_mode: {
+        label: "Limiter rollout mode",
+        description: "Limiter stage: observe, warning_only, or enforce."
+      },
+      webhook_enabled: {
+        label: "Enable webhooks",
+        description: "Emit signed webhook events from ingest/enforcement pipeline."
+      },
+      webhook_urls: {
+        label: "Webhook URLs",
+        description: "One URL per line for outbound webhook delivery."
+      },
+      webhook_secret: {
+        label: "Webhook secret",
+        description: "Shared secret used for X-Webhook-Secret signature."
+      },
+      webhook_timeout_seconds: {
+        label: "Webhook timeout (sec)",
+        description: "HTTP timeout for webhook deliveries."
+      },
+      webhook_retry_attempts: {
+        label: "Webhook retry attempts",
+        description: "Maximum delivery attempts per webhook event."
+      },
+      webhook_backoff_seconds: {
+        label: "Webhook backoff (sec)",
+        description: "Base retry delay for webhook redelivery."
       }
     },
     telegramFields: {
@@ -1676,6 +1741,34 @@ export const enDictionary: TranslationDictionary = {
       telegram_admin_commands_enabled: {
         label: "Enable admin bot commands",
         description: "Allows Telegram admin command handlers to run."
+      },
+      tg_topic_review: {
+        label: "Topic: review",
+        description: "Admin topic/thread id for review events."
+      },
+      tg_topic_warning_only: {
+        label: "Topic: warning-only",
+        description: "Admin topic/thread id for warning-only events."
+      },
+      tg_topic_warning: {
+        label: "Topic: warnings",
+        description: "Admin topic/thread id for warning events."
+      },
+      tg_topic_ban: {
+        label: "Topic: restrictions",
+        description: "Admin topic/thread id for access restriction events."
+      },
+      tg_topic_usage_profile_risk: {
+        label: "Topic: usage-profile risk",
+        description: "Admin topic/thread id for usage-profile risk events."
+      },
+      tg_topic_violation_continues: {
+        label: "Topic: violation-continues",
+        description: "Admin topic/thread id for ongoing violation events."
+      },
+      tg_topic_traffic_limit_exceeded: {
+        label: "Topic: traffic-limit exceeded",
+        description: "Admin topic/thread id for traffic-limit events."
       },
       telegram_notify_admin_review_enabled: {
         label: "Notify review cases",

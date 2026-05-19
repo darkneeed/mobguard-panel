@@ -142,6 +142,10 @@ export function OverviewPage({ session: _session }: { session?: Session }) {
   const realtimeUsage = overview?.realtime_usage || null;
   const panelServer = overview?.panel_server || null;
   const summary = modules?.summary || null;
+  const modulesOnline = Math.max(
+    Number(realtimeUsage?.active_users ?? 0),
+    Number(summary?.active_users_total ?? 0),
+  );
   const staleSnapshot = (overview?.freshness?.overview_age_seconds ?? 0) > 20;
   const staleModules = modules?.items.filter((item) => !item.healthy) || [];
   const warningModules = modules?.items.filter((item) => moduleVariant(item) === "severity-high") || [];
@@ -235,7 +239,7 @@ export function OverviewPage({ session: _session }: { session?: Session }) {
         </div>
         <div className="stat-card">
           <span>Онлайн на модулях</span>
-          <strong>{realtimeUsage?.active_users ?? summary?.active_users_total ?? "—"}</strong>
+          <strong>{modulesOnline}</strong>
         </div>
         <div className="stat-card">
           <span>В нарушении</span>

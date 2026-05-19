@@ -41,6 +41,8 @@ def build_automation_status(container: APIContainer) -> dict[str, Any]:
             detection_settings.get("auto_enforce_requires_hard_or_multi_signal", True)
         ),
         "provider_conflict_review_only": bool(detection_settings.get("provider_conflict_review_only", True)),
+        "limiter_enabled": bool(runtime_settings.get("limiter_enabled", True)),
+        "limiter_rollout_mode": str(runtime_settings.get("limiter_rollout_mode", "observe") or "observe"),
     }
 
     mode_reasons: list[str] = []
@@ -50,10 +52,13 @@ def build_automation_status(container: APIContainer) -> dict[str, Any]:
         mode_reasons.append("shadow_mode")
     if flags["warning_only_mode"]:
         mode_reasons.append("warning_only_mode")
+    limiter_mode = str(flags["limiter_rollout_mode"]).strip().lower()
+    if limiter_mode in {"observe", "warning_only", "enforce"}:
+        mode_reasons.append(f"limiter_{limiter_mode}")
 
-    if flags["dry_run"] or flags["shadow_mode"]:
+    if flags["dry_run"] or flags["shadow_mode"] or limiter_mode == "observe":
         mode = "observe"
-    elif flags["warning_only_mode"]:
+    elif flags["warning_only_mode"] or limiter_mode == "warning_only":
         mode = "warning_only"
     else:
         mode = "enforce"

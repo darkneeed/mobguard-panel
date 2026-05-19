@@ -1,6 +1,7 @@
 import type { Dispatch, SetStateAction } from "react";
 import { api, CacheAdminResponse, OverridesResponse, ViolationsResponse } from "../../api/client";
 import type { Language } from "../../localization/types";
+import { useVisibleItems } from "../../shared/useVisibleItems";
 import { formatDisplayDateTime } from "../../utils/datetime";
 
 type TranslateFn = (key: string, params?: Record<string, string | number>) => string;
@@ -70,15 +71,68 @@ export function OperationsDataSection({
   displayValue,
   formatDecisionLabel,
 }: Props) {
+  const active = (violations?.active as Array<Record<string, unknown>> | undefined) || [];
+  const history = (violations?.history as Array<Record<string, unknown>> | undefined) || [];
+  const limiterWindows = (violations?.limiter?.windows as Array<Record<string, unknown>> | undefined) || [];
+  const limiterCooldowns = (violations?.limiter?.cooldowns as Array<Record<string, unknown>> | undefined) || [];
+  const limiterIgnores = (violations?.limiter?.ignores as Array<Record<string, unknown>> | undefined) || [];
+  const webhookDeliveries = (violations?.webhooks as Array<Record<string, unknown>> | undefined) || [];
+  const exactIp = (overrides?.exact_ip as Array<Record<string, unknown>> | undefined) || [];
+  const unsure = (overrides?.unsure_patterns as Array<Record<string, unknown>> | undefined) || [];
+  const items = (cache?.items as Array<Record<string, unknown>> | undefined) || [];
+  const {
+    visibleItems: visibleActive,
+    hasMore: hasMoreActive,
+    loadMoreRef: loadMoreActiveRef,
+  } = useVisibleItems(active, { initialCount: 20, step: 20 });
+  const {
+    visibleItems: visibleHistory,
+    hasMore: hasMoreHistory,
+    loadMoreRef: loadMoreHistoryRef,
+  } = useVisibleItems(history, { initialCount: 20, step: 20 });
+  const {
+    visibleItems: visibleLimiterWindows,
+    hasMore: hasMoreLimiterWindows,
+    loadMoreRef: loadMoreLimiterWindowsRef,
+  } = useVisibleItems(limiterWindows, { initialCount: 20, step: 20 });
+  const {
+    visibleItems: visibleLimiterCooldowns,
+    hasMore: hasMoreLimiterCooldowns,
+    loadMoreRef: loadMoreLimiterCooldownsRef,
+  } = useVisibleItems(limiterCooldowns, { initialCount: 20, step: 20 });
+  const {
+    visibleItems: visibleLimiterIgnores,
+    hasMore: hasMoreLimiterIgnores,
+    loadMoreRef: loadMoreLimiterIgnoresRef,
+  } = useVisibleItems(limiterIgnores, { initialCount: 20, step: 20 });
+  const {
+    visibleItems: visibleWebhookDeliveries,
+    hasMore: hasMoreWebhookDeliveries,
+    loadMoreRef: loadMoreWebhookDeliveriesRef,
+  } = useVisibleItems(webhookDeliveries, { initialCount: 20, step: 20 });
+  const {
+    visibleItems: visibleExactIp,
+    hasMore: hasMoreExactIp,
+    loadMoreRef: loadMoreExactIpRef,
+  } = useVisibleItems(exactIp, { initialCount: 20, step: 20 });
+  const {
+    visibleItems: visibleUnsure,
+    hasMore: hasMoreUnsure,
+    loadMoreRef: loadMoreUnsureRef,
+  } = useVisibleItems(unsure, { initialCount: 20, step: 20 });
+  const {
+    visibleItems: visibleCacheItems,
+    hasMore: hasMoreCacheItems,
+    loadMoreRef: loadMoreCacheRef,
+  } = useVisibleItems(items, { initialCount: 20, step: 20 });
+
   if (mode === "violations") {
-    const active = (violations?.active as Array<Record<string, unknown>> | undefined) || [];
-    const history = (violations?.history as Array<Record<string, unknown>> | undefined) || [];
     return (
       <div className="detail-grid">
         <div className="panel">
           <h2>{t("data.violations.activeTitle")}</h2>
           <div className="record-list">
-            {active.map((item) => (
+            {visibleActive.map((item) => (
               <div className="record-item" key={String(item.uuid)}>
                 <div className="record-main">
                   <span className="record-title">{String(item.uuid)}</span>
@@ -91,12 +145,17 @@ export function OperationsDataSection({
                 </div>
               </div>
             ))}
+            {hasMoreActive ? (
+              <div className="provider-empty muted" ref={loadMoreActiveRef}>
+                <span>{t("common.loading")}</span>
+              </div>
+            ) : null}
           </div>
         </div>
         <div className="panel">
           <h2>{t("data.violations.historyTitle")}</h2>
           <div className="record-list">
-            {history.map((item) => (
+            {visibleHistory.map((item) => (
               <div className="record-item" key={String(item.id)}>
                 <div className="record-main">
                   <span className="record-title">{String(item.uuid)}</span>
@@ -108,6 +167,88 @@ export function OperationsDataSection({
                 </div>
               </div>
             ))}
+            {hasMoreHistory ? (
+              <div className="provider-empty muted" ref={loadMoreHistoryRef}>
+                <span>{t("common.loading")}</span>
+              </div>
+            ) : null}
+          </div>
+        </div>
+        <div className="panel">
+          <h2>Limiter windows</h2>
+          <div className="record-list">
+            {visibleLimiterWindows.map((item) => (
+              <div className="record-item" key={String(item.scope_key)}>
+                <div className="record-main">
+                  <span className="record-title">{String(item.scope_key)}</span>
+                  <span>{String(item.event_count)}</span>
+                </div>
+                <div className="record-meta">
+                  <span>{formatDisplayDateTime(String(item.window_started_at ?? ""), t("common.notAvailable"), language)}</span>
+                  <span>{formatDisplayDateTime(String(item.last_event_at ?? ""), t("common.notAvailable"), language)}</span>
+                </div>
+              </div>
+            ))}
+            {hasMoreLimiterWindows ? (
+              <div className="provider-empty muted" ref={loadMoreLimiterWindowsRef}>
+                <span>{t("common.loading")}</span>
+              </div>
+            ) : null}
+          </div>
+        </div>
+        <div className="panel">
+          <h2>Limiter cooldown/ignore</h2>
+          <div className="record-list">
+            {visibleLimiterCooldowns.map((item) => (
+              <div className="record-item" key={`${String(item.scope_key)}:${String(item.action)}`}>
+                <div className="record-main">
+                  <span className="record-title">{String(item.scope_key)}</span>
+                  <span>{String(item.action)}</span>
+                </div>
+                <div className="record-meta">
+                  <span>{formatDisplayDateTime(String(item.cooldown_until ?? ""), t("common.notAvailable"), language)}</span>
+                </div>
+              </div>
+            ))}
+            {visibleLimiterIgnores.map((item) => (
+              <div className="record-item" key={String(item.scope_key)}>
+                <div className="record-main">
+                  <span className="record-title">{String(item.scope_key)}</span>
+                  <span className="tag">{String(item.reason || "ignore")}</span>
+                </div>
+                <div className="record-meta">
+                  <span>{formatDisplayDateTime(String(item.expires_at ?? ""), t("common.notAvailable"), language)}</span>
+                </div>
+              </div>
+            ))}
+            {hasMoreLimiterCooldowns || hasMoreLimiterIgnores ? (
+              <div className="provider-empty muted" ref={hasMoreLimiterCooldowns ? loadMoreLimiterCooldownsRef : loadMoreLimiterIgnoresRef}>
+                <span>{t("common.loading")}</span>
+              </div>
+            ) : null}
+          </div>
+        </div>
+        <div className="panel">
+          <h2>Webhook deliveries</h2>
+          <div className="record-list">
+            {visibleWebhookDeliveries.map((item) => (
+              <div className="record-item" key={String(item.id)}>
+                <div className="record-main">
+                  <span className="record-title">{String(item.event_type)}</span>
+                  <span className="tag">{String(item.status)}</span>
+                </div>
+                <div className="record-meta">
+                  <span>{String(item.target_url)}</span>
+                  <span>{String(item.attempt_count)}</span>
+                  <span>{formatDisplayDateTime(String(item.created_at ?? ""), t("common.notAvailable"), language)}</span>
+                </div>
+              </div>
+            ))}
+            {hasMoreWebhookDeliveries ? (
+              <div className="provider-empty muted" ref={loadMoreWebhookDeliveriesRef}>
+                <span>{t("common.loading")}</span>
+              </div>
+            ) : null}
           </div>
         </div>
       </div>
@@ -115,8 +256,6 @@ export function OperationsDataSection({
   }
 
   if (mode === "overrides") {
-    const exactIp = (overrides?.exact_ip as Array<Record<string, unknown>> | undefined) || [];
-    const unsure = (overrides?.unsure_patterns as Array<Record<string, unknown>> | undefined) || [];
     return (
       <div className="detail-grid">
         <div className="panel">
@@ -131,7 +270,7 @@ export function OperationsDataSection({
             <button disabled={!canWriteData || isPending("exactOverride")} onClick={saveExactOverride}>{t("data.overrides.save")}</button>
           </div>
           <div className="record-list">
-            {exactIp.map((item) => (
+            {visibleExactIp.map((item) => (
               <div className="record-item" key={String(item.ip)}>
                 <div className="record-main">
                   <span className="record-title">{String(item.ip)}</span>
@@ -153,6 +292,11 @@ export function OperationsDataSection({
                 </div>
               </div>
             ))}
+            {hasMoreExactIp ? (
+              <div className="provider-empty muted" ref={loadMoreExactIpRef}>
+                <span>{t("common.loading")}</span>
+              </div>
+            ) : null}
           </div>
         </div>
         <div className="panel">
@@ -167,7 +311,7 @@ export function OperationsDataSection({
             <button disabled={!canWriteData || isPending("unsureOverride")} onClick={saveUnsureOverride}>{t("data.overrides.save")}</button>
           </div>
           <div className="record-list">
-            {unsure.map((item) => (
+            {visibleUnsure.map((item) => (
               <div className="record-item" key={String(item.ip_pattern)}>
                 <div className="record-main">
                   <span className="record-title">{String(item.ip_pattern)}</span>
@@ -189,19 +333,23 @@ export function OperationsDataSection({
                 </div>
               </div>
             ))}
+            {hasMoreUnsure ? (
+              <div className="provider-empty muted" ref={loadMoreUnsureRef}>
+                <span>{t("common.loading")}</span>
+              </div>
+            ) : null}
           </div>
         </div>
       </div>
     );
   }
 
-  const items = (cache?.items as Array<Record<string, unknown>> | undefined) || [];
   return (
     <div className="detail-grid">
       <div className="panel">
         <h2>{t("data.cache.title")}</h2>
         <div className="record-list">
-          {items.map((item) => (
+          {visibleCacheItems.map((item) => (
             <div className="record-item" key={String(item.ip)}>
               <div className="record-main">
                 <span className="record-title">{String(item.ip)}</span>
@@ -233,6 +381,11 @@ export function OperationsDataSection({
               </div>
             </div>
           ))}
+          {hasMoreCacheItems ? (
+            <div className="provider-empty muted" ref={loadMoreCacheRef}>
+              <span>{t("common.loading")}</span>
+            </div>
+          ) : null}
         </div>
       </div>
       <div className="panel">

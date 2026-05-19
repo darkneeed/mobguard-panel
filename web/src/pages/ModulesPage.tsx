@@ -12,6 +12,7 @@ import {
 import { ModalShell } from "../components/ModalShell";
 import { useToast } from "../components/ToastProvider";
 import { useI18n } from "../localization";
+import { useVisibleItems } from "../shared/useVisibleItems";
 import { useVisiblePolling } from "../shared/useVisiblePolling";
 import { formatDisplayDateTime } from "../utils/datetime";
 
@@ -201,6 +202,11 @@ export function ModulesPage({ session }: { session?: Session }) {
       return haystack.includes(normalizedQuery);
     });
   }, [data, query]);
+  const {
+    visibleItems: visibleModuleItems,
+    hasMore: hasMoreModules,
+    loadMoreRef: loadMoreModulesRef,
+  } = useVisibleItems(filteredItems, { initialCount: 10, step: 10 });
 
   const installedItems = useMemo(
     () =>
@@ -586,7 +592,12 @@ export function ModulesPage({ session }: { session?: Session }) {
           </div>
         </div>
         <div className="queue-grid module-ops-grid-list">
-          {filteredItems.map(renderModuleCard)}
+          {visibleModuleItems.map(renderModuleCard)}
+          {hasMoreModules ? (
+            <div className="provider-empty muted" ref={loadMoreModulesRef}>
+              <span>{t("common.loading")}</span>
+            </div>
+          ) : null}
           {!filteredItems.length ? (
             <div className="provider-empty">{t("modules.empty")}</div>
           ) : null}

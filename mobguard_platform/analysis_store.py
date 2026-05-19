@@ -138,10 +138,46 @@ class AnalysisStore:
                 )
                 """
             )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS limiter_state_windows (
+                    scope_key TEXT PRIMARY KEY,
+                    event_count INTEGER NOT NULL DEFAULT 0,
+                    window_started_at TEXT NOT NULL,
+                    last_event_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS limiter_state_cooldowns (
+                    scope_key TEXT NOT NULL,
+                    action TEXT NOT NULL,
+                    cooldown_until TEXT NOT NULL,
+                    last_triggered_at TEXT NOT NULL,
+                    PRIMARY KEY (scope_key, action)
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS limiter_ignore_rules (
+                    scope_key TEXT PRIMARY KEY,
+                    reason TEXT NOT NULL DEFAULT '',
+                    expires_at TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                )
+                """
+            )
             conn.execute("CREATE INDEX IF NOT EXISTS idx_trackers_last_seen ON active_trackers(last_seen)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_decisions_expires ON ip_decisions(expires)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_ip_history_uuid ON ip_history(uuid)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_ip_history_uuid_timestamp ON ip_history(uuid, timestamp)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_limiter_state_windows_updated_at ON limiter_state_windows(updated_at)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_limiter_state_cooldowns_until ON limiter_state_cooldowns(cooldown_until)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_limiter_ignore_rules_expires ON limiter_ignore_rules(expires_at)")
             conn.commit()
 
     async def _run(self, fn, *args):

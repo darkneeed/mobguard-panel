@@ -34,6 +34,7 @@ from mobguard_platform.runtime_admin_defaults import ENFORCEMENT_SETTINGS_DEFAUL
 from mobguard_platform.storage.sqlite import is_sqlite_busy_error
 
 from ..context import APIContainer
+from .limiter_engine import evaluate_limiter_policy_tx
 
 
 PROTOCOL_VERSION = "v1"
@@ -777,8 +778,43 @@ async def _apply_enforcement_if_needed(
     if not uuid:
         return None
 
+    def _evaluate_limiter() -> dict[str, Any]:
+        with container.store._connect() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            decision = evaluate_limiter_policy_tx(
+                conn,
+                settings,
+                user_data,
+                payload,
+                bundle,
+                action="enforcement",
+            )
+            conn.commit()
+            return decision.to_dict()
+
+    limiter = await asyncio.to_thread(_evaluate_limiter)
+    limiter_payload = limiter if str(limiter.get("reason") or "") != "disabled" else None
+    limiter_reason = str(limiter.get("reason") or "")
+    if not bool(limiter.get("allowed")):
+        if limiter_reason == "rollout_warning_only":
+            warning_only_from_limiter = True
+        elif limiter_reason in {"below_threshold", "cooldown_active", "ignore_ttl", "rollout_observe"}:
+            return {
+                "type": "suppressed",
+                "reason": limiter_reason,
+                "warning_only": False,
+                "delivery_status": "suppressed",
+                "dry_run": bool(settings.get("dry_run", True)),
+                **({"limiter": limiter_payload} if limiter_payload else {}),
+            }
+        else:
+            warning_only_from_limiter = False
+    else:
+        warning_only_from_limiter = False
+
     warning_only = (
-        bool(settings.get("warning_only_mode", False))
+        warning_only_from_limiter
+        or bool(settings.get("warning_only_mode", False))
         or bool(settings.get("shadow_mode", True))
         or should_warning_only(bundle)
         or not bundle.punitive_eligible
@@ -804,6 +840,7 @@ async def _apply_enforcement_if_needed(
                 "warning_count": next_warning_count,
                 "warning_only": True,
                 "dry_run": True,
+                **({"limiter": limiter_payload} if limiter_payload else {}),
             }
         await container.analysis_store.execute(
             """
@@ -830,6 +867,7 @@ async def _apply_enforcement_if_needed(
             "type": "warning",
             "warning_count": next_warning_count,
             "warning_only": True,
+            **({"limiter": limiter_payload} if limiter_payload else {}),
         }
 
     durations = settings.get(
@@ -848,6 +886,7 @@ async def _apply_enforcement_if_needed(
             "ban_minutes": duration,
             "remote_updated": False,
             "dry_run": True,
+            **({"limiter": limiter_payload} if limiter_payload else {}),
         }
     unban_time = now + timedelta(minutes=duration)
     await container.analysis_store.execute(
@@ -914,6 +953,7 @@ async def _apply_enforcement_if_needed(
         "ban_minutes": duration,
         "remote_updated": bool(remote_updated),
         "dry_run": False,
+        **({"limiter": limiter_payload} if limiter_payload else {}),
     }
 
 

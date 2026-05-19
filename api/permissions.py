@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from typing import Any
 
 
@@ -71,6 +72,13 @@ ROLE_PERMISSIONS: dict[str, tuple[str, ...]] = {
     ),
 }
 
+SINGLE_ADMIN_MODE_DEFAULT = os.getenv("MOBGUARD_SINGLE_ADMIN_MODE", "true").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
+
 
 def normalize_role(value: Any) -> str:
     normalized = str(value or "").strip().lower()
@@ -95,6 +103,8 @@ def role_for_telegram_id(rules: dict[str, Any], tg_id: int) -> str | None:
     viewer_ids = {int(value) for value in rules.get("viewer_tg_ids", [])}
     if numeric_id in owner_ids:
         return ROLE_OWNER
+    if SINGLE_ADMIN_MODE_DEFAULT:
+        return None
     if numeric_id in moderator_ids:
         return ROLE_MODERATOR
     if numeric_id in viewer_ids:

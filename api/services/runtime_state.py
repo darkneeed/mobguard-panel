@@ -812,10 +812,11 @@ def list_auto_decisions(store: Any, filters: dict[str, Any]) -> dict[str, Any]:
     page = max(int(filters.get("page", 1) or 1), 1)
     page_size = min(max(int(filters.get("page_size", 50) or 50), 1), 200)
     sort = str(filters.get("sort") or "created_desc").strip().lower()
+    compact = str(filters.get("compact") or "").strip().lower() in {"1", "true", "yes", "on"}
     order_by = "ae.created_at ASC" if sort == "created_asc" else "ae.created_at DESC"
     clauses: list[str] = [
         "COALESCE(ae.decision_source, 'rule_engine') != 'manual_override'",
-        "NOT EXISTS (SELECT 1 FROM review_cases rc WHERE rc.case_scope_key = ae.case_scope_key AND rc.status != 'MERGED')",
+        "NOT EXISTS (SELECT 1 FROM review_cases rc WHERE rc.case_scope_key = ae.case_scope_key AND rc.status = 'OPEN')",
     ]
     params: list[Any] = []
 
@@ -858,7 +859,7 @@ def list_auto_decisions(store: Any, filters: dict[str, Any]) -> dict[str, Any]:
 
     where_sql = f"WHERE {' AND '.join(clauses)}" if clauses else ""
     with store._connect() as conn:
-        select_sql = _analysis_event_select(conn, store)
+        select_sql = _analysis_event_select(conn, store, include_payload_fields=not compact)
         enforcement_exists = store._table_exists(conn, "enforcement_jobs")
         if enforcement_exists:
             enforcement_status_sql = """

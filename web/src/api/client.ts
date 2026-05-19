@@ -11,6 +11,7 @@ export type {
   AnalysisEventListResponse,
   AutoDecisionItem,
   AutoDecisionListResponse,
+  BedolagaOverviewResponse,
   AuditTrailResponse,
   AuthResult,
   AuthCapabilities,

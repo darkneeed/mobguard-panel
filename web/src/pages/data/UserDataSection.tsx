@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 
 import { api, UserCardExportResponse, UserCardResponse, UserSearchResponse } from "../../api/client";
 import type { Language } from "../../localization/types";
+import { useVisibleItems } from "../../shared/useVisibleItems";
 import { formatUsageDeviceInventory, hasPanelUsageDevices } from "../../shared/usageDevices";
 import { formatDisplayDateTime } from "../../utils/datetime";
 
@@ -87,6 +88,10 @@ export function UserDataSection({
       ? (panelUser.userTraffic as Record<string, unknown> | undefined)
       : undefined;
   const identifier = String(identity?.uuid || identity?.system_id || identity?.telegram_id || "");
+  const { visibleItems: visibleSearchItems, hasMore: hasMoreSearchItems, loadMoreRef: loadMoreSearchRef } = useVisibleItems(items, { initialCount: 20, step: 20 });
+  const { visibleItems: visibleAnalysisEvents, hasMore: hasMoreAnalysisEvents, loadMoreRef: loadMoreAnalysisRef } = useVisibleItems(analysisEvents, { initialCount: 20, step: 20 });
+  const { visibleItems: visibleReviewCases, hasMore: hasMoreReviewCases, loadMoreRef: loadMoreReviewCasesRef } = useVisibleItems(reviewCases, { initialCount: 20, step: 20 });
+  const { visibleItems: visibleHistoryItems, hasMore: hasMoreHistoryItems, loadMoreRef: loadMoreHistoryRef } = useVisibleItems(history, { initialCount: 20, step: 20 });
 
   function renderUserExportPreview() {
     if (!userCardExport) return null;
@@ -165,7 +170,7 @@ export function UserDataSection({
           </div>
         ) : null}
         <ul className="reason-list">
-          {items.map((item) => (
+          {visibleSearchItems.map((item) => (
             <li key={String(item.uuid || item.system_id || item.telegram_id)}>
               <button
                 className="ghost"
@@ -179,6 +184,11 @@ export function UserDataSection({
             </li>
           ))}
         </ul>
+        {hasMoreSearchItems ? (
+          <div className="provider-empty muted" ref={loadMoreSearchRef}>
+            <span>{t("common.loading")}</span>
+          </div>
+        ) : null}
       </div>
 
       {identity ? (
@@ -344,7 +354,7 @@ export function UserDataSection({
             <h2>{t("data.users.analysisTitle")}</h2>
             <ul className="reason-list">
               {analysisEvents.length === 0 ? <li><span>{t("data.users.analysisEmpty")}</span></li> : null}
-              {analysisEvents.map((item, index) => (
+              {visibleAnalysisEvents.map((item, index) => (
                 <li key={String((item as Record<string, unknown>).id || index)}>
                   <strong>{displayValue((item as Record<string, unknown>).ip)} · {displayValue((item as Record<string, unknown>).verdict)} / {displayValue((item as Record<string, unknown>).confidence_band)}</strong>
                   <span>{displayValue((item as Record<string, unknown>).isp)} · AS{displayValue((item as Record<string, unknown>).asn)}</span>
@@ -353,13 +363,18 @@ export function UserDataSection({
                 </li>
               ))}
             </ul>
+            {hasMoreAnalysisEvents ? (
+              <div className="provider-empty muted" ref={loadMoreAnalysisRef}>
+                <span>{t("common.loading")}</span>
+              </div>
+            ) : null}
           </div>
 
           <div className="panel">
             <h2>{t("data.users.openCasesTitle")}</h2>
             <ul className="reason-list">
               {reviewCases.length === 0 ? <li><span>{t("data.users.openCasesEmpty")}</span></li> : null}
-              {reviewCases.map((item, index) => (
+              {visibleReviewCases.map((item, index) => (
                 <li key={String((item as Record<string, unknown>).id || index)}>
                   <Link to={`/reviews/${(item as Record<string, unknown>).id}`}>
                     #{String((item as Record<string, unknown>).id)} · {String((item as Record<string, unknown>).review_reason)} · {String((item as Record<string, unknown>).ip)} · {formatDisplayDateTime(String((item as Record<string, unknown>).updated_at ?? ""), t("common.notAvailable"), language)}
@@ -367,13 +382,18 @@ export function UserDataSection({
                 </li>
               ))}
             </ul>
+            {hasMoreReviewCases ? (
+              <div className="provider-empty muted" ref={loadMoreReviewCasesRef}>
+                <span>{t("common.loading")}</span>
+              </div>
+            ) : null}
           </div>
 
           <div className="panel">
             <h2>{t("data.users.historyTitle")}</h2>
             <ul className="reason-list">
               {history.length === 0 ? <li><span>{t("data.users.historyEmpty")}</span></li> : null}
-              {history.map((item, index) => (
+              {visibleHistoryItems.map((item, index) => (
                 <li key={`${String((item as Record<string, unknown>).timestamp)}-${String((item as Record<string, unknown>).ip)}-${index}`}>
                   <strong>{String((item as Record<string, unknown>).ip)}</strong>
                   <span>{String((item as Record<string, unknown>).tag)} · {t("data.violations.historyRow", { strike: String((item as Record<string, unknown>).strike_number), duration: String((item as Record<string, unknown>).punishment_duration) })}</span>
@@ -381,6 +401,11 @@ export function UserDataSection({
                 </li>
               ))}
             </ul>
+            {hasMoreHistoryItems ? (
+              <div className="provider-empty muted" ref={loadMoreHistoryRef}>
+                <span>{t("common.loading")}</span>
+              </div>
+            ) : null}
           </div>
 
           {renderUserExportPreview()}

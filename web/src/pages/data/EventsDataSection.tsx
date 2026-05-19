@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import { AnalysisEventListResponse } from "../../api/client";
 import { describeScopeContext } from "../../features/reviews/lib/scopeContext";
 import type { Language } from "../../localization/types";
+import { useVisibleItems } from "../../shared/useVisibleItems";
 import { formatDisplayDateTime } from "../../utils/datetime";
 
 type TranslateFn = (key: string, params?: Record<string, string | number>) => string;
@@ -35,6 +36,11 @@ export function EventsDataSection({ t, language, events, filters, setFilters }: 
   const pageSize = events?.page_size ?? filters.page_size;
   const totalCount = events?.count ?? 0;
   const totalPages = Math.max(1, Math.ceil(totalCount / Math.max(pageSize, 1)));
+  const {
+    visibleItems: visibleEventItems,
+    hasMore: hasMoreEvents,
+    loadMoreRef: loadMoreEventsRef,
+  } = useVisibleItems(items, { initialCount: 12, step: 12 });
 
   function updateFilters(updater: (prev: EventFilters) => EventFilters) {
     setFilters(updater);
@@ -158,7 +164,7 @@ export function EventsDataSection({ t, language, events, filters, setFilters }: 
               <span>{t("data.events.empty")}</span>
             </div>
           ) : null}
-          {items.map((item) => (
+          {visibleEventItems.map((item) => (
             (() => {
               const scopeContext = describeScopeContext(
                 t,
@@ -206,6 +212,11 @@ export function EventsDataSection({ t, language, events, filters, setFilters }: 
               );
             })()
           ))}
+          {hasMoreEvents ? (
+            <div className="provider-empty muted" ref={loadMoreEventsRef}>
+              <span>{t("common.loading")}</span>
+            </div>
+          ) : null}
         </div>
         <div className="record-actions">
           <button

@@ -10,6 +10,7 @@ import {
   loadDecisionsPage,
   loadModulesPage,
   loadOverviewPage,
+  loadBedolagaPage,
   loadQualityPage,
   loadReviewDetailPage,
   loadReviewQueuePage,
@@ -53,6 +54,7 @@ const TelegramPage = lazyNamed(loadTelegramPage, "TelegramPage");
 const AccessPage = lazyNamed(loadAccessPage, "AccessPage");
 const DataPage = lazyNamed(loadDataPage, "DataPage");
 const QualityPage = lazyNamed(loadQualityPage, "QualityPage");
+const BedolagaPage = lazyNamed(loadBedolagaPage, "BedolagaPage");
 
 function RouteFallback() {
   const { t } = useI18n();
@@ -203,6 +205,14 @@ export function AppRouter({
           element={
             <PermissionRoute session={session} permission="quality.read">
               <QualityPage />
+            </PermissionRoute>
+          }
+        />
+        <Route
+          path="/bedolaga"
+          element={
+            <PermissionRoute session={session} permission="data.read">
+              <BedolagaPage />
             </PermissionRoute>
           }
         />

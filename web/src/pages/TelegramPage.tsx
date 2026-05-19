@@ -41,7 +41,14 @@ type TelegramFieldKey =
   | "telegram_notify_admin_traffic_limit_exceeded_enabled"
   | "telegram_notify_user_warning_only_enabled"
   | "telegram_notify_user_warning_enabled"
-  | "telegram_notify_user_ban_enabled";
+  | "telegram_notify_user_ban_enabled"
+  | "tg_topic_review"
+  | "tg_topic_warning_only"
+  | "tg_topic_warning"
+  | "tg_topic_ban"
+  | "tg_topic_usage_profile_risk"
+  | "tg_topic_violation_continues"
+  | "tg_topic_traffic_limit_exceeded";
 
 type TemplateFieldKey =
   | "user_warning_only_template"
@@ -91,6 +98,13 @@ const TELEGRAM_FIELDS: TelegramField[] = [
     section: "delivery",
     type: "boolean",
   },
+  { key: "tg_topic_review", section: "delivery", type: "number" },
+  { key: "tg_topic_warning_only", section: "delivery", type: "number" },
+  { key: "tg_topic_warning", section: "delivery", type: "number" },
+  { key: "tg_topic_ban", section: "delivery", type: "number" },
+  { key: "tg_topic_usage_profile_risk", section: "delivery", type: "number" },
+  { key: "tg_topic_violation_continues", section: "delivery", type: "number" },
+  { key: "tg_topic_traffic_limit_exceeded", section: "delivery", type: "number" },
   {
     key: "telegram_notify_admin_review_enabled",
     section: "admin",

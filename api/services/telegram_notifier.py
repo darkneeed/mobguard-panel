@@ -72,6 +72,7 @@ class TelegramNotifier:
         self,
         text: str,
         *,
+        event: str | None = None,
         dedupe_key: str | None = None,
     ) -> bool:
         raw_settings = self._settings()
@@ -89,7 +90,7 @@ class TelegramNotifier:
                 token=token,
                 chat_id=chat_id,
                 text=text,
-                topic_id=_coerce_topic_id(raw_settings.get("tg_topic_id")),
+                topic_id=self._topic_for_admin_event(raw_settings, event),
             )
         )
         return True
@@ -214,6 +215,28 @@ class TelegramNotifier:
         self._dedupe_until[key] = now + ttl_seconds
         return False
 
+    def _topic_for_admin_event(self, raw_settings: Mapping[str, Any], event: str | None) -> int | None:
+        if event:
+            with self.container.store._connect() as conn:
+                if self.container.store._table_exists(conn, "telegram_topic_routing"):
+                    row = conn.execute(
+                        "SELECT topic_id FROM telegram_topic_routing WHERE event_key = ?",
+                        (str(event),),
+                    ).fetchone()
+                    if row:
+                        topic = _coerce_topic_id(row["topic_id"])
+                        if topic is not None:
+                            return topic
+            event_key = f"tg_topic_{event}"
+            topic = _coerce_topic_id(raw_settings.get(event_key))
+            if topic is not None:
+                return topic
+            route_key = f"telegram_topic_route_{event}"
+            route_topic = _coerce_topic_id(raw_settings.get(route_key))
+            if route_topic is not None:
+                return route_topic
+        return _coerce_topic_id(raw_settings.get("tg_topic_id"))
+
 
 def _coerce_topic_id(value: Any) -> int | None:
     if value in (None, "", 0, "0"):
@@ -223,6 +246,8 @@ def _coerce_topic_id(value: Any) -> int | None:
     except (TypeError, ValueError):
         return None
     return parsed or None
+
+
 
 
 def _runtime_settings(container: Any) -> dict[str, Any]:
@@ -252,6 +277,17 @@ async def emit_ingest_notifications(
     if notifier is None:
         return
     try:
+        webhook_dispatcher = getattr(container, "webhook_dispatcher", None)
+        webhook_payload = {
+            "event_type": "ingest.analysis_event",
+            "user": dict(user),
+            "bundle": bundle.to_dict() if hasattr(bundle, "to_dict") else {},
+            "tag": tag,
+            "review_reason": review_reason,
+            "enforcement": dict(enforcement or {}),
+        }
+        if webhook_dispatcher is not None:
+            await webhook_dispatcher.emit("ingest.analysis_event", webhook_payload)
         if review_reason and bundle.case_id:
             await _notify_review_case(notifier, container, user, bundle, tag, review_reason)
         if enforcement:
@@ -324,6 +360,7 @@ async def _notify_review_case(
             message += f"  • {escape_html(entry)}\n"
     await notifier.notify_admin(
         message,
+        event="review",
         dedupe_key=f"review:{user.get('uuid')}:{bundle.ip}:{review_reason}",
     )
 
@@ -400,6 +437,13 @@ async def _notify_enforcement(
     if admin_message:
         await notifier.notify_admin(
             admin_message,
+            event=(
+                "warning_only"
+                if str(enforcement.get("type") or "") == "warning" and bool(enforcement.get("warning_only"))
+                else "warning"
+                if str(enforcement.get("type") or "") == "warning"
+                else "ban"
+            ),
             dedupe_key=f"enforcement:{bundle.event_id}:{enforcement.get('type')}:{enforcement.get('warning_only')}",
         )
     telegram_id = user.get("telegramId")

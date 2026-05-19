@@ -267,6 +267,50 @@ class DataAdminDomainTests(unittest.TestCase):
         self.assertEqual(payload["items"][0]["enforcement_status"], "applied")
         self.assertEqual(payload["items"][0]["enforcement_job_type"], "access_state")
 
+    def test_auto_decisions_facade_includes_events_after_review_case_is_closed(self):
+        user = {
+            "uuid": "uuid-1",
+            "username": "alice",
+            "telegramId": "1001",
+            "id": 42,
+            "module_id": "node-a",
+            "module_name": "Node A",
+        }
+        bundle = DecisionBundle(
+            ip="8.8.8.8",
+            verdict="HOME",
+            confidence_band="PROBABLE_HOME",
+            score=-22,
+            asn=12345,
+            isp="ISP C",
+        )
+        self.store.record_analysis_event(user, "8.8.8.7", "TAG-A", bundle)
+        review_event_id = self.store.record_analysis_event(user, "8.8.8.8", "TAG-A", bundle)
+        review_case = self.store.ensure_review_case(
+            user,
+            "8.8.8.8",
+            "TAG-A",
+            bundle,
+            review_event_id,
+            "probable_home",
+        )
+        self.store.resolve_review_case(
+            review_case.id,
+            "MOBILE",
+            "admin",
+            1001,
+            "close case for auto decisions",
+        )
+
+        payload = decisions_service.list_decisions_auto(
+            self.container,
+            {"page": 1, "page_size": 50, "sort": "created_desc"},
+        )
+
+        ips = {item["ip"] for item in payload["items"]}
+        self.assertIn("8.8.8.7", ips)
+        self.assertIn("8.8.8.8", ips)
+
     def test_console_facade_merges_system_logs_and_module_inputs(self):
         with self.store._connect() as conn:
             conn.execute(

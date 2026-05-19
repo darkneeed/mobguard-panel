@@ -611,6 +611,20 @@ export type OverviewMetricsResponse = {
 export type ViolationsResponse = {
   active: Array<Record<string, unknown>>;
   history: Array<Record<string, unknown>>;
+  limiter?: {
+    windows: Array<Record<string, unknown>>;
+    cooldowns: Array<Record<string, unknown>>;
+    ignores: Array<Record<string, unknown>>;
+  };
+  webhooks?: Array<Record<string, unknown>>;
+};
+
+export type BedolagaOverviewResponse = {
+  enabled: boolean;
+  base_url: string;
+  metrics: Record<string, unknown>;
+  clients: Array<Record<string, unknown>>;
+  errors: string[];
 };
 
 export type OverridesResponse = {

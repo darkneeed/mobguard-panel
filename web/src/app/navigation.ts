@@ -35,7 +35,8 @@ export const primaryNavigation: NavigationGroup[] = [
     titleKey: "layout.groups.operate",
     items: [
       { to: "/data/console", labelKey: "layout.nav.console", permission: "data.read" },
-      { to: "/data/users", labelKey: "layout.nav.data", permission: "data.read" }
+      { to: "/data/users", labelKey: "layout.nav.data", permission: "data.read" },
+      { to: "/bedolaga", labelKey: "layout.nav.bedolaga", permission: "data.read" }
     ]
   }
 ];

@@ -21,6 +21,7 @@ from mobguard_platform.storage.sqlite import is_sqlite_busy_error, is_sqlite_int
 
 from ..context import APIContainer
 from .modules import _analyze_event, _build_batch_context, _remnawave_client, _resolve_remote_user
+from .limiter_engine import evaluate_limiter_policy_tx
 from .review_auto_resolution import AUTO_REVIEW_ACTOR, match_review_auto_resolution
 from .telegram_notifier import emit_ingest_notifications
 
@@ -223,7 +224,34 @@ def _plan_enforcement_tx(
     if not uuid:
         return None
 
-    warning_only = (
+    limiter_decision = evaluate_limiter_policy_tx(
+        conn,
+        settings,
+        user_data,
+        payload,
+        bundle,
+        action="enforcement",
+    )
+    limiter_payload = limiter_decision.to_dict() if limiter_decision.reason != "disabled" else None
+    if not limiter_decision.allowed:
+        reason = limiter_decision.reason
+        if reason == "rollout_warning_only":
+            warning_only = True
+        elif reason in {"below_threshold", "cooldown_active", "ignore_ttl", "rollout_observe"}:
+            return {
+                "type": "suppressed",
+                "reason": reason,
+                "warning_only": False,
+                "delivery_status": "suppressed",
+                "dry_run": bool(settings.get("dry_run", True)),
+                **({"limiter": limiter_payload} if limiter_payload else {}),
+            }
+        else:
+            warning_only = False
+    else:
+        warning_only = False
+
+    warning_only = warning_only or (
         bool(settings.get("warning_only_mode", False))
         or bool(settings.get("shadow_mode", True))
         or should_warning_only(bundle)
@@ -280,6 +308,7 @@ def _plan_enforcement_tx(
             "warning_only": True,
             "delivery_status": "applied",
             "dry_run": False,
+            **({"limiter": limiter_payload} if limiter_payload else {}),
         }
 
     durations = settings.get(
@@ -300,6 +329,7 @@ def _plan_enforcement_tx(
             "job_id": None,
             "dry_run": True,
             "warning_only": False,
+            **({"limiter": limiter_payload} if limiter_payload else {}),
         }
     unban_time = (now_dt + timedelta(minutes=duration)).isoformat()
     conn.execute(
@@ -382,6 +412,7 @@ def _plan_enforcement_tx(
         "job_id": job_id or None,
         "dry_run": dry_run,
         "warning_only": False,
+        **({"limiter": limiter_payload} if limiter_payload else {}),
     }
 
 

@@ -46,7 +46,23 @@ type GeneralSettingKey =
   | "full_access_squad_name"
   | "restricted_access_squad_name"
   | "traffic_cap_increment_gb"
-  | "traffic_cap_threshold_gb";
+  | "traffic_cap_threshold_gb"
+  | "limiter_enabled"
+  | "limiter_threshold_count"
+  | "limiter_window_seconds"
+  | "limiter_cooldown_seconds"
+  | "limiter_tolerance"
+  | "limiter_tolerance_multiplier"
+  | "limiter_ignore_ttl_seconds"
+  | "limiter_group_by_subnet"
+  | "limiter_group_by_asn"
+  | "limiter_rollout_mode"
+  | "webhook_enabled"
+  | "webhook_urls"
+  | "webhook_secret"
+  | "webhook_timeout_seconds"
+  | "webhook_retry_attempts"
+  | "webhook_backoff_seconds";
 
 type GeneralSettingField = {
   key: GeneralSettingKey;
@@ -67,6 +83,22 @@ const GENERAL_SETTINGS_FIELDS: GeneralSettingField[] = [
   { key: "restricted_access_squad_name", inputType: "text" },
   { key: "traffic_cap_increment_gb", inputType: "number" },
   { key: "traffic_cap_threshold_gb", inputType: "number" },
+  { key: "limiter_enabled", inputType: "boolean" },
+  { key: "limiter_threshold_count", inputType: "number" },
+  { key: "limiter_window_seconds", inputType: "number" },
+  { key: "limiter_cooldown_seconds", inputType: "number" },
+  { key: "limiter_tolerance", inputType: "number" },
+  { key: "limiter_tolerance_multiplier", inputType: "number", step: 0.1 },
+  { key: "limiter_ignore_ttl_seconds", inputType: "number" },
+  { key: "limiter_group_by_subnet", inputType: "boolean" },
+  { key: "limiter_group_by_asn", inputType: "boolean" },
+  { key: "limiter_rollout_mode", inputType: "text" },
+  { key: "webhook_enabled", inputType: "boolean" },
+  { key: "webhook_urls", inputType: "text" },
+  { key: "webhook_secret", inputType: "text" },
+  { key: "webhook_timeout_seconds", inputType: "number" },
+  { key: "webhook_retry_attempts", inputType: "number" },
+  { key: "webhook_backoff_seconds", inputType: "number" },
 ];
 
 const AUTOMATION_GENERAL_FIELD_KEYS = [

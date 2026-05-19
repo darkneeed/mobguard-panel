@@ -10,7 +10,8 @@ const routeLoaders: Array<{ match: string; loader: RouteLoader }> = [
   { match: "/telegram", loader: () => import("../pages/TelegramPage") },
   { match: "/access", loader: () => import("../pages/AccessPage") },
   { match: "/data", loader: () => import("../pages/DataPage") },
-  { match: "/quality", loader: () => import("../pages/QualityPage") }
+  { match: "/quality", loader: () => import("../pages/QualityPage") },
+  { match: "/bedolaga", loader: () => import("../pages/BedolagaPage") }
 ];
 
 const prefetched = new Set<string>();
@@ -53,6 +54,10 @@ export function loadDataPage() {
 
 export function loadQualityPage() {
   return import("../pages/QualityPage");
+}
+
+export function loadBedolagaPage() {
+  return import("../pages/BedolagaPage");
 }
 
 function findLoader(pathname: string): RouteLoader | null {

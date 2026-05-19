@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime
 from typing import Any
 
 from fastapi import HTTPException
@@ -34,6 +35,46 @@ ACCESS_RUNTIME_SETTINGS_DEFAULTS = {
     "panel_name": "MobGuard",
     "panel_logo_url": "",
 }
+
+TELEGRAM_TOPIC_SETTINGS_TO_EVENT = {
+    "tg_topic_review": "review",
+    "tg_topic_warning_only": "warning_only",
+    "tg_topic_warning": "warning",
+    "tg_topic_ban": "ban",
+    "tg_topic_usage_profile_risk": "usage_profile_risk",
+    "tg_topic_violation_continues": "violation_continues",
+    "tg_topic_traffic_limit_exceeded": "traffic_limit_exceeded",
+}
+
+
+def _sync_topic_routing(container: APIContainer, settings_payload: dict[str, Any]) -> None:
+    rows: list[tuple[str, int, str]] = []
+    now = datetime.utcnow().replace(microsecond=0).isoformat()
+    for setting_key, event_key in TELEGRAM_TOPIC_SETTINGS_TO_EVENT.items():
+        if setting_key not in settings_payload:
+            continue
+        try:
+            topic_id = int(settings_payload.get(setting_key) or 0)
+        except (TypeError, ValueError):
+            topic_id = 0
+        rows.append((event_key, topic_id, now))
+    if not rows:
+        return
+    with container.store._connect() as conn:
+        if not container.store._table_exists(conn, "telegram_topic_routing"):
+            return
+        for event_key, topic_id, updated_at in rows:
+            conn.execute(
+                """
+                INSERT INTO telegram_topic_routing (event_key, topic_id, updated_at)
+                VALUES (?, ?, ?)
+                ON CONFLICT(event_key) DO UPDATE SET
+                    topic_id = excluded.topic_id,
+                    updated_at = excluded.updated_at
+                """,
+                (event_key, topic_id, updated_at),
+            )
+        conn.commit()
 
 
 def _runtime_settings(container: APIContainer) -> dict[str, Any]:
@@ -207,6 +248,7 @@ def update_telegram_settings(container: APIContainer, payload: dict[str, Any]) -
     }
     if settings_updates:
         write_runtime_settings(container, settings_updates)
+        _sync_topic_routing(container, settings_updates)
     env_updates = {key: payload.get("env", {}).get(key) for key in TELEGRAM_ENV_FIELDS if key in payload.get("env", {})}
     if env_updates:
         try:

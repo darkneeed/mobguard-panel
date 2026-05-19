@@ -18,6 +18,7 @@ import { describeScopeContext } from "../features/reviews/lib/scopeContext";
 import { useI18n } from "../localization";
 import type { Language } from "../localization";
 import { buildSearchParams } from "../shared/api/request";
+import { useVisibleItems } from "../shared/useVisibleItems";
 import { useVisiblePolling } from "../shared/useVisiblePolling";
 import {
   formatDisplayDateTime,
@@ -196,13 +197,18 @@ export function ReviewQueuePage({ session }: { session?: Session }) {
     () => ({ ...effectiveFilters, view: "compact" }),
     [effectiveFilters],
   );
+  const {
+    visibleItems: visibleQueueItems,
+    hasMore: hasMoreQueueItems,
+    loadMoreRef: loadMoreQueueItemsRef,
+  } = useVisibleItems(list.items, { initialCount: 12, step: 12 });
   const queueSearch = useMemo(
     () => buildSearchParams(effectiveFilters),
     [effectiveFilters],
   );
   const visibleQueueIds = useMemo(
-    () => list.items.map((item) => item.id),
-    [list.items],
+    () => visibleQueueItems.map((item) => item.id),
+    [visibleQueueItems],
   );
   const canResolve = hasPermission(session, "reviews.resolve");
   const canRecheck = hasPermission(session, "reviews.recheck");
@@ -1010,7 +1016,7 @@ export function ReviewQueuePage({ session }: { session?: Session }) {
 
       {!loading ? (
         <div className="queue-grid review-queue-grid">
-          {list.items.map((item, index) => (
+          {visibleQueueItems.map((item, index) => (
             <article key={item.id} className="queue-card">
               {(() => {
                 const ipInventory =
@@ -1258,6 +1264,11 @@ export function ReviewQueuePage({ session }: { session?: Session }) {
               })()}
             </article>
           ))}
+          {hasMoreQueueItems ? (
+            <div className="provider-empty muted" ref={loadMoreQueueItemsRef}>
+              <span>{t("common.loading")}</span>
+            </div>
+          ) : null}
         </div>
       ) : null}
 

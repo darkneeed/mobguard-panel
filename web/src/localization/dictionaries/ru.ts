@@ -81,6 +81,7 @@ export const ruDictionary: TranslationDictionary = {
       access: "Доступ",
       data: "Данные",
       quality: "Качество",
+      bedolaga: "Bedolaga",
     },
     subnav: {
       rules: {
@@ -1825,6 +1826,70 @@ export const ruDictionary: TranslationDictionary = {
         description:
           "Если пользователь уже израсходовал не меньше этого объёма, вместо скрытия мобильных конфигов применяется лимит трафика.",
       },
+      limiter_enabled: {
+        label: "Включить limiter",
+        description: "Включает пороги/окно/cooldown/ignore для enforcement.",
+      },
+      limiter_threshold_count: {
+        label: "Порог limiter",
+        description: "Сколько нарушений в окне нужно до срабатывания limiter.",
+      },
+      limiter_window_seconds: {
+        label: "Окно limiter (сек)",
+        description: "Скользящее окно для подсчёта нарушений limiter.",
+      },
+      limiter_cooldown_seconds: {
+        label: "Cooldown limiter (сек)",
+        description: "Пауза перед следующим действием enforcement после срабатывания limiter.",
+      },
+      limiter_tolerance: {
+        label: "Tolerance limiter",
+        description: "Допустимое количество событий до жёсткого срабатывания порога.",
+      },
+      limiter_tolerance_multiplier: {
+        label: "Множитель tolerance",
+        description: "Множитель для tolerance при вычислении итогового порога.",
+      },
+      limiter_ignore_ttl_seconds: {
+        label: "Ignore TTL (сек)",
+        description: "После срабатывания limiter временно игнорировать этот scope.",
+      },
+      limiter_group_by_subnet: {
+        label: "Группировать по subnet",
+        description: "Использовать subnet как scope limiter при отсутствии UUID.",
+      },
+      limiter_group_by_asn: {
+        label: "Группировать по ASN",
+        description: "Использовать ASN как scope limiter при отсутствии UUID.",
+      },
+      limiter_rollout_mode: {
+        label: "Режим rollout limiter",
+        description: "Этап limiter: observe, warning_only или enforce.",
+      },
+      webhook_enabled: {
+        label: "Включить webhooks",
+        description: "Отправлять подписанные webhook-события из ingest/enforcement.",
+      },
+      webhook_urls: {
+        label: "Webhook URL",
+        description: "Один URL на строку для outbound webhook-доставки.",
+      },
+      webhook_secret: {
+        label: "Webhook secret",
+        description: "Секрет для подписи X-Webhook-Secret.",
+      },
+      webhook_timeout_seconds: {
+        label: "Таймаут webhook (сек)",
+        description: "HTTP таймаут webhook-доставки.",
+      },
+      webhook_retry_attempts: {
+        label: "Повторы webhook",
+        description: "Максимум попыток доставки webhook-события.",
+      },
+      webhook_backoff_seconds: {
+        label: "Backoff webhook (сек)",
+        description: "Базовая задержка между ретраями webhook.",
+      },
     },
     telegramFields: {
       tg_admin_chat_id: {
@@ -1851,6 +1916,34 @@ export const ruDictionary: TranslationDictionary = {
       telegram_admin_commands_enabled: {
         label: "Команды администратора",
         description: "Разрешает обработчики админских команд Telegram",
+      },
+      tg_topic_review: {
+        label: "Топик: review",
+        description: "ID топика админ-чата для review-событий",
+      },
+      tg_topic_warning_only: {
+        label: "Топик: warning-only",
+        description: "ID топика админ-чата для warning-only событий",
+      },
+      tg_topic_warning: {
+        label: "Топик: warning",
+        description: "ID топика админ-чата для предупреждений",
+      },
+      tg_topic_ban: {
+        label: "Топик: ban",
+        description: "ID топика админ-чата для ограничений доступа",
+      },
+      tg_topic_usage_profile_risk: {
+        label: "Топик: usage-profile risk",
+        description: "ID топика админ-чата для событий риска профиля использования",
+      },
+      tg_topic_violation_continues: {
+        label: "Топик: violation-continues",
+        description: "ID топика админ-чата для продолжающихся нарушений",
+      },
+      tg_topic_traffic_limit_exceeded: {
+        label: "Топик: traffic-limit exceeded",
+        description: "ID топика админ-чата для событий лимита трафика",
       },
       telegram_notify_admin_review_enabled: {
         label: "Ревью",

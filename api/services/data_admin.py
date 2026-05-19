@@ -425,7 +425,7 @@ def update_user_exemptions(container: APIContainer, identifier: str, kind: str, 
 def list_violations(container: APIContainer) -> dict[str, Any]:
     with container.store._connect() as conn:
         if not container.store._table_exists(conn, "violations") or not container.store._table_exists(conn, "violation_history"):
-            return {"active": [], "history": []}
+            return {"active": [], "history": [], "limiter": {}, "webhooks": []}
         active = conn.execute(
             """
             SELECT {columns}
@@ -442,4 +442,45 @@ def list_violations(container: APIContainer) -> dict[str, Any]:
             LIMIT 200
             """
         ).fetchall()
-    return {"active": [dict(row) for row in active], "history": [dict(row) for row in history]}
+        limiter_windows = conn.execute(
+            """
+            SELECT scope_key, event_count, window_started_at, last_event_at, updated_at
+            FROM limiter_state_windows
+            ORDER BY updated_at DESC
+            LIMIT 200
+            """
+        ).fetchall() if container.store._table_exists(conn, "limiter_state_windows") else []
+        limiter_cooldowns = conn.execute(
+            """
+            SELECT scope_key, action, cooldown_until, last_triggered_at
+            FROM limiter_state_cooldowns
+            ORDER BY cooldown_until DESC
+            LIMIT 200
+            """
+        ).fetchall() if container.store._table_exists(conn, "limiter_state_cooldowns") else []
+        limiter_ignores = conn.execute(
+            """
+            SELECT scope_key, reason, expires_at, created_at, updated_at
+            FROM limiter_ignore_rules
+            ORDER BY expires_at DESC
+            LIMIT 200
+            """
+        ).fetchall() if container.store._table_exists(conn, "limiter_ignore_rules") else []
+        webhook_deliveries = conn.execute(
+            """
+            SELECT id, event_type, target_url, status, attempt_count, response_status, error_text, delivered_at, created_at
+            FROM webhook_deliveries
+            ORDER BY created_at DESC, id DESC
+            LIMIT 200
+            """
+        ).fetchall() if container.store._table_exists(conn, "webhook_deliveries") else []
+    return {
+        "active": [dict(row) for row in active],
+        "history": [dict(row) for row in history],
+        "limiter": {
+            "windows": [dict(row) for row in limiter_windows],
+            "cooldowns": [dict(row) for row in limiter_cooldowns],
+            "ignores": [dict(row) for row in limiter_ignores],
+        },
+        "webhooks": [dict(row) for row in webhook_deliveries],
+    }

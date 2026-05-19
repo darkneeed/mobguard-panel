@@ -1,4 +1,5 @@
 import { ConsoleListResponse } from "../../api/client";
+import { useVisibleItems } from "../../shared/useVisibleItems";
 
 type TranslateFn = (
   key: string,
@@ -33,6 +34,11 @@ export function ConsoleDataSection({
   const totalCount = consoleData?.count ?? 0;
   const totalPages = Math.max(1, Math.ceil(totalCount / Math.max(pageSize, 1)));
   const sourceCounts = consoleData?.source_counts || {};
+  const {
+    visibleItems: visibleConsoleItems,
+    hasMore: hasMoreConsoleItems,
+    loadMoreRef: loadMoreConsoleRef,
+  } = useVisibleItems(items, { initialCount: 20, step: 20 });
 
   function updateFilter<K extends keyof ConsoleFilters>(
     key: K,
@@ -153,7 +159,7 @@ export function ConsoleDataSection({
               <span>{t("data.console.empty")}</span>
             </div>
           ) : null}
-          {items.map((item) => (
+          {visibleConsoleItems.map((item) => (
             <article
               className={`console-entry console-entry-${item.level}`}
               key={item.id}
@@ -207,6 +213,11 @@ export function ConsoleDataSection({
               </div>
             </article>
           ))}
+          {hasMoreConsoleItems ? (
+            <div className="provider-empty muted" ref={loadMoreConsoleRef}>
+              <span>{t("common.loading")}</span>
+            </div>
+          ) : null}
         </div>
         <div className="record-actions">
           <button

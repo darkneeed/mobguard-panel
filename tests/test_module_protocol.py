@@ -285,6 +285,63 @@ class ModuleProtocolTests(unittest.TestCase):
         )
         self._assert_no_persisted_enforcement_state()
 
+    def test_plan_enforcement_tx_respects_limiter_rollout_modes(self):
+        bundle = DecisionBundle(
+            ip="1.2.3.9",
+            verdict="HOME",
+            confidence_band="HIGH_HOME",
+            score=-120,
+            isp="ISP",
+            punitive_eligible=True,
+        )
+        runtime = SimpleNamespace(
+            settings={
+                "dry_run": False,
+                "shadow_mode": False,
+                "warning_only_mode": False,
+                "ban_durations_minutes": [15, 60],
+                "limiter_enabled": True,
+                "limiter_threshold_count": 1,
+                "limiter_window_seconds": 3600,
+                "limiter_rollout_mode": "observe",
+            }
+        )
+
+        with self.store._connect() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            suppressed = ingest_pipeline._plan_enforcement_tx(
+                conn,
+                runtime,
+                {"uuid": "uuid-limiter-observe"},
+                {"ip": "1.2.3.9", "tag": "SELFSTEAL_RU-YANDEX_TCP"},
+                bundle,
+                event_uid="limiter-observe-1",
+                analysis_event_id=1,
+                review_case_id=None,
+            )
+            conn.commit()
+        self.assertEqual(suppressed["type"], "suppressed")
+        self.assertEqual(suppressed["reason"], "rollout_observe")
+        self.assertEqual(suppressed["limiter"]["rollout_mode"], "observe")
+
+        runtime.settings["limiter_rollout_mode"] = "warning_only"
+        with self.store._connect() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            warning = ingest_pipeline._plan_enforcement_tx(
+                conn,
+                runtime,
+                {"uuid": "uuid-limiter-warning"},
+                {"ip": "1.2.3.10", "tag": "SELFSTEAL_RU-YANDEX_TCP"},
+                bundle,
+                event_uid="limiter-warning-1",
+                analysis_event_id=2,
+                review_case_id=None,
+            )
+            conn.commit()
+        self.assertEqual(warning["type"], "warning")
+        self.assertTrue(bool(warning["warning_only"]))
+        self.assertEqual(warning["limiter"]["rollout_mode"], "warning_only")
+
     def test_apply_enforcement_if_needed_dry_run_warning_does_not_persist_warning_state(self):
         bundle = DecisionBundle(
             ip="1.2.3.6",

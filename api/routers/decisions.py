@@ -23,6 +23,7 @@ def list_auto_decisions(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=50, ge=1, le=200),
     sort: str = Query(default="created_desc"),
+    compact: bool = Query(default=False),
     _: dict[str, Any] = Depends(require_permission(PERMISSION_DATA_READ)),
     container=Depends(get_container),
 ) -> dict[str, Any]:
@@ -38,5 +39,6 @@ def list_auto_decisions(
             "page": page,
             "page_size": page_size,
             "sort": sort,
+            "compact": compact,
         },
     )

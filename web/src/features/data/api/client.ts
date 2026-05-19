@@ -2,6 +2,7 @@ import { buildSearchParams, request, requestBlob } from "../../../shared/api/req
 import {
   AnalysisEventListResponse,
   AutoDecisionListResponse,
+  BedolagaOverviewResponse,
   AuditTrailResponse,
   CacheAdminResponse,
   CalibrationExportPreview,
@@ -134,5 +135,11 @@ export const dataApi = {
     request<Record<string, unknown>>(`/admin/modules/${encodeURIComponent(moduleId)}/token/reveal`, {
       method: "POST"
     }),
-  getHealth: () => request<HealthSnapshot>("/health")
+  getHealth: () => request<HealthSnapshot>("/health"),
+  getBedolagaOverview: () => request<BedolagaOverviewResponse>("/admin/bedolaga/overview"),
+  postBedolagaAction: (path: string, method: string, payload: Record<string, unknown> = {}) =>
+    request<Record<string, unknown>>("/admin/bedolaga/action", {
+      method: "POST",
+      body: JSON.stringify({ path, method, payload })
+    })
 };

@@ -24,6 +24,22 @@ ENFORCEMENT_SETTINGS_DEFAULTS = {
     "restricted_access_squad_name": DEFAULT_RESTRICTED_ACCESS_SQUAD_NAME,
     "traffic_cap_increment_gb": DEFAULT_TRAFFIC_CAP_INCREMENT_GB,
     "traffic_cap_threshold_gb": DEFAULT_TRAFFIC_CAP_THRESHOLD_GB,
+    "limiter_enabled": False,
+    "limiter_threshold_count": 3,
+    "limiter_window_seconds": 1800,
+    "limiter_cooldown_seconds": 900,
+    "limiter_tolerance": 0,
+    "limiter_tolerance_multiplier": 1.0,
+    "limiter_ignore_ttl_seconds": 0,
+    "limiter_group_by_subnet": True,
+    "limiter_group_by_asn": True,
+    "limiter_rollout_mode": "observe",
+    "webhook_enabled": False,
+    "webhook_urls": "",
+    "webhook_secret": "",
+    "webhook_timeout_seconds": 10,
+    "webhook_retry_attempts": 3,
+    "webhook_backoff_seconds": 2,
 }
 
 
@@ -44,6 +60,13 @@ TELEGRAM_RUNTIME_SETTINGS_DEFAULTS = {
     "telegram_notify_user_warning_only_enabled": True,
     "telegram_notify_user_warning_enabled": True,
     "telegram_notify_user_ban_enabled": True,
+    "tg_topic_review": 0,
+    "tg_topic_warning_only": 0,
+    "tg_topic_warning": 0,
+    "tg_topic_ban": 0,
+    "tg_topic_usage_profile_risk": 0,
+    "tg_topic_violation_continues": 0,
+    "tg_topic_traffic_limit_exceeded": 0,
 }
 
 

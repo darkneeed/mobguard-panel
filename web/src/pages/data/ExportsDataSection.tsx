@@ -1,5 +1,6 @@
 import type { Dispatch, SetStateAction } from "react";
 import { CalibrationExportPreview, CalibrationReadinessCheck } from "../../api/client";
+import { useVisibleItems } from "../../shared/useVisibleItems";
 
 type TranslateFn = (key: string, params?: Record<string, string | number>) => string;
 
@@ -39,6 +40,11 @@ export function ExportsDataSection({
   const readiness = lastCalibrationManifest?.readiness;
   const blockers = readiness?.blockers || [];
   const checks = readiness?.checks || [];
+  const {
+    visibleItems: visibleChecks,
+    hasMore: hasMoreChecks,
+    loadMoreRef: loadMoreChecksRef,
+  } = useVisibleItems(checks, { initialCount: 20, step: 20 });
   const datasetReady = Boolean(lastCalibrationManifest?.dataset_ready);
   const tuningReady = Boolean(lastCalibrationManifest?.tuning_ready);
 
@@ -141,7 +147,7 @@ export function ExportsDataSection({
             <div className="panel export-checks-panel">
               <h3>{t("data.exports.checksTitle")}</h3>
               <div className="record-list">
-                {checks.map((check) => (
+                {visibleChecks.map((check) => (
                   <div className="record-item" key={`${check.scope}:${check.key}`}>
                     <div className="record-main">
                       <span className="record-title">{formatReadinessCheckLabel(check.key)}</span>
@@ -155,6 +161,11 @@ export function ExportsDataSection({
                     </div>
                   </div>
                 ))}
+                {hasMoreChecks ? (
+                  <div className="provider-empty muted" ref={loadMoreChecksRef}>
+                    <span>{t("common.loading")}</span>
+                  </div>
+                ) : null}
               </div>
             </div>
             <details className="export-section" open>
