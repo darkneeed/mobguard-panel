@@ -40,3 +40,35 @@ class RuntimeContextTests(unittest.TestCase):
         self.assertEqual(context.settings["geoip_db"], str(self.runtime / "GeoLite2-ASN.mmdb"))
         self.assertTrue((self.runtime / "health").exists())
         self.assertTrue((self.runtime / "bans.db").exists())
+
+    def test_load_runtime_context_restores_empty_config_json(self):
+        (self.runtime / "config.json").write_text("", encoding="utf-8")
+        previous = os.environ.get("MOBGUARD_ENV_FILE")
+        os.environ["MOBGUARD_ENV_FILE"] = str(self.root / ".env")
+        try:
+            context = load_runtime_context(self.root, str(self.runtime))
+        finally:
+            if previous is None:
+                os.environ.pop("MOBGUARD_ENV_FILE", None)
+            else:
+                os.environ["MOBGUARD_ENV_FILE"] = previous
+
+        self.assertIn("settings", context.config)
+        self.assertEqual(context.settings["db_file"], str(self.runtime / "bans.db"))
+        self.assertEqual(context.settings["geoip_db"], str(self.runtime / "GeoLite2-ASN.mmdb"))
+
+    def test_load_runtime_context_restores_invalid_config_json(self):
+        (self.runtime / "config.json").write_text("{invalid-json", encoding="utf-8")
+        previous = os.environ.get("MOBGUARD_ENV_FILE")
+        os.environ["MOBGUARD_ENV_FILE"] = str(self.root / ".env")
+        try:
+            context = load_runtime_context(self.root, str(self.runtime))
+        finally:
+            if previous is None:
+                os.environ.pop("MOBGUARD_ENV_FILE", None)
+            else:
+                os.environ["MOBGUARD_ENV_FILE"] = previous
+
+        self.assertIn("settings", context.config)
+        self.assertEqual(context.settings["db_file"], str(self.runtime / "bans.db"))
+        self.assertEqual(context.settings["geoip_db"], str(self.runtime / "GeoLite2-ASN.mmdb"))
