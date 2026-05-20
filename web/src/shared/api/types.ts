@@ -40,6 +40,7 @@ export type AuthCapabilities = {
 export type BrandingConfig = {
   panel_name: string;
   panel_logo_url: string;
+  remnawave_api_url?: string;
 };
 
 export type OwnerSecurityStatus = {

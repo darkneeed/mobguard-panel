@@ -952,6 +952,11 @@ export const ruDictionary: TranslationDictionary = {
       "Название сервиса, логотип и локальные настройки интерфейса для этой панели.",
     brandingSaved: "Оформление обновлено",
     saveBranding: "Сохранить оформление",
+    integrationTitle: "Интеграции",
+    integrationDescription:
+      "Серверные подключения, которые используются для live-метрик и lookup пользователей.",
+    integrationSaved: "Параметры интеграции обновлены",
+    saveIntegration: "Сохранить интеграции",
     brandingFields: {
       serviceName: "Название сервиса",
       serviceNameDescription:
@@ -960,6 +965,12 @@ export const ruDictionary: TranslationDictionary = {
       logoUrlDescription:
         "Публичный URL изображения логотипа. Оставьте пустым, чтобы использовать встроенный логотип по умолчанию.",
       logoUrlPlaceholder: "https://example.com/logo.png",
+    },
+    integrationFields: {
+      remnawaveApiUrl: "URL Remnawave API",
+      remnawaveApiUrlDescription:
+        "Базовый URL Remnawave API для online-метрик нод и lookup пользователей.",
+      remnawaveApiUrlPlaceholder: "https://panel.example.com/api",
     },
     interfaceTitle: "Интерфейс на этом устройстве",
     interfaceDescription:

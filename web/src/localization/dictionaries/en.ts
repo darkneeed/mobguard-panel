@@ -887,12 +887,21 @@ export const enDictionary: TranslationDictionary = {
     brandingDescription: "Service name, logo, and local interface preferences for this panel.",
     brandingSaved: "Appearance updated",
     saveBranding: "Save appearance",
+    integrationTitle: "Integrations",
+    integrationDescription: "Server-side integrations used for live node metrics and user lookups.",
+    integrationSaved: "Integration settings updated",
+    saveIntegration: "Save integrations",
     brandingFields: {
       serviceName: "Service name",
       serviceNameDescription: "Visible service name in the panel shell and login screen.",
       logoUrl: "Logo URL",
       logoUrlDescription: "Public image URL for the service logo. Leave empty to use the default built-in logo.",
-      logoUrlPlaceholder: "https://example.com/logo.png"
+      logoUrlPlaceholder: "https://example.com/logo.png",
+    },
+    integrationFields: {
+      remnawaveApiUrl: "Remnawave API URL",
+      remnawaveApiUrlDescription: "Base URL of Remnawave API used for node online metrics and user lookups.",
+      remnawaveApiUrlPlaceholder: "https://panel.example.com/api"
     },
     interfaceTitle: "Interface on this device",
     interfaceDescription: "Language, palette, and theme are applied immediately and stored locally in the browser.",

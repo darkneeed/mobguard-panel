@@ -169,6 +169,7 @@ class APISettingsTests(unittest.TestCase):
         initial = settings_service.get_access_settings(container)
         self.assertEqual(initial["settings"]["panel_name"], "MobGuard")
         self.assertEqual(initial["settings"]["panel_logo_url"], "")
+        self.assertEqual(initial["settings"]["remnawave_api_url"], "")
         self.assertIn("owner_security", initial)
         self.assertFalse(initial["owner_security"]["totp_enabled"])
 
@@ -178,6 +179,7 @@ class APISettingsTests(unittest.TestCase):
                 "settings": {
                     "panel_name": "Acme Shield",
                     "panel_logo_url": "https://cdn.example.com/logo.png",
+                    "remnawave_api_url": "https://panel.example.com/api",
                 }
             },
             "admin",
@@ -188,9 +190,11 @@ class APISettingsTests(unittest.TestCase):
 
         self.assertEqual(updated["settings"]["panel_name"], "Acme Shield")
         self.assertEqual(updated["settings"]["panel_logo_url"], "https://cdn.example.com/logo.png")
+        self.assertEqual(updated["settings"]["remnawave_api_url"], "https://panel.example.com/api")
         self.assertEqual(store.synced["settings"]["panel_name"], "Acme Shield")
         config_payload = json.loads((self.runtime_dir / "config.json").read_text(encoding="utf-8"))
         self.assertEqual(config_payload["settings"]["panel_logo_url"], "https://cdn.example.com/logo.png")
+        self.assertEqual(config_payload["settings"]["remnawave_api_url"], "https://panel.example.com/api")
 
     def test_auth_start_payload_uses_runtime_branding(self):
         previous = os.environ.get("MOBGUARD_ENV_FILE")

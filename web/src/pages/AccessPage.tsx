@@ -55,10 +55,13 @@ export function AccessPage({
   const [savedLists, setSavedLists] = useState<Record<string, string>>({});
   const [brandingDraft, setBrandingDraft] = useState<BrandingConfig>(branding);
   const [savedBranding, setSavedBranding] = useState<BrandingConfig>(branding);
+  const [remnawaveApiUrlDraft, setRemnawaveApiUrlDraft] = useState("");
+  const [savedRemnawaveApiUrl, setSavedRemnawaveApiUrl] = useState("");
   const [envDraft, setEnvDraft] = useState<Record<string, string>>({});
   const [error, setError] = useState("");
   const [saved, setSaved] = useState("");
   const [brandingSaved, setBrandingSaved] = useState("");
+  const [integrationSaved, setIntegrationSaved] = useState("");
   const [envError, setEnvError] = useState("");
   const [envSaved, setEnvSaved] = useState("");
   const [securityError, setSecurityError] = useState("");
@@ -88,20 +91,28 @@ export function AccessPage({
         );
         setBrandingDraft(payload.settings);
         setSavedBranding(payload.settings);
+        setRemnawaveApiUrlDraft(payload.settings.remnawave_api_url || "");
+        setSavedRemnawaveApiUrl(payload.settings.remnawave_api_url || "");
         setEnvDraft(buildInitialEnvDraft(payload.env));
       })
       .catch((err: Error) => setError(err.message || t("access.loadFailed")));
   }, [t]);
 
   const brandingDirty = useMemo(
-    () => JSON.stringify(brandingDraft) !== JSON.stringify(savedBranding),
+    () =>
+      brandingDraft.panel_name !== savedBranding.panel_name
+      || brandingDraft.panel_logo_url !== savedBranding.panel_logo_url,
     [brandingDraft, savedBranding],
+  );
+  const remnawaveDirty = useMemo(
+    () => remnawaveApiUrlDraft !== savedRemnawaveApiUrl,
+    [remnawaveApiUrlDraft, savedRemnawaveApiUrl],
   );
   const listDirty = useMemo(
     () => JSON.stringify(lists) !== JSON.stringify(savedLists),
     [lists, savedLists],
   );
-  const accessDirty = brandingDirty || listDirty;
+  const accessDirty = brandingDirty || remnawaveDirty || listDirty;
   const envDirty = useMemo(
     () => isEnvDirty(data?.env, envDraft),
     [data?.env, envDraft],
@@ -161,6 +172,7 @@ export function AccessPage({
       setEnvDraft(buildInitialEnvDraft(response.env));
       setSaved(t("access.saved"));
       setBrandingSaved("");
+      setIntegrationSaved("");
       setError("");
     } catch (err) {
       setError(err instanceof Error ? err.message : t("access.saveFailed"));
@@ -180,12 +192,37 @@ export function AccessPage({
       setData(response);
       setBrandingDraft(response.settings);
       setSavedBranding(response.settings);
+      setRemnawaveApiUrlDraft(response.settings.remnawave_api_url || "");
+      setSavedRemnawaveApiUrl(response.settings.remnawave_api_url || "");
       onBrandingChange(response.settings);
       setBrandingSaved(t("access.brandingSaved"));
+      setIntegrationSaved("");
       setError("");
     } catch (err) {
       setError(err instanceof Error ? err.message : t("access.saveFailed"));
       setBrandingSaved("");
+    }
+  }
+
+  async function saveRemnawaveApiUrl() {
+    if (!data) return;
+    try {
+      const response = await api.updateAccessSettings({
+        settings: {
+          remnawave_api_url: remnawaveApiUrlDraft.trim(),
+        },
+      });
+      setData(response);
+      setBrandingDraft(response.settings);
+      setSavedBranding(response.settings);
+      setRemnawaveApiUrlDraft(response.settings.remnawave_api_url || "");
+      setSavedRemnawaveApiUrl(response.settings.remnawave_api_url || "");
+      onBrandingChange(response.settings);
+      setIntegrationSaved(t("access.integrationSaved"));
+      setError("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t("access.saveFailed"));
+      setIntegrationSaved("");
     }
   }
 
@@ -461,6 +498,44 @@ export function AccessPage({
           </div>
 
           <div className="dashboard-grid">
+            <div className="panel">
+              <div className="panel-heading panel-heading-row">
+                <div>
+                  <h2>{t("access.integrationTitle")}</h2>
+                  <p className="muted">{t("access.integrationDescription")}</p>
+                </div>
+                <div className="action-row">
+                  <span
+                    className={
+                      remnawaveDirty ? "tag review-only" : "tag severity-low"
+                    }
+                  >
+                    {remnawaveDirty
+                      ? t("common.unsavedChanges")
+                      : t("common.saved")}
+                  </span>
+                  <button onClick={saveRemnawaveApiUrl} disabled={!remnawaveDirty}>
+                    {t("access.saveIntegration")}
+                  </button>
+                </div>
+              </div>
+              {integrationSaved ? <div className="ok-box">{integrationSaved}</div> : null}
+              <div className="settings-group settings-group-stack">
+                <div className="rule-field">
+                  <FieldLabel
+                    label={t("access.integrationFields.remnawaveApiUrl")}
+                    description={t("access.integrationFields.remnawaveApiUrlDescription")}
+                  />
+                  <input
+                    aria-label={t("access.integrationFields.remnawaveApiUrl")}
+                    placeholder={t("access.integrationFields.remnawaveApiUrlPlaceholder")}
+                    value={remnawaveApiUrlDraft}
+                    onChange={(event) => setRemnawaveApiUrlDraft(event.target.value)}
+                  />
+                </div>
+              </div>
+            </div>
+
             <div className="panel">
               <div className="panel-heading panel-heading-row">
                 <div>

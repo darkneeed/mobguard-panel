@@ -27,7 +27,8 @@ describe("AccessPage", () => {
     lists: { admin_tg_ids: [1], exempt_ids: [], exempt_tg_ids: [] },
     settings: {
       panel_name: "MobGuard",
-      panel_logo_url: ""
+      panel_logo_url: "",
+      remnawave_api_url: ""
     },
     auth: {
       telegram_enabled: true,
@@ -118,7 +119,8 @@ describe("AccessPage", () => {
       ...basePayload,
       settings: {
         panel_name: "Acme Shield",
-        panel_logo_url: "https://cdn.example.com/logo.png"
+        panel_logo_url: "https://cdn.example.com/logo.png",
+        remnawave_api_url: ""
       },
       env: {}
     });
@@ -153,7 +155,55 @@ describe("AccessPage", () => {
     });
     expect(onBrandingChange).toHaveBeenCalledWith({
       panel_name: "Acme Shield",
-      panel_logo_url: "https://cdn.example.com/logo.png"
+      panel_logo_url: "https://cdn.example.com/logo.png",
+      remnawave_api_url: ""
+    });
+  });
+
+  it("saves remnawave url through integrations action", async () => {
+    const onBrandingChange = vi.fn();
+    vi.mocked(api.getAccessSettings).mockResolvedValue({
+      ...basePayload,
+      env: {}
+    });
+    vi.mocked(api.updateAccessSettings).mockResolvedValue({
+      ...basePayload,
+      settings: {
+        panel_name: "MobGuard",
+        panel_logo_url: "",
+        remnawave_api_url: "https://panel.example.com/api"
+      },
+      env: {}
+    });
+
+    renderWithProviders(
+      <AccessPage
+        branding={{ panel_name: "MobGuard", panel_logo_url: "" }}
+        onBrandingChange={onBrandingChange}
+        language="en"
+        onLanguageChange={() => undefined}
+        palette="green"
+        onPaletteChange={() => undefined}
+        theme="system"
+        onThemeChange={() => undefined}
+      />
+    );
+
+    const remnawaveApiUrlInput = await screen.findByRole("textbox", { name: "Remnawave API URL" });
+    await userEvent.type(remnawaveApiUrlInput, "https://panel.example.com/api");
+    await userEvent.click(screen.getByRole("button", { name: "Save integrations" }));
+
+    await waitFor(() => {
+      expect(api.updateAccessSettings).toHaveBeenCalledWith({
+        settings: {
+          remnawave_api_url: "https://panel.example.com/api"
+        }
+      });
+    });
+    expect(onBrandingChange).toHaveBeenCalledWith({
+      panel_name: "MobGuard",
+      panel_logo_url: "",
+      remnawave_api_url: "https://panel.example.com/api"
     });
   });
 

@@ -34,6 +34,7 @@ from .runtime_state import (
 ACCESS_RUNTIME_SETTINGS_DEFAULTS = {
     "panel_name": "MobGuard",
     "panel_logo_url": "",
+    "remnawave_api_url": "",
 }
 
 TELEGRAM_TOPIC_SETTINGS_TO_EVENT = {
