@@ -66,9 +66,16 @@ type GeneralSettingKey =
 
 type GeneralSettingField = {
   key: GeneralSettingKey;
-  inputType: "number" | "boolean" | "number-list" | "text";
+  inputType: "number" | "boolean" | "number-list" | "text" | "choice";
   step?: number;
+  choices?: readonly string[];
 };
+
+const LIMITER_ROLLOUT_MODE_OPTIONS = [
+  "observe",
+  "warning_only",
+  "enforce",
+] as const;
 
 const GENERAL_SETTINGS_FIELDS: GeneralSettingField[] = [
   { key: "usage_time_threshold", inputType: "number" },
@@ -92,7 +99,11 @@ const GENERAL_SETTINGS_FIELDS: GeneralSettingField[] = [
   { key: "limiter_ignore_ttl_seconds", inputType: "number" },
   { key: "limiter_group_by_subnet", inputType: "boolean" },
   { key: "limiter_group_by_asn", inputType: "boolean" },
-  { key: "limiter_rollout_mode", inputType: "text" },
+  {
+    key: "limiter_rollout_mode",
+    inputType: "choice",
+    choices: LIMITER_ROLLOUT_MODE_OPTIONS,
+  },
   { key: "webhook_enabled", inputType: "boolean" },
   { key: "webhook_urls", inputType: "text" },
   { key: "webhook_secret", inputType: "text" },
@@ -389,7 +400,7 @@ export function RulesPage() {
           });
         continue;
       }
-      if (field.inputType === "text") {
+      if (field.inputType === "text" || field.inputType === "choice") {
         payload[field.key] = rawValue.trim();
         continue;
       }
@@ -964,6 +975,23 @@ export function RulesPage() {
                       updateGeneralField(field.key, event.target.value)
                     }
                   />
+                ) : field.inputType === "choice" ? (
+                  <select
+                    value={
+                      generalDraft[field.key] ||
+                      field.choices?.[0] ||
+                      ""
+                    }
+                    onChange={(event) =>
+                      updateGeneralField(field.key, event.target.value)
+                    }
+                  >
+                    {(field.choices || []).map((choice) => (
+                      <option key={choice} value={choice}>
+                        {t(`automationStatus.modes.${choice}` as const)}
+                      </option>
+                    ))}
+                  </select>
                 ) : field.inputType === "text" ? (
                   <input
                     type="text"

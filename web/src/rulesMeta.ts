@@ -41,7 +41,6 @@ export type RuleSettingKey =
   | "probable_home_warning_only"
   | "auto_enforce_requires_hard_or_multi_signal"
   | "provider_conflict_review_only"
-  | "limiter_rollout_mode"
   | "review_ui_base_url"
   | "learning_promote_asn_min_support"
   | "learning_promote_asn_min_precision"
@@ -146,7 +145,6 @@ export const RULE_SETTING_FIELDS: RuleSettingFieldMeta[] = [
     inputType: "boolean"
   },
   { key: "provider_conflict_review_only", sectionKey: "policy", inputType: "boolean" },
-  { key: "limiter_rollout_mode", sectionKey: "policy", inputType: "text" },
   { key: "review_ui_base_url", sectionKey: "policy", inputType: "text" },
   { key: "live_rules_refresh_seconds", sectionKey: "policy", inputType: "number" },
   { key: "learning_promote_asn_min_support", sectionKey: "learning", inputType: "number" },

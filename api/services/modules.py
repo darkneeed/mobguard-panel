@@ -155,20 +155,51 @@ def _apply_module_freshness(module: dict[str, Any], *, stale_after_seconds: int)
     return payload
 
 
+def _module_remnawave_node_aliases(container: APIContainer) -> dict[str, str]:
+    raw_aliases = _module_runtime_settings(container).get("module_remnawave_node_aliases")
+    if not isinstance(raw_aliases, dict):
+        return {}
+    aliases: dict[str, str] = {}
+    for raw_key, raw_value in raw_aliases.items():
+        key = str(raw_key or "").strip().lower()
+        value = str(raw_value or "").strip().lower()
+        if key and value:
+            aliases[key] = value
+    return aliases
+
+
+def _panel_online_for_module(
+    panel_online_map: dict[str, int],
+    *,
+    module_id: str,
+    module_name: str,
+    aliases: dict[str, str],
+) -> int:
+    lookup_keys = [
+        module_id.strip().lower(),
+        module_name.strip().lower(),
+    ]
+    alias = aliases.get(module_name.strip().lower())
+    if alias:
+        lookup_keys.append(alias)
+    resolved = 0
+    for key in lookup_keys:
+        if not key:
+            continue
+        resolved = max(resolved, int(panel_online_map.get(key) or 0))
+    return resolved
+
+
 def _remnawave_client(container: APIContainer) -> PanelClient:
-    runtime_settings = {}
     runtime = getattr(container, "runtime", None)
-    runtime_config = getattr(runtime, "config", None)
-    if isinstance(runtime_config, dict):
-        runtime_settings = runtime_config.get("settings", {}) if isinstance(runtime_config.get("settings", {}), dict) else {}
-    settings = _runtime_settings(container)
+    settings = _module_runtime_settings(container)
     env_path = getattr(runtime, "env_path", None)
     env_values = read_env_file(str(env_path)) if env_path else {}
     base_url = str(
-        runtime_settings.get("remnawave_api_url")
-        or runtime_settings.get("panel_url")
-        or settings.get("remnawave_api_url")
+        settings.get("remnawave_api_url")
         or settings.get("panel_url")
+        or os.getenv("REMNAWAVE_API_URL")
+        or env_values.get("REMNAWAVE_API_URL")
         or ""
     ).strip()
     token = (
@@ -679,6 +710,7 @@ def _attach_runtime_metrics(
     module_ids = [str(item.get("module_id") or "").strip() for item in modules if str(item.get("module_id") or "").strip()]
     heartbeat_details = _heartbeat_detail_map(container, module_ids)
     panel_online_map = _panel_nodes_online_map(container)
+    panel_node_aliases = _module_remnawave_node_aliases(container)
     activity = _activity_snapshot(container)
     per_module_activity = activity.get("modules", {})
     activity_window_seconds = int(activity.get("window_seconds") or MODULE_ACTIVITY_WINDOW_SECONDS)
@@ -703,9 +735,11 @@ def _attach_runtime_metrics(
         module_id = str(payload.get("module_id") or "").strip()
         module_activity = per_module_activity.get(module_id, {})
         details = heartbeat_details.get(module_id, {})
-        panel_online = max(
-            int(panel_online_map.get(module_id.lower()) or 0),
-            int(panel_online_map.get(str(payload.get("module_name") or "").strip().lower()) or 0),
+        panel_online = _panel_online_for_module(
+            panel_online_map,
+            module_id=module_id,
+            module_name=str(payload.get("module_name") or ""),
+            aliases=panel_node_aliases,
         )
         heartbeat_metrics = _heartbeat_activity(details)
         activity_active_users = int(module_activity.get("active_users") or 0)
