@@ -511,6 +511,7 @@ export const ruDictionary: TranslationDictionary = {
     create: "Создать модуль",
     save: "Сохранить изменения",
     open: "Открыть детали",
+    restart: "Перезапустить модуль",
     createTitle: "Создание карточки модуля",
     createDescription:
       "Укажите отображаемое имя и INBOUND-теги для этого модуля. После сохранения панель сгенерирует module_id и API-токен.",
@@ -519,6 +520,8 @@ export const ruDictionary: TranslationDictionary = {
       "Редактируйте имя модуля и INBOUND-теги. Обновлённые теги придут в сборщик через удалённую конфигурацию без изменения сценария установки.",
     createSuccess: "Модуль создан",
     updateSuccess: "Модуль обновлён",
+    restartSuccess: "Команда перезапуска отправлена модулю",
+    restartFailed: "Не удалось отправить команду перезапуска",
     saveFailed: "Не удалось сохранить модуль",
     pendingInstall: "ожидает установку",
     stale: "устарел",

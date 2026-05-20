@@ -243,7 +243,7 @@ def _plan_enforcement_tx(
                 "reason": reason,
                 "warning_only": False,
                 "delivery_status": "suppressed",
-                "dry_run": bool(settings.get("dry_run", True)),
+                "dry_run": bool(settings.get("dry_run", ENFORCEMENT_SETTINGS_DEFAULTS["dry_run"])),
                 **({"limiter": limiter_payload} if limiter_payload else {}),
             }
         else:
@@ -257,7 +257,7 @@ def _plan_enforcement_tx(
         or should_warning_only(bundle)
         or not bundle.punitive_eligible
     )
-    dry_run = bool(settings.get("dry_run", True))
+    dry_run = bool(settings.get("dry_run", ENFORCEMENT_SETTINGS_DEFAULTS["dry_run"]))
     now_dt = datetime.utcnow().replace(microsecond=0)
     now = now_dt.isoformat()
     violation_row = conn.execute(

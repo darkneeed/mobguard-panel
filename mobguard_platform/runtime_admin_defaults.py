@@ -18,7 +18,7 @@ ENFORCEMENT_SETTINGS_DEFAULTS = {
     "warning_only_mode": False,
     "manual_review_mixed_home_enabled": False,
     "manual_ban_approval_enabled": False,
-    "dry_run": True,
+    "dry_run": False,
     "report_time": "06:00",
     "full_access_squad_name": DEFAULT_FULL_ACCESS_SQUAD_NAME,
     "restricted_access_squad_name": DEFAULT_RESTRICTED_ACCESS_SQUAD_NAME,

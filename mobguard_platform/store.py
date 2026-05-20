@@ -11,7 +11,7 @@ import threading
 import time
 from datetime import datetime, timedelta
 from decimal import Decimal
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 from .models import DecisionBundle, ReviewCaseSummary
 from .asn_sources import detect_asn_source
@@ -377,9 +377,31 @@ def _ensure_list_of_type(key: str, value: Any, item_type: type) -> list[Any]:
     return cleaned
 
 
+def _dedupe_preserve_order(values: list[Any], *, key_func: Optional[Callable[[Any], Any]] = None) -> list[Any]:
+    deduped: list[Any] = []
+    seen: set[Any] = set()
+    resolver = key_func or (lambda item: item)
+    for item in values:
+        marker = resolver(item)
+        if marker in seen:
+            continue
+        seen.add(marker)
+        deduped.append(item)
+    return deduped
+
+
 def _normalize_string_list(key: str, value: Any) -> list[str]:
     cleaned = _ensure_list_of_type(key, value, str)
-    return [item.strip().lower() for item in cleaned if item.strip()]
+    normalized = [item.strip().lower() for item in cleaned if item.strip()]
+    return _dedupe_preserve_order(normalized)
+
+
+def _normalize_top_level_list(key: str, value: Any, item_type: type) -> list[Any]:
+    cleaned = _ensure_list_of_type(key, value, item_type)
+    if item_type is str:
+        normalized = [item.strip().lower() for item in cleaned if item.strip()]
+        return _dedupe_preserve_order(normalized)
+    return _dedupe_preserve_order(cleaned)
 
 
 def _normalize_provider_profile_item(index: int, value: Any) -> dict[str, Any]:
@@ -403,7 +425,9 @@ def _normalize_provider_profile_item(index: int, value: Any) -> dict[str, Any]:
         "home_markers": _normalize_string_list(
             f"provider_profiles[{index}].home_markers", value.get("home_markers", [])
         ),
-        "asns": _ensure_list_of_type(f"provider_profiles[{index}].asns", value.get("asns", []), int),
+        "asns": _dedupe_preserve_order(
+            _ensure_list_of_type(f"provider_profiles[{index}].asns", value.get("asns", []), int)
+        ),
     }
 
 
@@ -505,7 +529,7 @@ def validate_live_rules_patch(payload: dict[str, Any]) -> dict[str, Any]:
     normalized: dict[str, Any] = {}
     for key, item_type in EDITABLE_TOP_LEVEL_KEYS.items():
         if key in payload:
-            normalized[key] = _ensure_list_of_type(key, payload[key], item_type)
+            normalized[key] = _normalize_top_level_list(key, payload[key], item_type)
     for key, validator in EDITABLE_COMPLEX_TOP_LEVEL_KEYS.items():
         if key in payload:
             normalized[key] = validator(payload[key])
@@ -802,7 +826,7 @@ class PlatformStore:
             raw_value = copy.deepcopy(payload.get(key, self.base_config.get(key, [])))
             if raw_value is None:
                 raw_value = []
-            rules[key] = _ensure_list_of_type(key, raw_value, item_type)
+            rules[key] = _normalize_top_level_list(key, raw_value, item_type)
         for key, validator in EDITABLE_COMPLEX_TOP_LEVEL_KEYS.items():
             raw_value = copy.deepcopy(payload.get(key, self.base_config.get(key, [])))
             if raw_value is None:
@@ -1903,6 +1927,19 @@ class PlatformStore:
 
     def get_module_token_ciphertext(self, module_id: str) -> str:
         return self.modules_admin.get_module_token_ciphertext(module_id)
+
+    def request_module_restart(
+        self,
+        module_id: str,
+        *,
+        requested_by: str = "",
+        reason: str = "manual_restart",
+    ) -> dict[str, Any]:
+        return self.modules_admin.request_module_restart(
+            module_id,
+            requested_by=requested_by,
+            reason=reason,
+        )
 
     def register_module(
         self,

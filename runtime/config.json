@@ -307,7 +307,7 @@
       "yandex-2": "yandexcloud-2"
     },
     "report_time": "06:00",
-    "dry_run": true,
+    "dry_run": false,
     "tg_admin_chat_id": "",
     "tg_topic_id": 0,
     "gray_zone_threshold": 0,

@@ -1315,8 +1315,12 @@ class ReviewAdminRepository(SQLiteRepository):
 
         with self.connect() as conn:
             auto_resolution = bundle.verdict if not review_reason and bundle.verdict in {"HOME", "MOBILE"} else ""
-            next_status = "OPEN" if review_reason else "RESOLVED" if auto_resolution else "SKIPPED"
-            stored_review_reason = str(review_reason or case_row["review_reason"] or "unsure")
+            # Keep ambiguous recheck outcomes in manual queue instead of silently skipping.
+            next_status = "RESOLVED" if auto_resolution else "OPEN"
+            stored_review_reason = str(
+                review_reason
+                or ("unsure" if not auto_resolution else case_row["review_reason"] or "unsure")
+            )
             conn.execute(
                 """
                 UPDATE review_cases
@@ -1440,28 +1444,6 @@ class ReviewAdminRepository(SQLiteRepository):
                     (event_context["ip"], auto_resolution, actor, actor_tg_id, event_created_at, event_created_at, expires_at),
                 )
                 self._record_labels_for_resolution(conn, case_id, event_id, bundle, auto_resolution)
-            elif next_status == "SKIPPED":
-                conn.execute(
-                    """
-                    INSERT INTO review_resolutions (case_id, event_id, resolution, actor, actor_tg_id, note, created_at)
-                    VALUES (?, ?, 'SKIP', ?, ?, ?, ?)
-                    """,
-                    (case_id, event_id, actor, actor_tg_id, note, event_created_at),
-                )
-                conn.execute(
-                    """
-                    DELETE FROM exact_ip_overrides
-                    WHERE ip = ? AND source = 'review_resolution'
-                    """,
-                    (event_context["ip"],),
-                )
-                conn.execute(
-                    """
-                    DELETE FROM review_labels
-                    WHERE case_id = ?
-                    """,
-                    (case_id,),
-                )
             self._attach_case_context(
                 conn,
                 case_id=case_id,

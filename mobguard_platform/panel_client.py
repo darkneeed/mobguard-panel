@@ -103,6 +103,12 @@ class RemnawaveClient:
             return normalized
         return normalized.lower()
 
+    def _typed_lookup_key(self, lookup_type: str, identifier: str) -> str:
+        normalized = self._normalized_lookup_key(identifier)
+        if not normalized:
+            return ""
+        return f"{lookup_type}:{normalized}"
+
     def _clone_cached_value(self, value: Any) -> Any:
         if isinstance(value, (dict, list)):
             return json.loads(json.dumps(value, ensure_ascii=False))
@@ -124,66 +130,107 @@ class RemnawaveClient:
             return
         cache[normalized_key] = (time.monotonic() + max(float(ttl_seconds), 0.0), self._clone_cached_value(value))
 
-    def _cache_user_lookup(self, identifier: str, user: Optional[dict[str, Any]]) -> None:
+    def _cache_user_lookup(
+        self,
+        identifier: str,
+        user: Optional[dict[str, Any]],
+        *,
+        lookup_type: str = "auto",
+    ) -> None:
         ttl = self.USER_CACHE_TTL_SECONDS if user else self.NEGATIVE_USER_CACHE_TTL_SECONDS
-        self._cache_set(self._user_cache, identifier, user, ttl)
+        self._cache_set(self._user_cache, self._typed_lookup_key(lookup_type, identifier), user, ttl)
 
-    def _resolve_user_candidates(self, identifier: str) -> list[dict[str, Any]]:
+    def _resolve_user_candidates(self, identifier: str, *, lookup_type: str = "auto") -> list[dict[str, Any]]:
         normalized = str(identifier or "").strip()
         if not normalized:
             return []
+        if lookup_type == "uuid":
+            return [{"uuid": normalized}]
+        if lookup_type == "system_id":
+            return [{"id": int(normalized)}] if normalized.isdigit() else []
+        if lookup_type == "telegram_id":
+            return [{"telegramId": normalized}] if normalized.isdigit() else []
+        if lookup_type == "username":
+            return [{"username": normalized}]
+        if lookup_type == "short_uuid":
+            return [{"shortUuid": normalized}]
         if UUID_PATTERN.fullmatch(normalized):
             return [{"uuid": normalized}]
         if normalized.isdigit():
             return [{"id": int(normalized)}]
         return [{"username": normalized}, {"shortUuid": normalized}]
 
-    def get_user_data(self, identifier: str) -> Optional[dict[str, Any]]:
+    def _user_lookup_endpoints(self, str_id: str, *, lookup_type: str) -> list[str]:
+        if lookup_type == "uuid":
+            return [f"/api/users/{quote(str_id)}", f"/api/users/by-short-uuid/{quote(str_id)}"]
+        if lookup_type == "system_id":
+            return [f"/api/users/by-id/{quote(str_id)}"]
+        if lookup_type == "telegram_id":
+            return [f"/api/users/by-telegram-id/{quote(str_id)}"]
+        if lookup_type == "username":
+            return [f"/api/users/by-username/{quote(str_id)}", f"/api/users/{quote(str_id)}"]
+        if lookup_type == "short_uuid":
+            return [f"/api/users/by-short-uuid/{quote(str_id)}", f"/api/users/{quote(str_id)}"]
+        if UUID_PATTERN.fullmatch(str_id):
+            return [
+                f"/api/users/{quote(str_id)}",
+                f"/api/users/by-short-uuid/{quote(str_id)}",
+            ]
+        if str_id.isdigit():
+            return [
+                f"/api/users/by-id/{quote(str_id)}",
+                f"/api/users/by-telegram-id/{quote(str_id)}",
+            ]
+        return [
+            f"/api/users/by-username/{quote(str_id)}",
+            f"/api/users/by-short-uuid/{quote(str_id)}",
+            f"/api/users/{quote(str_id)}",
+        ]
+
+    def _get_user_data_with_hint(self, identifier: str, *, lookup_type: str = "auto") -> Optional[dict[str, Any]]:
         if not self.enabled:
             self.last_error = "Panel client is disabled"
             return None
 
         self.last_error = None
         str_id = str(identifier).strip()
-        cache_hit, cached_user = self._cache_get(self._user_cache, str_id)
+        typed_lookup_key = self._typed_lookup_key(lookup_type, str_id)
+        cache_hit, cached_user = self._cache_get(self._user_cache, typed_lookup_key)
         if cache_hit:
             return cached_user
 
-        for payload_body in self._resolve_user_candidates(str_id):
+        for payload_body in self._resolve_user_candidates(str_id, lookup_type=lookup_type):
             payload = self._request("POST", "/api/users/resolve", body=payload_body)
             user = self._extract_user(payload)
             if user:
                 self._cache_user(user)
-                self._cache_user_lookup(str_id, user)
+                self._cache_user_lookup(str_id, user, lookup_type=lookup_type)
                 return user
 
-        endpoints: list[str]
-        if UUID_PATTERN.fullmatch(str_id):
-            endpoints = [
-                f"/api/users/{quote(str_id)}",
-                f"/api/users/by-short-uuid/{quote(str_id)}",
-            ]
-        elif str_id.isdigit():
-            endpoints = [
-                f"/api/users/by-id/{quote(str_id)}",
-                f"/api/users/by-telegram-id/{quote(str_id)}",
-            ]
-        else:
-            endpoints = [
-                f"/api/users/by-username/{quote(str_id)}",
-                f"/api/users/by-short-uuid/{quote(str_id)}",
-                f"/api/users/{quote(str_id)}",
-            ]
-
-        for endpoint in endpoints:
+        for endpoint in self._user_lookup_endpoints(str_id, lookup_type=lookup_type):
             payload = self._request("GET", endpoint)
             user = self._extract_user(payload)
             if user:
                 self._cache_user(user)
-                self._cache_user_lookup(str_id, user)
+                self._cache_user_lookup(str_id, user, lookup_type=lookup_type)
                 return user
-        self._cache_user_lookup(str_id, None)
+        self._cache_user_lookup(str_id, None, lookup_type=lookup_type)
         return None
+
+    def get_user_data(self, identifier: str) -> Optional[dict[str, Any]]:
+        return self._get_user_data_with_hint(identifier, lookup_type="auto")
+
+    def get_user_data_by_uuid(self, uuid: str) -> Optional[dict[str, Any]]:
+        return self._get_user_data_with_hint(uuid, lookup_type="uuid")
+
+    def get_user_data_by_system_id(self, system_id: int | str) -> Optional[dict[str, Any]]:
+        return self._get_user_data_with_hint(str(system_id), lookup_type="system_id")
+
+    def get_user_data_by_telegram_id(self, telegram_id: int | str) -> Optional[dict[str, Any]]:
+        return self._get_user_data_with_hint(str(telegram_id), lookup_type="telegram_id")
+
+    def get_user_data_by_username(self, username: str) -> Optional[dict[str, Any]]:
+        return self._get_user_data_with_hint(username, lookup_type="username")
 
     def get_user_hwid_devices(self, user_uuid: str) -> list[dict[str, Any]]:
         normalized_uuid = str(user_uuid or "").strip()
@@ -383,16 +430,21 @@ class RemnawaveClient:
         uuid = str(user.get("uuid", "")).strip()
         if uuid:
             user_copy = dict(user)
-            self._cache_user_lookup(uuid, user_copy)
+            self._cache_user_lookup(uuid, user_copy, lookup_type="auto")
+            self._cache_user_lookup(uuid, user_copy, lookup_type="uuid")
             if str(user_copy.get("username", "")).strip():
-                self._cache_user_lookup(str(user_copy["username"]), user_copy)
+                self._cache_user_lookup(str(user_copy["username"]), user_copy, lookup_type="auto")
+                self._cache_user_lookup(str(user_copy["username"]), user_copy, lookup_type="username")
             if user_copy.get("id") not in (None, ""):
-                self._cache_user_lookup(str(user_copy["id"]), user_copy)
+                self._cache_user_lookup(str(user_copy["id"]), user_copy, lookup_type="auto")
+                self._cache_user_lookup(str(user_copy["id"]), user_copy, lookup_type="system_id")
             if user_copy.get("telegramId") not in (None, ""):
-                self._cache_user_lookup(str(user_copy["telegramId"]), user_copy)
+                self._cache_user_lookup(str(user_copy["telegramId"]), user_copy, lookup_type="auto")
+                self._cache_user_lookup(str(user_copy["telegramId"]), user_copy, lookup_type="telegram_id")
             short_uuid = str(user_copy.get("shortUuid", "")).strip()
             if short_uuid:
-                self._cache_user_lookup(short_uuid, user_copy)
+                self._cache_user_lookup(short_uuid, user_copy, lookup_type="auto")
+                self._cache_user_lookup(short_uuid, user_copy, lookup_type="short_uuid")
             self._internal_squad_uuid_cache.update(
                 {
                     str(item.get("name", "")).strip(): str(item.get("uuid", "")).strip()

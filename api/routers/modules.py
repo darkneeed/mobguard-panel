@@ -190,3 +190,29 @@ def admin_reveal_module_token(
         details={},
     )
     return result
+
+
+@router.post("/admin/modules/{module_id}/restart")
+def admin_restart_module(
+    module_id: str,
+    session: dict[str, Any] = Depends(require_permission(PERMISSION_MODULES_WRITE, require_owner_totp=True)),
+    container=Depends(get_container),
+) -> dict[str, Any]:
+    try:
+        result = module_service.request_module_restart(
+            container,
+            module_id,
+            requested_by=str(session.get("subject") or session.get("username") or session.get("telegram_id") or "admin"),
+        )
+    except ValueError as exc:
+        status_code = 404 if "not registered" in str(exc).lower() else 400
+        raise HTTPException(status_code=status_code, detail=str(exc)) from exc
+    record_admin_action(
+        container,
+        session,
+        action="modules.restart",
+        target_type="module",
+        target_id=module_id,
+        details={},
+    )
+    return result

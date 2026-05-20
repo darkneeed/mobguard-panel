@@ -175,13 +175,18 @@ def _panel_online_for_module(
     module_name: str,
     aliases: dict[str, str],
 ) -> int:
-    lookup_keys = [
+    lookup_keys = {
         module_id.strip().lower(),
         module_name.strip().lower(),
-    ]
-    alias = aliases.get(module_name.strip().lower())
-    if alias:
-        lookup_keys.append(alias)
+    }
+    for alias_key in (module_id.strip().lower(), module_name.strip().lower()):
+        raw_alias = aliases.get(alias_key)
+        if not raw_alias:
+            continue
+        for alias in str(raw_alias).split(","):
+            normalized_alias = alias.strip().lower()
+            if normalized_alias:
+                lookup_keys.add(normalized_alias)
     resolved = 0
     for key in lookup_keys:
         if not key:
@@ -310,6 +315,24 @@ def _module_install_payload(container: APIContainer, module: dict[str, Any]) -> 
         """
     ).strip()
     return {"compose_yaml": compose_yaml}
+
+
+def _module_control_payload(module: dict[str, Any] | None) -> dict[str, Any]:
+    metadata = (module or {}).get("metadata")
+    if not isinstance(metadata, dict):
+        return {}
+    raw_control = metadata.get("module_control")
+    if not isinstance(raw_control, dict):
+        return {}
+    restart_token = str(raw_control.get("restart_token") or "").strip()
+    if not restart_token:
+        return {}
+    return {
+        "restart_token": restart_token,
+        "requested_at": str(raw_control.get("requested_at") or "").strip(),
+        "requested_by": str(raw_control.get("requested_by") or "").strip(),
+        "reason": str(raw_control.get("reason") or "").strip(),
+    }
 
 
 def _module_detail_response(container: APIContainer, module: dict[str, Any]) -> dict[str, Any]:
@@ -747,7 +770,15 @@ def _attach_runtime_metrics(
         heartbeat_active_users = int(heartbeat_metrics.get("active_users") or 0)
         heartbeat_recent_events = int(heartbeat_metrics.get("recent_events") or 0)
         heartbeat_window_seconds = int(heartbeat_metrics.get("window_seconds") or 0)
-        resolved_active_users = max(activity_active_users, heartbeat_active_users, panel_online)
+        real_time_active_users = max(heartbeat_active_users, panel_online)
+        if payload.get("healthy"):
+            resolved_active_users = (
+                real_time_active_users
+                if real_time_active_users > 0
+                else activity_active_users
+            )
+        else:
+            resolved_active_users = panel_online if panel_online > 0 else 0
         resolved_recent_events = max(activity_recent_events, heartbeat_recent_events)
         resolved_window_seconds = (
             heartbeat_window_seconds
@@ -819,23 +850,38 @@ async def _resolve_remote_user(
     runtime: ModuleBatchContext,
     payload: dict[str, Any],
 ) -> dict[str, Any]:
-    identifier = next(
-        (
-            value
-            for value in (
-                payload.get("uuid"),
-                payload.get("system_id"),
-                payload.get("telegram_id"),
-                payload.get("username"),
-            )
-            if value not in (None, "")
-        ),
-        None,
-    )
     remote_user = {}
     client = runtime.remnawave_client
-    if identifier not in (None, "") and client.enabled:
-        remote_user = await asyncio.to_thread(client.get_user_data, str(identifier).strip()) or {}
+    if client.enabled:
+        uuid_value = str(payload.get("uuid") or "").strip()
+        username = str(payload.get("username") or "").strip()
+        system_id_raw = payload.get("system_id")
+        telegram_id_raw = payload.get("telegram_id")
+
+        def _lookup() -> dict[str, Any]:
+            if uuid_value:
+                resolver = getattr(client, "get_user_data_by_uuid", None)
+                if callable(resolver):
+                    return resolver(uuid_value) or {}
+                return client.get_user_data(uuid_value) or {}
+            if system_id_raw not in (None, ""):
+                resolver = getattr(client, "get_user_data_by_system_id", None)
+                if callable(resolver):
+                    return resolver(int(system_id_raw)) or {}
+                return client.get_user_data(str(system_id_raw).strip()) or {}
+            if telegram_id_raw not in (None, ""):
+                resolver = getattr(client, "get_user_data_by_telegram_id", None)
+                if callable(resolver):
+                    return resolver(str(telegram_id_raw).strip()) or {}
+                return client.get_user_data(str(telegram_id_raw).strip()) or {}
+            if username:
+                resolver = getattr(client, "get_user_data_by_username", None)
+                if callable(resolver):
+                    return resolver(username) or {}
+                return client.get_user_data(username) or {}
+            return {}
+
+        remote_user = await asyncio.to_thread(_lookup)
     user_data = dict(remote_user)
     if payload.get("uuid") and not user_data.get("uuid"):
         user_data["uuid"] = payload["uuid"]
@@ -955,7 +1001,7 @@ async def _apply_enforcement_if_needed(
                 "reason": limiter_reason,
                 "warning_only": False,
                 "delivery_status": "suppressed",
-                "dry_run": bool(settings.get("dry_run", True)),
+                "dry_run": bool(settings.get("dry_run", ENFORCEMENT_SETTINGS_DEFAULTS["dry_run"])),
                 **({"limiter": limiter_payload} if limiter_payload else {}),
             }
         else:
@@ -970,7 +1016,7 @@ async def _apply_enforcement_if_needed(
         or should_warning_only(bundle)
         or not bundle.punitive_eligible
     )
-    observe_only = bool(settings.get("dry_run", True)) or not client.enabled
+    observe_only = bool(settings.get("dry_run", ENFORCEMENT_SETTINGS_DEFAULTS["dry_run"])) or not client.enabled
     now = datetime.utcnow().replace(microsecond=0)
     row = await container.analysis_store.fetch_one(
         """
@@ -1279,16 +1325,17 @@ def get_module_config(container: APIContainer, module: dict[str, Any] | None) ->
     inbound_tags = list((module or {}).get("inbound_tags") or [])
     rules["inbound_tags"] = inbound_tags
     rules["mobile_tags"] = list(inbound_tags)
-    return {
-        "config": {
-            "protocol_version": PROTOCOL_VERSION,
-            "config_revision": rules_state["revision"],
-            "updated_at": rules_state["updated_at"],
-            "rules": rules,
-            "module_runtime": _module_runtime(settings),
-        },
-        "module": module,
+    config_payload = {
+        "protocol_version": PROTOCOL_VERSION,
+        "config_revision": rules_state["revision"],
+        "updated_at": rules_state["updated_at"],
+        "rules": rules,
+        "module_runtime": _module_runtime(settings),
     }
+    module_control = _module_control_payload(module)
+    if module_control:
+        config_payload["module_control"] = module_control
+    return {"config": config_payload, "module": module}
 
 
 async def ingest_module_events(container: APIContainer, payload: dict[str, Any], token: str) -> dict[str, Any]:
@@ -1415,3 +1462,18 @@ def reveal_module_token(container: APIContainer, module_id: str) -> dict[str, An
     except ModuleSecretError as exc:
         raise ValueError(str(exc)) from exc
     return {"module_id": module_id, "module_token": token}
+
+
+def request_module_restart(
+    container: APIContainer,
+    module_id: str,
+    *,
+    requested_by: str = "admin",
+) -> dict[str, Any]:
+    module = container.store.request_module_restart(
+        module_id,
+        requested_by=requested_by,
+        reason="panel_manual_restart",
+    )
+    stale_after_seconds = _module_stale_after_seconds(container)
+    return {"module": _apply_module_freshness(module, stale_after_seconds=stale_after_seconds)}

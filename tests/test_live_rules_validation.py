@@ -68,6 +68,30 @@ class LiveRulesValidationTests(unittest.TestCase):
             ],
         )
 
+    def test_duplicate_rule_values_are_deduped(self):
+        payload = validate_live_rules_patch(
+            {
+                "allowed_isp_keywords": [" Mobile ", "mobile", "LTE", "lte"],
+                "mixed_asns": [123, "123", 456, 456],
+                "provider_profiles": [
+                    {
+                        "key": "MTS",
+                        "classification": "mixed",
+                        "aliases": ["mts", "MTS", " mgts "],
+                        "mobile_markers": ["lte", "LTE", "mobile"],
+                        "home_markers": ["fiber", "FIBER"],
+                        "asns": [8359, "8359", 12389],
+                    }
+                ],
+            }
+        )
+        self.assertEqual(payload["allowed_isp_keywords"], ["mobile", "lte"])
+        self.assertEqual(payload["mixed_asns"], [123, 456])
+        self.assertEqual(payload["provider_profiles"][0]["aliases"], ["mts", "mgts"])
+        self.assertEqual(payload["provider_profiles"][0]["mobile_markers"], ["lte", "mobile"])
+        self.assertEqual(payload["provider_profiles"][0]["home_markers"], ["fiber"])
+        self.assertEqual(payload["provider_profiles"][0]["asns"], [8359, 12389])
+
     def test_history_settings_are_accepted(self):
         payload = validate_live_rules_patch(
             {

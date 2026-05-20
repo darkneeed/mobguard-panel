@@ -284,6 +284,10 @@ export type ModuleDetailResponse = {
   install: ModuleInstallBundle;
 };
 
+export type ModuleRestartResponse = {
+  module: ModuleRecord;
+};
+
 export type ModuleProvisioningPayload = {
   module_name: string;
   inbound_tags: string[];

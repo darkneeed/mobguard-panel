@@ -349,6 +349,47 @@ class StoreReviewFlowTests(unittest.TestCase):
         self.assertEqual(updated["resolutions"][0]["resolution"], "MOBILE")
         self.assertEqual(self.store.get_ip_override(refreshed_bundle.ip), "MOBILE")
 
+    def test_recheck_unsure_without_explicit_reason_stays_open_for_manual_queue(self):
+        user = {"uuid": "uuid-1", "username": "alice", "telegramId": "1001", "id": 42, "module_id": "node-a", "module_name": "Node A"}
+        original_bundle = DecisionBundle(
+            ip="10.10.10.13",
+            verdict="UNSURE",
+            confidence_band="UNSURE",
+            score=0,
+            asn=12345,
+            isp="MTS",
+        )
+        event_id = self.store.record_analysis_event(user, original_bundle.ip, "TAG", original_bundle)
+        summary = self.store.ensure_review_case(user, original_bundle.ip, "TAG", original_bundle, event_id, "unsure")
+
+        refreshed_bundle = DecisionBundle(
+            ip="10.10.10.13",
+            verdict="UNSURE",
+            confidence_band="UNSURE",
+            score=1,
+            asn=12345,
+            isp="MTS",
+        )
+
+        updated = self.store.recheck_review_case(
+            summary.id,
+            user,
+            refreshed_bundle.ip,
+            "TAG",
+            refreshed_bundle,
+            None,
+            "system",
+            1001,
+            "auto recheck",
+        )
+
+        self.assertEqual(updated["status"], "OPEN")
+        self.assertEqual(updated["review_reason"], "unsure")
+        self.assertEqual(updated["verdict"], "UNSURE")
+        self.assertEqual(updated["confidence_band"], "UNSURE")
+        self.assertEqual(updated["resolutions"], [])
+        self.assertIsNone(self.store.get_ip_override(refreshed_bundle.ip))
+
     def test_live_rules_revision_conflict_is_rejected(self):
         state = self.store.get_live_rules_state()
         updated = self.store.update_live_rules(

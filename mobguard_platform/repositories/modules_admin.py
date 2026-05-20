@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import uuid
 from datetime import datetime, timedelta
 from typing import Any, Optional
 
@@ -268,6 +269,50 @@ class ModuleAdminRepository(SQLiteRepository):
         if not ciphertext:
             raise ValueError("Module token reveal is unavailable for this module")
         return ciphertext
+
+    def request_module_restart(
+        self,
+        module_id: str,
+        *,
+        requested_by: str = "",
+        reason: str = "manual_restart",
+    ) -> dict[str, Any]:
+        normalized_id = str(module_id or "").strip()
+        if not normalized_id:
+            raise ValueError("module_id is required")
+        now = _utcnow()
+        restart_token = uuid.uuid4().hex
+
+        with self.connect() as conn:
+            row = conn.execute(
+                "SELECT metadata_json FROM modules WHERE module_id = ?",
+                (normalized_id,),
+            ).fetchone()
+            if not row:
+                raise ValueError("Module is not registered")
+
+            metadata = _module_metadata_from_json(row["metadata_json"])
+            raw_control = metadata.get("module_control")
+            control = dict(raw_control) if isinstance(raw_control, dict) else {}
+            control.update(
+                {
+                    "restart_token": restart_token,
+                    "requested_at": now,
+                    "requested_by": str(requested_by or "admin").strip() or "admin",
+                    "reason": str(reason or "manual_restart").strip() or "manual_restart",
+                }
+            )
+            metadata["module_control"] = control
+            conn.execute(
+                "UPDATE modules SET metadata_json = ? WHERE module_id = ?",
+                (json.dumps(metadata, ensure_ascii=False), normalized_id),
+            )
+            conn.commit()
+
+        module = self.get_module(normalized_id)
+        if not module:
+            raise ValueError("Module is not registered")
+        return module
 
     def register_module(
         self,

@@ -12,6 +12,7 @@ import {
   ModuleDetailResponse,
   ModuleListResponse,
   ModuleProvisioningPayload,
+  ModuleRestartResponse,
   OverviewMetricsResponse,
   OverridesResponse,
   ReviewListParams,
@@ -133,6 +134,10 @@ export const dataApi = {
     }),
   revealModuleToken: (moduleId: string) =>
     request<Record<string, unknown>>(`/admin/modules/${encodeURIComponent(moduleId)}/token/reveal`, {
+      method: "POST"
+    }),
+  restartModule: (moduleId: string) =>
+    request<ModuleRestartResponse>(`/admin/modules/${encodeURIComponent(moduleId)}/restart`, {
       method: "POST"
     }),
   getHealth: () => request<HealthSnapshot>("/health"),

@@ -12,7 +12,8 @@ vi.mock("../api/client", () => ({
     getModuleDetail: vi.fn(),
     createModule: vi.fn(),
     updateModule: vi.fn(),
-    revealModuleToken: vi.fn()
+    revealModuleToken: vi.fn(),
+    restartModule: vi.fn()
   }
 }));
 

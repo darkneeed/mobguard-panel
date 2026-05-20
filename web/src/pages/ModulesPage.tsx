@@ -6,6 +6,7 @@ import {
   ModuleDetailResponse,
   ModuleListResponse,
   ModuleProvisioningPayload,
+  ModuleRestartResponse,
   ModuleRecord,
   Session,
 } from "../api/client";
@@ -172,6 +173,7 @@ export function ModulesPage({ session }: { session?: Session }) {
   const [saved, setSaved] = useState("");
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [restartingModuleId, setRestartingModuleId] = useState("");
 
   const activeModule = modalMode === "detail" ? (detail?.module ?? null) : null;
   const draftDirty = useMemo(
@@ -371,6 +373,40 @@ export function ModulesPage({ session }: { session?: Session }) {
     }
   }
 
+  async function restartModule(item: ModuleRecord) {
+    if (!canManageModules || item.install_state === "pending_install") return;
+    setRestartingModuleId(item.module_id);
+    try {
+      const response = (await api.restartModule(item.module_id)) as ModuleRestartResponse;
+      const updatedModule = response?.module;
+      if (updatedModule) {
+        setData((prev) =>
+          prev
+            ? {
+                ...prev,
+                items: prev.items.map((moduleItem) =>
+                  moduleItem.module_id === updatedModule.module_id ? updatedModule : moduleItem,
+                ),
+              }
+            : prev,
+        );
+        setDetail((prev) =>
+          prev && prev.module.module_id === updatedModule.module_id
+            ? { ...prev, module: updatedModule }
+            : prev,
+        );
+      }
+      pushToast("success", t("modules.restartSuccess"));
+    } catch (err) {
+      pushToast(
+        "error",
+        err instanceof Error ? err.message : t("modules.restartFailed"),
+      );
+    } finally {
+      setRestartingModuleId("");
+    }
+  }
+
   async function copyText(value: string, successMessage: string) {
     try {
       await navigator.clipboard.writeText(value);
@@ -511,6 +547,19 @@ export function ModulesPage({ session }: { session?: Session }) {
         <div className="action-row">
           <button className="ghost" onClick={() => openModule(item.module_id)}>
             {t("modules.open")}
+          </button>
+          <button
+            className="ghost"
+            disabled={
+              !canManageModules ||
+              item.install_state === "pending_install" ||
+              restartingModuleId === item.module_id
+            }
+            onClick={() => restartModule(item)}
+          >
+            {restartingModuleId === item.module_id
+              ? t("common.loading")
+              : t("modules.restart")}
           </button>
         </div>
       </article>

@@ -222,6 +222,62 @@ class PanelClientTests(unittest.TestCase):
         self.assertEqual(second["uuid"], "uuid-1")
         self.assertEqual(calls, [("POST", "/api/users/resolve", {"username": "alice"})])
 
+    def test_numeric_typed_lookups_do_not_collide_between_system_and_telegram_ids(self):
+        client = PanelClient("https://panel.example.com", "secret")
+        calls = []
+
+        def fake_request(method, endpoint, body=None):
+            calls.append((method, endpoint, body))
+            if endpoint == "/api/users/resolve" and body == {"id": 42}:
+                return {"response": {"uuid": "uuid-system-42", "id": 42, "username": "system-user"}}
+            if endpoint == "/api/users/resolve" and body == {"telegramId": "42"}:
+                return {"response": {"uuid": "uuid-telegram-42", "telegramId": "42", "username": "tg-user"}}
+            return None
+
+        with patch.object(client, "_request", side_effect=fake_request):
+            system_payload = client.get_user_data_by_system_id(42)
+            telegram_payload = client.get_user_data_by_telegram_id(42)
+
+        self.assertEqual(system_payload["uuid"], "uuid-system-42")
+        self.assertEqual(telegram_payload["uuid"], "uuid-telegram-42")
+        self.assertEqual(
+            calls,
+            [
+                ("POST", "/api/users/resolve", {"id": 42}),
+                ("POST", "/api/users/resolve", {"telegramId": "42"}),
+            ],
+        )
+
+    def test_typed_lookup_cache_returns_same_identity_without_cross_type_reuse(self):
+        client = PanelClient("https://panel.example.com", "secret")
+        calls = []
+
+        def fake_request(method, endpoint, body=None):
+            calls.append((method, endpoint, body))
+            if endpoint == "/api/users/resolve" and body == {"id": 7}:
+                return {"response": {"uuid": "uuid-system-7", "id": 7}}
+            if endpoint == "/api/users/resolve" and body == {"telegramId": "7"}:
+                return {"response": {"uuid": "uuid-telegram-7", "telegramId": "7"}}
+            return None
+
+        with patch.object(client, "_request", side_effect=fake_request):
+            first_system = client.get_user_data_by_system_id(7)
+            second_system = client.get_user_data_by_system_id(7)
+            first_telegram = client.get_user_data_by_telegram_id(7)
+            second_telegram = client.get_user_data_by_telegram_id(7)
+
+        self.assertEqual(first_system["uuid"], "uuid-system-7")
+        self.assertEqual(second_system["uuid"], "uuid-system-7")
+        self.assertEqual(first_telegram["uuid"], "uuid-telegram-7")
+        self.assertEqual(second_telegram["uuid"], "uuid-telegram-7")
+        self.assertEqual(
+            calls,
+            [
+                ("POST", "/api/users/resolve", {"id": 7}),
+                ("POST", "/api/users/resolve", {"telegramId": "7"}),
+            ],
+        )
+
     def test_username_lookup_falls_back_to_documented_username_endpoint_when_resolve_is_unavailable(self):
         client = PanelClient("https://panel.example.com", "secret")
         calls = []

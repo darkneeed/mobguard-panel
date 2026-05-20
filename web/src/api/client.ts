@@ -34,6 +34,7 @@ export type {
   ModuleProcessMetrics,
   ModuleProcessSample,
   ModuleProvisioningPayload,
+  ModuleRestartResponse,
   ModuleRecord,
   ModuleRuntimeMetrics,
   ModuleSummary,

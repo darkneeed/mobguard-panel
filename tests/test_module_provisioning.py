@@ -197,6 +197,39 @@ class ModuleProvisioningTests(unittest.TestCase):
         self.assertEqual(client.token, "runtime-token")
         self.assertTrue(client.enabled)
 
+    def test_request_module_restart_exposes_control_in_module_config(self):
+        self.env_path.write_text("MOBGUARD_MODULE_SECRET_KEY=test-secret\n", encoding="utf-8")
+        created = module_service.create_managed_module(
+            self.container,
+            {"module_name": "Node Restart", "inbound_tags": ["DEFAULT-INBOUND"]},
+        )
+        module_id = created["module"]["module_id"]
+        module_service.register_module(
+            self.container,
+            {
+                "module_id": module_id,
+                "module_name": "Node Restart",
+                "version": "1.0.0",
+                "protocol_version": "v1",
+            },
+            created["install"]["module_token"],
+        )
+
+        restarted = module_service.request_module_restart(
+            self.container,
+            module_id,
+            requested_by="owner:test",
+        )
+        module = restarted["module"]
+        control = module.get("metadata", {}).get("module_control", {})
+        restart_token = str(control.get("restart_token") or "").strip()
+
+        self.assertTrue(restart_token)
+        self.assertEqual(control.get("requested_by"), "owner:test")
+
+        config_payload = module_service.get_module_config(self.container, module)["config"]
+        self.assertEqual(config_payload.get("module_control", {}).get("restart_token"), restart_token)
+
 
 if __name__ == "__main__":
     unittest.main()

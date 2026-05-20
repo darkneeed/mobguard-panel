@@ -142,6 +142,29 @@ class ModuleProtocolTests(unittest.TestCase):
 
         self.assertEqual(mocked_backfill.call_count, 0)
 
+    def test_resolve_remote_user_prefers_typed_telegram_lookup_when_available(self):
+        calls: list[tuple[str, str]] = []
+
+        class TypedClient:
+            enabled = True
+
+            def get_user_data_by_telegram_id(self, value):
+                calls.append(("tg", str(value)))
+                return {"uuid": "uuid-from-tg", "telegramId": str(value)}
+
+            def get_user_data(self, value):
+                calls.append(("generic", str(value)))
+                return {"uuid": "uuid-from-generic", "telegramId": str(value)}
+
+        runtime = SimpleNamespace(remnawave_client=TypedClient())
+        payload = {"telegram_id": "42"}
+
+        result = asyncio.run(module_service._resolve_remote_user(runtime, payload))
+
+        self.assertEqual(result["uuid"], "uuid-from-tg")
+        self.assertEqual(result["telegramId"], "42")
+        self.assertEqual(calls, [("tg", "42")])
+
     def test_event_batch_deduplicates_by_event_uid(self):
         self.store.create_managed_module(
             "node-a",

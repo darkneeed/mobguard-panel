@@ -88,7 +88,7 @@ PANEL_TOKEN = os.getenv("PANEL_TOKEN")
 # Global State
 DEBUG_LEVEL = CONFIG['settings'].get('debug_level', 'OFF').upper()
 DEBUG_MODE = DEBUG_LEVEL != 'OFF'
-DRY_RUN = CONFIG['settings'].get('dry_run', True)
+DRY_RUN = CONFIG['settings'].get('dry_run', False)
 EXEMPT_UUIDS: Set[str] = set(str(x) for x in CONFIG.get('exempt_uuids', []))
 
 # Режимы модерации
@@ -1045,7 +1045,7 @@ def refresh_runtime_state_from_config() -> None:
     TG_TOPIC_ID = int(settings().get('tg_topic_id', 0) or 0)
     DEBUG_LEVEL = str(settings().get('debug_level', 'OFF')).upper()
     DEBUG_MODE = DEBUG_LEVEL != 'OFF'
-    DRY_RUN = config_flag('dry_run', True)
+    DRY_RUN = config_flag('dry_run', False)
     EXEMPT_UUIDS = set(str(x) for x in CONFIG.get('exempt_uuids', []))
     TG_MIN_INTERVAL = float(telegram_setting('telegram_message_min_interval_seconds'))
     current_settings = dict((CONFIG.get("settings", {}) if isinstance(CONFIG.get("settings", {}), dict) else {}))

@@ -277,8 +277,12 @@ export function TelegramPage() {
   async function saveRuntime() {
     if (!data) return;
     try {
+      const changedFields = TELEGRAM_FIELDS.filter(
+        (field) => settings[field.key] !== savedSettings[field.key],
+      );
+      if (changedFields.length === 0) return;
       const settingsPayload = Object.fromEntries(
-        TELEGRAM_FIELDS.map((field) => {
+        changedFields.map((field) => {
           if (field.type === "boolean") {
             return [field.key, settings[field.key] === "true"];
           }
