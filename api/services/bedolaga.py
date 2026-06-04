@@ -68,7 +68,7 @@ def get_bedolaga_overview(container: APIContainer) -> dict[str, Any]:
             "clients": [],
             "errors": ["bedolaga_api_url is not configured"],
         }
-    metrics = _perform_request(base_url, token, timeout_seconds, path="/stats")
+    metrics = _perform_request(base_url, token, timeout_seconds, path="/stats/overview")
     clients = _perform_request(base_url, token, timeout_seconds, path="/users?limit=20")
     errors: list[str] = []
     if not metrics.get("ok"):
