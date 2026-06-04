@@ -16,13 +16,6 @@ class StorageBundle:
 
 
 def build_storage_bundle(runtime: RuntimeContext) -> StorageBundle:
-    if runtime.database.backend == "sqlite":
-        db_path = runtime.database.sqlite_path or runtime.db_path
-        return StorageBundle(
-            backend="sqlite",
-            store=PlatformStore(db_path, runtime.config, str(runtime.config_path)),
-            analysis_store=AnalysisStore(db_path),
-        )
     postgres_dsn = runtime.database.resolve_postgres_dsn()
     if not postgres_dsn:
         raise ValueError("Postgres backend selected but no Postgres DSN is configured")

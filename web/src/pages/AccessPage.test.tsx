@@ -98,7 +98,7 @@ describe("AccessPage", () => {
       />
     );
 
-    const secretInput = await screen.findByPlaceholderText("Leave blank to keep the current secret value");
+    const secretInput = await screen.findByLabelText("PANEL_LOCAL_PASSWORD");
     await userEvent.type(secretInput, "new-secret");
     await userEvent.click(screen.getByRole("button", { name: "Save .env settings" }));
 
@@ -194,11 +194,13 @@ describe("AccessPage", () => {
     await userEvent.click(screen.getByRole("button", { name: "Save integrations" }));
 
     await waitFor(() => {
-      expect(api.updateAccessSettings).toHaveBeenCalledWith({
-        settings: {
-          remnawave_api_url: "https://panel.example.com/api"
-        }
-      });
+      expect(api.updateAccessSettings).toHaveBeenCalledWith(
+        expect.objectContaining({
+          settings: expect.objectContaining({
+            remnawave_api_url: "https://panel.example.com/api"
+          })
+        })
+      );
     });
     expect(onBrandingChange).toHaveBeenCalledWith({
       panel_name: "MobGuard",

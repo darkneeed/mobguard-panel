@@ -83,7 +83,7 @@ class RemnawaveClient:
     NODES_CACHE_TTL_SECONDS = 20.0
 
     def __init__(self, base_url: str, token: str):
-        self.base_url = base_url.rstrip("/")
+        self.base_url = self._normalize_base_url(base_url)
         self.token = token
         self.last_error: Optional[str] = None
         self._internal_squad_uuid_cache: dict[str, str] = {}
@@ -92,6 +92,13 @@ class RemnawaveClient:
         self._devices_cache: dict[str, tuple[float, Any]] = {}
         self._traffic_cache: dict[str, tuple[float, Any]] = {}
         self._nodes_cache: tuple[float, list[dict[str, Any]]] | None = None
+
+    @staticmethod
+    def _normalize_base_url(base_url: str) -> str:
+        normalized = str(base_url or "").strip().rstrip("/")
+        if normalized.lower().endswith("/api"):
+            return normalized[:-4].rstrip("/")
+        return normalized
 
     @property
     def enabled(self) -> bool:
@@ -139,6 +146,36 @@ class RemnawaveClient:
     ) -> None:
         ttl = self.USER_CACHE_TTL_SECONDS if user else self.NEGATIVE_USER_CACHE_TTL_SECONDS
         self._cache_set(self._user_cache, self._typed_lookup_key(lookup_type, identifier), user, ttl)
+
+    def _should_hydrate_user_profile(self, lookup_type: str, identifier: str) -> bool:
+        normalized = str(identifier or "").strip()
+        if lookup_type == "username":
+            return True
+        if lookup_type != "auto":
+            return False
+        if not normalized or normalized.isdigit() or UUID_PATTERN.fullmatch(normalized):
+            return False
+        return True
+
+    def _hydrate_user_profile(self, user: Optional[dict[str, Any]]) -> Optional[dict[str, Any]]:
+        if not isinstance(user, dict):
+            return None
+        hydrated = dict(user)
+        uuid_value = str(hydrated.get("uuid") or "").strip()
+        if not uuid_value:
+            return hydrated
+        has_id = hydrated.get("id") not in (None, "")
+        has_telegram = hydrated.get("telegramId") not in (None, "")
+        if has_telegram:
+            return hydrated
+        payload = self._request("GET", f"/api/users/{quote(uuid_value)}")
+        detailed = self._extract_user(payload)
+        if not isinstance(detailed, dict):
+            return hydrated
+        for key, value in detailed.items():
+            if hydrated.get(key) in (None, "") and value not in (None, ""):
+                hydrated[key] = value
+        return hydrated
 
     def _resolve_user_candidates(self, identifier: str, *, lookup_type: str = "auto") -> list[dict[str, Any]]:
         normalized = str(identifier or "").strip()
@@ -195,6 +232,7 @@ class RemnawaveClient:
         self.last_error = None
         str_id = str(identifier).strip()
         typed_lookup_key = self._typed_lookup_key(lookup_type, str_id)
+        should_hydrate = self._should_hydrate_user_profile(lookup_type, str_id)
         cache_hit, cached_user = self._cache_get(self._user_cache, typed_lookup_key)
         if cache_hit:
             return cached_user
@@ -202,6 +240,8 @@ class RemnawaveClient:
         for payload_body in self._resolve_user_candidates(str_id, lookup_type=lookup_type):
             payload = self._request("POST", "/api/users/resolve", body=payload_body)
             user = self._extract_user(payload)
+            if should_hydrate:
+                user = self._hydrate_user_profile(user)
             if user:
                 self._cache_user(user)
                 self._cache_user_lookup(str_id, user, lookup_type=lookup_type)
@@ -210,6 +250,8 @@ class RemnawaveClient:
         for endpoint in self._user_lookup_endpoints(str_id, lookup_type=lookup_type):
             payload = self._request("GET", endpoint)
             user = self._extract_user(payload)
+            if should_hydrate:
+                user = self._hydrate_user_profile(user)
             if user:
                 self._cache_user(user)
                 self._cache_user_lookup(str_id, user, lookup_type=lookup_type)

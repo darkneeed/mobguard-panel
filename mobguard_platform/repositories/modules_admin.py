@@ -7,7 +7,6 @@ from datetime import datetime, timedelta
 from typing import Any, Optional
 
 from .base import SQLiteRepository
-from ..storage.sqlite import run_with_sqlite_retry
 
 MODULE_PROTOCOL_SQLITE_TIMEOUT_SECONDS = 1
 MODULE_PROTOCOL_SQLITE_BUSY_TIMEOUT_MS = 1000
@@ -124,10 +123,7 @@ def _module_health_snapshot(
 
 class ModuleAdminRepository(SQLiteRepository):
     def _run_retryable_module_write(self, operation):
-        return run_with_sqlite_retry(
-            operation,
-            retry_delays_seconds=MODULE_PROTOCOL_SQLITE_BUSY_RETRY_DELAYS_SECONDS,
-        )
+        return operation()
 
     def _backfill_module_name(self, conn, module_id: str, module_name: str) -> None:
         normalized_id = str(module_id or "").strip()

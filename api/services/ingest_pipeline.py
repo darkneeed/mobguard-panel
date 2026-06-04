@@ -16,8 +16,8 @@ from mobguard_platform import (
     review_reason_for_bundle,
     should_warning_only,
 )
+from mobguard_platform.panel_client import PanelClient
 from mobguard_platform.runtime_admin_defaults import ENFORCEMENT_SETTINGS_DEFAULTS
-from mobguard_platform.storage.sqlite import is_sqlite_busy_error, is_sqlite_interrupted_error
 
 from ..context import APIContainer
 from .modules import _analyze_event, _build_batch_context, _remnawave_client, _resolve_remote_user
@@ -49,6 +49,25 @@ def _utcnow() -> str:
     return datetime.utcnow().replace(microsecond=0).isoformat()
 
 
+def _enforcement_mode(settings: dict[str, Any]) -> str:
+    if bool(settings.get("dry_run", ENFORCEMENT_SETTINGS_DEFAULTS["dry_run"])):
+        return "observe"
+    if bool(settings.get("shadow_mode", True)):
+        return "observe"
+    if bool(settings.get("warning_only_mode", ENFORCEMENT_SETTINGS_DEFAULTS["warning_only_mode"])):
+        return "warning_only"
+    limiter_rollout_mode = str(settings.get("limiter_rollout_mode", "observe") or "observe").strip().lower()
+    if limiter_rollout_mode == "observe":
+        return "observe"
+    if limiter_rollout_mode == "warning_only":
+        return "warning_only"
+    return "enforce"
+
+
+def _should_apply_enforcement_jobs(settings: dict[str, Any]) -> bool:
+    return _enforcement_mode(settings) == "enforce"
+
+
 def _backoff_seconds(attempt_count: int) -> int:
     attempt = max(int(attempt_count), 1)
     return min(2 ** min(attempt, 5), 60)
@@ -63,7 +82,7 @@ def _is_transient_error(exc: BaseException) -> bool:
 
 
 def _is_best_effort_sqlite_error(exc: BaseException) -> bool:
-    return is_sqlite_busy_error(exc) or is_sqlite_interrupted_error(exc)
+    return isinstance(exc, Exception) and "database is locked" in str(exc)
 
 
 def _should_emit_busy_log(action: str, *, now: float | None = None) -> bool:
@@ -205,6 +224,29 @@ def _create_enforcement_job_tx(
     return int(row["id"]) if row else 0
 
 
+def _tracker_elapsed_seconds_tx(
+    conn: sqlite3.Connection,
+    *,
+    uuid: str,
+    ip: str,
+    now_dt: datetime,
+) -> int | None:
+    row = conn.execute(
+        "SELECT start_time FROM active_trackers WHERE key = ?",
+        (f"{uuid}:{ip}",),
+    ).fetchone()
+    if not row:
+        return None
+    start_raw = str(row["start_time"] or "").strip()
+    if not start_raw:
+        return None
+    try:
+        started_at = datetime.fromisoformat(start_raw)
+    except ValueError:
+        return None
+    return max(int((now_dt - started_at).total_seconds()), 0)
+
+
 def _plan_enforcement_tx(
     conn: sqlite3.Connection,
     runtime: Any,
@@ -223,6 +265,30 @@ def _plan_enforcement_tx(
     uuid = str(user_data.get("uuid") or "").strip()
     if not uuid:
         return None
+    ip = str(payload.get("ip") or "").strip()
+    if not ip:
+        return None
+
+    try:
+        usage_threshold_seconds = int(
+            settings.get("usage_time_threshold", ENFORCEMENT_SETTINGS_DEFAULTS["usage_time_threshold"]) or 0
+        )
+    except (TypeError, ValueError):
+        usage_threshold_seconds = int(ENFORCEMENT_SETTINGS_DEFAULTS["usage_time_threshold"])
+    usage_threshold_seconds = max(usage_threshold_seconds, 0)
+    now_dt = datetime.utcnow().replace(microsecond=0)
+    if usage_threshold_seconds > 0:
+        elapsed_seconds = _tracker_elapsed_seconds_tx(conn, uuid=uuid, ip=ip, now_dt=now_dt)
+        if elapsed_seconds is None or elapsed_seconds < usage_threshold_seconds:
+            return {
+                "type": "suppressed",
+                "reason": "usage_threshold",
+                "warning_only": False,
+                "delivery_status": "suppressed",
+                "dry_run": bool(settings.get("dry_run", ENFORCEMENT_SETTINGS_DEFAULTS["dry_run"])),
+                "elapsed_seconds": int(elapsed_seconds or 0),
+                "required_seconds": int(usage_threshold_seconds),
+            }
 
     limiter_decision = evaluate_limiter_policy_tx(
         conn,
@@ -251,14 +317,25 @@ def _plan_enforcement_tx(
     else:
         warning_only = False
 
+    runtime_mode = _enforcement_mode(settings)
     warning_only = warning_only or (
+        runtime_mode != "enforce"
+        or
         bool(settings.get("warning_only_mode", False))
         or bool(settings.get("shadow_mode", True))
         or should_warning_only(bundle)
         or not bundle.punitive_eligible
     )
     dry_run = bool(settings.get("dry_run", ENFORCEMENT_SETTINGS_DEFAULTS["dry_run"]))
-    now_dt = datetime.utcnow().replace(microsecond=0)
+    non_persistent_warning = warning_only and (
+        runtime_mode != "enforce"
+        or dry_run
+        or bool(settings.get("warning_only_mode", False))
+        or bool(settings.get("shadow_mode", True))
+        or str(limiter_decision.reason or "") in {"rollout_warning_only", "rollout_observe"}
+        or should_warning_only(bundle)
+        or not bundle.punitive_eligible
+    )
     now = now_dt.isoformat()
     violation_row = conn.execute(
         """
@@ -273,13 +350,14 @@ def _plan_enforcement_tx(
 
     if warning_only:
         next_warning_count = warning_count + 1
-        if dry_run:
+        if non_persistent_warning:
             return {
                 "type": "warning",
                 "warning_count": next_warning_count,
                 "warning_only": True,
                 "delivery_status": "applied",
-                "dry_run": True,
+                "dry_run": dry_run,
+                **({"limiter": limiter_payload} if limiter_payload else {}),
             }
         conn.execute(
             """
@@ -576,9 +654,16 @@ async def _process_claimed_event(
             review_case_id = review_case.id
             bundle.case_id = review_case_id
 
+        # Use latest live settings for enforcement to avoid batch-level stale config races.
+        live_settings = container.store.get_live_rules_state()["rules"].get("settings", {})
+        effective_settings = dict(getattr(runtime, "settings", {}) or {})
+        if isinstance(live_settings, dict):
+            effective_settings.update(live_settings)
+        runtime_view = type("RuntimeView", (), {"settings": effective_settings})()
+
         enforcement = _plan_enforcement_tx(
             conn,
-            runtime,
+            runtime_view,
             user_data,
             payload,
             bundle,
@@ -620,6 +705,7 @@ async def _process_claimed_event(
             reason_codes=bundle.reason_codes,
             reasons=bundle.reasons,
             ongoing_duration_seconds=review_detail.get("usage_profile_ongoing_duration_seconds"),
+            stationary_threshold_hours=effective_settings.get("lifetime_stationary_hours"),
         )
         if auto_review_match is not None:
             resolved_detail = await asyncio.to_thread(
@@ -745,6 +831,19 @@ async def dispatch_enforcement_batch_once(
         return {"claimed": 0, "applied": 0, "retried": 0, "failed": 0}
 
     summary = {"claimed": len(claimed_jobs), "applied": 0, "retried": 0, "failed": 0}
+    runtime_settings = container.store.get_live_rules_state()["rules"].get("settings", {})
+    if not _should_apply_enforcement_jobs(runtime_settings):
+        for job in claimed_jobs:
+            await asyncio.to_thread(container.store.mark_enforcement_job_applied, int(job["id"]))
+        logger.warning(
+            "Suppressed %s pending enforcement jobs because runtime mode is '%s'",
+            len(claimed_jobs),
+            _enforcement_mode(runtime_settings),
+        )
+        container.store.mark_ingest_pipeline_snapshot_dirty()
+        summary["applied"] = len(claimed_jobs)
+        return summary
+
     for job in claimed_jobs:
         job_id = int(job["id"])
         try:
@@ -776,77 +875,109 @@ async def ingest_worker_loop(container: APIContainer) -> None:
     last_overview_snapshot_refresh = 0.0
     last_heartbeat_write = 0.0
     while True:
-        summary = await process_ingest_batch_once(container)
-        now = time.monotonic()
-        pipeline_snapshot_result = await asyncio.to_thread(container.store.refresh_due_ingest_pipeline_snapshot)
-        if pipeline_snapshot_result.get("busy"):
-            _log_busy_skip("Pipeline snapshot refresh")
-        if now - last_overview_snapshot_refresh >= OVERVIEW_SNAPSHOT_REFRESH_INTERVAL_SECONDS:
-            try:
-                await asyncio.to_thread(container.store.refresh_overview_snapshot, low_priority=True)
-            except sqlite3.OperationalError as exc:
-                if _is_best_effort_sqlite_error(exc):
-                    _log_best_effort_skip("Overview snapshot refresh", exc)
-                else:
-                    logger.exception("Overview snapshot refresh failed")
-            except Exception:
-                logger.exception("Overview/pipeline snapshot refresh failed")
-            last_overview_snapshot_refresh = now
-        if now - last_heartbeat_write >= HEARTBEAT_WRITE_INTERVAL_SECONDS:
+        try:
+            summary = await process_ingest_batch_once(container)
+            now = time.monotonic()
+            pipeline_snapshot_result = await asyncio.to_thread(container.store.refresh_due_ingest_pipeline_snapshot)
+            if pipeline_snapshot_result.get("busy"):
+                _log_busy_skip("Pipeline snapshot refresh")
+            if now - last_overview_snapshot_refresh >= OVERVIEW_SNAPSHOT_REFRESH_INTERVAL_SECONDS:
+                try:
+                    await asyncio.to_thread(container.store.refresh_overview_snapshot, low_priority=True)
+                except sqlite3.OperationalError as exc:
+                    if _is_best_effort_sqlite_error(exc):
+                        _log_best_effort_skip("Overview snapshot refresh", exc)
+                    else:
+                        logger.exception("Overview snapshot refresh failed")
+                except Exception:
+                    logger.exception("Overview/pipeline snapshot refresh failed")
+                last_overview_snapshot_refresh = now
+            if now - last_heartbeat_write >= HEARTBEAT_WRITE_INTERVAL_SECONDS:
+                try:
+                    await asyncio.to_thread(
+                        container.store.update_service_heartbeat,
+                        INGEST_WORKER_NAME,
+                        "ok",
+                        {
+                            "claimed": summary["claimed"],
+                            "processed": summary["processed"],
+                            "retried": summary["retried"],
+                            "failed": summary["failed"],
+                        },
+                        low_priority=True,
+                    )
+                except sqlite3.OperationalError as exc:
+                    if _is_best_effort_sqlite_error(exc):
+                        _log_best_effort_skip("Ingest worker heartbeat update", exc)
+                    else:
+                        logger.exception("Failed to update ingest worker heartbeat")
+                except Exception:
+                    logger.exception("Failed to update ingest worker heartbeat")
+                last_heartbeat_write = now
+            if summary["claimed"] == 0:
+                await asyncio.sleep(INGEST_IDLE_SLEEP_SECONDS)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("Unexpected error in ingest worker loop, backing off")
             try:
                 await asyncio.to_thread(
                     container.store.update_service_heartbeat,
                     INGEST_WORKER_NAME,
-                    "ok",
-                    {
-                        "claimed": summary["claimed"],
-                        "processed": summary["processed"],
-                        "retried": summary["retried"],
-                        "failed": summary["failed"],
-                    },
+                    "error",
+                    {},
                     low_priority=True,
                 )
-            except sqlite3.OperationalError as exc:
-                if _is_best_effort_sqlite_error(exc):
-                    _log_best_effort_skip("Ingest worker heartbeat update", exc)
-                else:
-                    logger.exception("Failed to update ingest worker heartbeat")
             except Exception:
-                logger.exception("Failed to update ingest worker heartbeat")
-            last_heartbeat_write = now
-        if summary["claimed"] == 0:
-            await asyncio.sleep(INGEST_IDLE_SLEEP_SECONDS)
+                pass
+            await asyncio.sleep(5.0)
 
 
 async def enforcement_dispatcher_loop(container: APIContainer) -> None:
     last_heartbeat_write = 0.0
     while True:
-        summary = await dispatch_enforcement_batch_once(container)
-        pipeline_snapshot_result = await asyncio.to_thread(container.store.refresh_due_ingest_pipeline_snapshot)
-        if pipeline_snapshot_result.get("busy"):
-            _log_busy_skip("Pipeline snapshot refresh")
-        now = time.monotonic()
-        if now - last_heartbeat_write >= HEARTBEAT_WRITE_INTERVAL_SECONDS:
+        try:
+            summary = await dispatch_enforcement_batch_once(container)
+            pipeline_snapshot_result = await asyncio.to_thread(container.store.refresh_due_ingest_pipeline_snapshot)
+            if pipeline_snapshot_result.get("busy"):
+                _log_busy_skip("Pipeline snapshot refresh")
+            now = time.monotonic()
+            if now - last_heartbeat_write >= HEARTBEAT_WRITE_INTERVAL_SECONDS:
+                try:
+                    await asyncio.to_thread(
+                        container.store.update_service_heartbeat,
+                        ENFORCEMENT_DISPATCHER_NAME,
+                        "ok",
+                        {
+                            "claimed": summary["claimed"],
+                            "applied": summary["applied"],
+                            "retried": summary["retried"],
+                            "failed": summary["failed"],
+                        },
+                        low_priority=True,
+                    )
+                except sqlite3.OperationalError as exc:
+                    if _is_best_effort_sqlite_error(exc):
+                        _log_best_effort_skip("Enforcement dispatcher heartbeat update", exc)
+                    else:
+                        logger.exception("Failed to update enforcement dispatcher heartbeat")
+                except Exception:
+                    logger.exception("Failed to update enforcement dispatcher heartbeat")
+                last_heartbeat_write = now
+            if summary["claimed"] == 0:
+                await asyncio.sleep(ENFORCEMENT_IDLE_SLEEP_SECONDS)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("Unexpected error in enforcement dispatcher loop, backing off")
             try:
                 await asyncio.to_thread(
                     container.store.update_service_heartbeat,
                     ENFORCEMENT_DISPATCHER_NAME,
-                    "ok",
-                    {
-                        "claimed": summary["claimed"],
-                        "applied": summary["applied"],
-                        "retried": summary["retried"],
-                        "failed": summary["failed"],
-                    },
+                    "error",
+                    {},
                     low_priority=True,
                 )
-            except sqlite3.OperationalError as exc:
-                if _is_best_effort_sqlite_error(exc):
-                    _log_best_effort_skip("Enforcement dispatcher heartbeat update", exc)
-                else:
-                    logger.exception("Failed to update enforcement dispatcher heartbeat")
             except Exception:
-                logger.exception("Failed to update enforcement dispatcher heartbeat")
-            last_heartbeat_write = now
-        if summary["claimed"] == 0:
-            await asyncio.sleep(ENFORCEMENT_IDLE_SLEEP_SECONDS)
+                pass
+            await asyncio.sleep(5.0)

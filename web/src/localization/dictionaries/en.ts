@@ -811,7 +811,10 @@ export const enDictionary: TranslationDictionary = {
     reasons: {
       dry_run: "dry-run remote actions",
       shadow_mode: "shadow mode blocks hard actions",
-      warning_only_mode: "warning-only escalation"
+      warning_only_mode: "warning-only escalation",
+      limiter_observe: "limiter is running in observe mode",
+      limiter_warning_only: "limiter allows warning-only escalation",
+      limiter_enforce: "limiter allows automatic restrictions"
     },
     flags: {
       auto_enforce_requires_hard_or_multi_signal: "Require hard or multi-signal for auto-enforce",
@@ -900,8 +903,14 @@ export const enDictionary: TranslationDictionary = {
     },
     integrationFields: {
       remnawaveApiUrl: "Remnawave API URL",
-      remnawaveApiUrlDescription: "Base URL of Remnawave API used for node online metrics and user lookups.",
-      remnawaveApiUrlPlaceholder: "https://panel.example.com/api"
+      remnawaveApiUrlDescription: "Base Remnawave URL used for node online metrics and user lookups (both with and without /api are supported).",
+      remnawaveApiUrlPlaceholder: "https://panel.example.com",
+      bedolagaApiUrl: "Bedolaga API URL",
+      bedolagaApiUrlDescription: "Base Bedolaga URL used for integration.",
+      bedolagaApiToken: "Bedolaga API Token",
+      bedolagaApiTokenDescription: "Secret token used for Bedolaga API authorization.",
+      bedolagaTimeout: "Bedolaga Timeout (sec)",
+      bedolagaTimeoutDescription: "Maximum timeout for Bedolaga upstream requests.",
     },
     interfaceTitle: "Interface on this device",
     interfaceDescription: "Language, palette, and theme are applied immediately and stored locally in the browser.",

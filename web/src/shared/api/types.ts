@@ -41,6 +41,9 @@ export type BrandingConfig = {
   panel_name: string;
   panel_logo_url: string;
   remnawave_api_url?: string;
+  bedolaga_api_url?: string;
+  bedolaga_api_token?: string;
+  bedolaga_timeout_seconds?: number;
 };
 
 export type OwnerSecurityStatus = {

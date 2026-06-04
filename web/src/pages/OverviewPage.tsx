@@ -168,6 +168,13 @@ export function OverviewPage({ session: _session }: { session?: Session }) {
   const warningModules = modules?.items.filter((item) => moduleVariant(item) === "severity-high") || [];
   const automationModeReasons = automationModeReasonLabels(t, overview?.automation_status);
   const automationGuardrails = automationGuardrailLabels(t, overview?.automation_status);
+  const automationMode = automationModeLabel(t, overview?.automation_status);
+  const automationModeBadgeClass =
+    overview?.automation_status?.mode === "enforce"
+      ? "status-resolved"
+      : overview?.automation_status?.mode === "warning_only"
+        ? "severity-high"
+        : "review-only";
   const topModules = useMemo(
     () =>
       [...(modules?.items || [])]
@@ -259,11 +266,11 @@ export function OverviewPage({ session: _session }: { session?: Session }) {
           <strong>{modulesOnline}</strong>
         </div>
         <div className="stat-card">
-          <span>В нарушении</span>
+          <span>С ограничениями</span>
           <strong>{violatingNow}</strong>
         </div>
         <div className="stat-card">
-          <span>Без нарушения</span>
+          <span>В норме</span>
           <strong>{compliantNow}</strong>
         </div>
         <div className="stat-card">
@@ -300,11 +307,11 @@ export function OverviewPage({ session: _session }: { session?: Session }) {
               <strong>{enforcement?.active_total ?? "—"}</strong>
             </div>
             <div className="module-ops-chip">
-              <span>Сейчас нарушают</span>
+              <span>Нарушают правила</span>
               <strong>{violatingNow}</strong>
             </div>
             <div className="module-ops-chip">
-              <span>Сейчас по правилам</span>
+              <span>В норме</span>
               <strong>{compliantNow}</strong>
             </div>
             <div className="module-ops-chip">
@@ -332,7 +339,7 @@ export function OverviewPage({ session: _session }: { session?: Session }) {
           <div className="panel-heading">
             <h2>Поток обработки</h2>
             <p className="muted">
-              Очередь, лаг и активные санкции без тяжёлых вспомогательных карточек.
+              Очередь, лаг и активные ограничения без тяжёлых вспомогательных карточек.
             </p>
           </div>
           <div className="stats-grid overview-flow-grid">
@@ -385,28 +392,43 @@ export function OverviewPage({ session: _session }: { session?: Session }) {
                 Текущие решения принимаются на основе настроек и обучения.
               </p>
             </div>
-              <div className="detail-list">
-                <div>
-                  <dt>Эффективный режим</dt>
-                  <dd>{automationModeLabel(t, overview?.automation_status)}</dd>
-                </div>
-                <div>
-                  <dt>Почему сейчас так</dt>
-                  <dd>
-                    {automationModeReasons.length
-                      ? automationModeReasons.join(", ")
-                      : "Блокирующих режим факторов нет"}
-                  </dd>
-                </div>
-                <div>
-                  <dt>Ограничители</dt>
-                  <dd>
-                    {automationGuardrails.length
-                      ? automationGuardrails.join(", ")
-                      : "Дополнительные guardrail-флаги не включены"}
-                  </dd>
-                </div>
+            <div className="automation-overview">
+              <div className="automation-overview-mode">
+                <span>{t("rules.automationStatus.modeLabel")}</span>
+                <strong>{automationMode}</strong>
+                <span className={`status-badge ${automationModeBadgeClass}`}>{automationMode}</span>
               </div>
+              <div className="automation-overview-grid">
+                <section className="automation-overview-section">
+                  <h3>{t("rules.automationStatus.modeReasonsLabel")}</h3>
+                  {automationModeReasons.length ? (
+                    <ul className="automation-pill-list">
+                      {automationModeReasons.map((reason) => (
+                        <li className="tag severity-high" key={reason}>
+                          {reason}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="muted">{t("rules.automationStatus.noModeReasons")}</p>
+                  )}
+                </section>
+                <section className="automation-overview-section">
+                  <h3>{t("rules.automationStatus.guardrailsLabel")}</h3>
+                  {automationGuardrails.length ? (
+                    <ul className="automation-pill-list">
+                      {automationGuardrails.map((guardrail) => (
+                        <li className="tag review-only" key={guardrail}>
+                          {guardrail}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="muted">{t("rules.automationStatus.noGuardrails")}</p>
+                  )}
+                </section>
+              </div>
+            </div>
             <div className="action-row">
               <Link className="button-link ghost" to="/rules/general">
                 Настроить правила

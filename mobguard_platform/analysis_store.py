@@ -6,7 +6,7 @@ import sqlite3
 from datetime import datetime, timedelta
 from typing import Any, Optional
 
-from .storage.sqlite import SQLiteStorage
+from .storage.postgres import PostgresStorage
 
 
 def utcnow() -> datetime:
@@ -18,15 +18,15 @@ def utcnow_iso() -> str:
 
 
 class AnalysisStore:
-    def __init__(self, db_path: str, *, storage: SQLiteStorage | None = None):
+    def __init__(self, db_path: str, *, storage: PostgresStorage):
         self.db_path = db_path
-        self.storage = storage or SQLiteStorage(db_path)
+        self.storage = storage
 
-    def _connect(self) -> sqlite3.Connection:
+    def _connect(self):
         return self.storage.connect()
 
     def init_schema(self) -> None:
-        if getattr(self.storage, "backend", "sqlite") != "sqlite":
+        if getattr(self.storage, "backend", "postgres") != "sqlite":
             return
         with self._connect() as conn:
             conn.execute("PRAGMA journal_mode=WAL")

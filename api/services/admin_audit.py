@@ -6,11 +6,8 @@ from datetime import datetime
 from typing import Any
 
 from ..context import APIContainer
-from mobguard_platform.storage.sqlite import is_sqlite_busy_error, run_with_sqlite_retry
-
 
 logger = logging.getLogger(__name__)
-ADMIN_AUDIT_RETRY_DELAYS_SECONDS = (0.05, 0.1, 0.2)
 
 
 def actor_name(session: dict[str, Any]) -> str:
@@ -43,23 +40,19 @@ def record_admin_action(
         "details": details or {},
     }
     try:
-        return run_with_sqlite_retry(
-            lambda: container.store.record_admin_audit_event(**payload),
-            retry_delays_seconds=ADMIN_AUDIT_RETRY_DELAYS_SECONDS,
-        )
-    except sqlite3.OperationalError as exc:
-        if not is_sqlite_busy_error(exc):
-            raise
+        return container.store.record_admin_audit_event(**payload)
+    except Exception as exc:
         logger.warning(
-            "Admin audit skipped because SQLite is busy: action=%s target=%s:%s",
+            "Admin audit skipped because database error: action=%s target=%s:%s",
             action,
             target_type,
             target_id,
+            exc_info=True,
         )
         return {
             "id": 0,
             **payload,
             "created_at": datetime.utcnow().replace(microsecond=0).isoformat(),
             "persisted": False,
-            "skip_reason": "database_locked",
+            "skip_reason": "database_error",
         }

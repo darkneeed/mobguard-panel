@@ -32,6 +32,14 @@ from .runtime_state import load_env_values, load_runtime_config
 
 logger = logging.getLogger(__name__)
 TELEGRAM_API_ROOT = "https://api.telegram.org"
+ADMIN_REASON_MAX_LINES = 4
+ADMIN_REASON_OMIT_PREFIXES = (
+    "[analysis]",
+    "querying ipinfo",
+    "ipinfo/runtime asn result",
+    "hostname:",
+    "asn classification",
+)
 
 
 @dataclass(slots=True)
@@ -265,6 +273,25 @@ def _identity_payload(user: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
+def _compact_admin_reason_lines(raw_lines: list[Any]) -> list[str]:
+    compact: list[str] = []
+    seen: set[str] = set()
+    for item in raw_lines:
+        text = " ".join(str(item or "").split())
+        if not text:
+            continue
+        lowered = text.lower()
+        if any(lowered.startswith(prefix) for prefix in ADMIN_REASON_OMIT_PREFIXES):
+            continue
+        if lowered in seen:
+            continue
+        seen.add(lowered)
+        compact.append(escape_html(text))
+        if len(compact) >= ADMIN_REASON_MAX_LINES:
+            break
+    return compact
+
+
 async def emit_ingest_notifications(
     container: Any,
     user: Mapping[str, Any],
@@ -291,7 +318,15 @@ async def emit_ingest_notifications(
         if review_reason and bundle.case_id:
             await _notify_review_case(notifier, container, user, bundle, tag, review_reason)
         if enforcement:
-            await _notify_enforcement(notifier, container, user, bundle, tag, enforcement)
+            await _notify_enforcement(
+                notifier,
+                container,
+                user,
+                bundle,
+                tag,
+                enforcement,
+                review_reason=review_reason,
+            )
     except Exception:
         logger.exception("Post-analysis Telegram notification flow failed")
 
@@ -354,14 +389,20 @@ async def _notify_review_case(
     usage_lines = build_usage_profile_admin_lines(usage_profile, scenario="usage_profile_risk")
     if usage_lines:
         message += "\n" + "\n".join(usage_lines) + "\n"
-    if bundle.log:
-        message += "\n<b>Основания:</b>\n"
-        for entry in bundle.log:
-            message += f"  • {escape_html(entry)}\n"
+    compact_reasons = _compact_admin_reason_lines(getattr(bundle, "log", []) or [])
+    if compact_reasons:
+        message += "\n<b>Ключевые основания:</b>\n"
+        for entry in compact_reasons:
+            message += f"  • {entry}\n"
+    dedupe_key = (
+        f"review-case:{int(bundle.case_id)}"
+        if bundle.case_id not in (None, "")
+        else f"review:{user.get('uuid')}:{bundle.ip}:{review_reason}"
+    )
     await notifier.notify_admin(
         message,
         event="review",
-        dedupe_key=f"review:{user.get('uuid')}:{bundle.ip}:{review_reason}",
+        dedupe_key=dedupe_key,
     )
 
 
@@ -372,6 +413,8 @@ async def _notify_enforcement(
     bundle: Any,
     tag: str,
     enforcement: Mapping[str, Any],
+    *,
+    review_reason: str | None = None,
 ) -> None:
     raw_settings = _runtime_settings(container)
     env_values = load_env_values(container)
@@ -411,9 +454,11 @@ async def _notify_enforcement(
     admin_message = ""
     user_message = ""
     user_event = ""
-    if str(enforcement.get("type") or "") == "warning":
+    enforcement_type = str(enforcement.get("type") or "")
+    is_warning_only = bool(enforcement.get("warning_only"))
+    if enforcement_type == "warning":
         if bool(enforcement.get("warning_only")):
-            if admin_event_enabled(raw_settings, "warning_only", has_admin_bot=has_admin_bot):
+            if not review_reason and admin_event_enabled(raw_settings, "warning_only", has_admin_bot=has_admin_bot):
                 admin_message = render_telegram_template(raw_settings, "admin_warning_only_template", common_context)
         else:
             if admin_event_enabled(raw_settings, "warning", has_admin_bot=has_admin_bot):
@@ -424,27 +469,33 @@ async def _notify_enforcement(
             user_message = render_telegram_template(raw_settings, "user_warning_only_template", common_context)
         else:
             user_message = render_telegram_template(raw_settings, "user_warning_template", common_context)
-    elif str(enforcement.get("type") or "") == "ban":
+    elif enforcement_type == "ban":
         if admin_event_enabled(raw_settings, "ban", has_admin_bot=has_admin_bot):
             admin_message = render_telegram_template(raw_settings, "admin_ban_template", common_context)
         user_event = "ban"
         user_message = render_telegram_template(raw_settings, "user_ban_template", common_context)
 
-    if admin_message and bundle.log:
-        admin_message += "\n<b>Основание:</b>\n"
-        for entry in bundle.log:
-            admin_message += f"  • {escape_html(entry)}\n"
     if admin_message:
+        compact_reasons = _compact_admin_reason_lines(getattr(bundle, "log", []) or [])
+        if compact_reasons:
+            admin_message += "\n<b>Ключевые основания:</b>\n"
+            for entry in compact_reasons:
+                admin_message += f"  • {entry}\n"
+    if admin_message:
+        if enforcement_type == "warning" and is_warning_only and bundle.case_id not in (None, ""):
+            admin_dedupe_key = f"enforcement-warning-case:{int(bundle.case_id)}"
+        else:
+            admin_dedupe_key = f"enforcement:{bundle.event_id}:{enforcement_type}:{is_warning_only}"
         await notifier.notify_admin(
             admin_message,
             event=(
                 "warning_only"
-                if str(enforcement.get("type") or "") == "warning" and bool(enforcement.get("warning_only"))
+                if enforcement_type == "warning" and is_warning_only
                 else "warning"
-                if str(enforcement.get("type") or "") == "warning"
+                if enforcement_type == "warning"
                 else "ban"
             ),
-            dedupe_key=f"enforcement:{bundle.event_id}:{enforcement.get('type')}:{enforcement.get('warning_only')}",
+            dedupe_key=admin_dedupe_key,
         )
     telegram_id = user.get("telegramId")
     if not dry_run and user_message and telegram_id not in (None, "") and has_user_bot:

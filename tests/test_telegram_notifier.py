@@ -116,7 +116,7 @@ class TelegramNotifierFlowTests(unittest.TestCase):
         self.assertIn("Case ID", text)
         self.assertIn("alice", text)
         self.assertIn("Provider review required", text)
-        self.assertTrue(str(kwargs.get("dedupe_key") or "").startswith("review:"))
+        self.assertEqual(str(kwargs.get("dedupe_key") or ""), f"review-case:{bundle.case_id}")
         self.assertEqual(self.notifier.user_calls, [])
 
     def test_observe_mode_suppresses_user_warning_messages(self):
@@ -149,6 +149,50 @@ class TelegramNotifierFlowTests(unittest.TestCase):
 
         self.assertEqual(len(self.notifier.admin_calls), 1)
         self.assertEqual(self.notifier.user_calls, [])
+
+    def test_warning_only_with_review_reason_does_not_duplicate_admin_case_notifications(self):
+        user = {"uuid": "uuid-1", "username": "alice", "telegramId": "1001", "id": 42}
+        bundle = DecisionBundle(
+            ip="10.10.10.22",
+            verdict="HOME",
+            confidence_band="PROBABLE_HOME",
+            score=-20,
+            asn=12345,
+            isp="MTS",
+        )
+        bundle.log.extend(
+            [
+                "[ANALYSIS] Starting analysis for IP 10.10.10.22",
+                "Querying IPInfo API",
+                "Pure HOME ASN 12345 (-100 points)",
+            ]
+        )
+        event_id = self.store.record_analysis_event(user, bundle.ip, "TAG", bundle)
+        summary = self.store.ensure_review_case(user, bundle.ip, "TAG", bundle, event_id, "provider_conflict")
+        bundle.case_id = summary.id
+        bundle.event_id = event_id
+
+        asyncio.run(
+            emit_ingest_notifications(
+                self.container,
+                user,
+                bundle,
+                "TAG",
+                "provider_conflict",
+                {
+                    "type": "warning",
+                    "warning_count": 1,
+                    "warning_only": True,
+                },
+            )
+        )
+
+        self.assertEqual(len(self.notifier.admin_calls), 1)
+        text, kwargs = self.notifier.admin_calls[0]
+        self.assertEqual(str(kwargs.get("dedupe_key") or ""), f"review-case:{bundle.case_id}")
+        self.assertIn("Pure HOME ASN 12345", text)
+        self.assertNotIn("Starting analysis for IP", text)
+        self.assertNotIn("Querying IPInfo API", text)
 
 
 if __name__ == "__main__":

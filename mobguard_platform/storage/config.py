@@ -4,13 +4,12 @@ from dataclasses import dataclass
 from typing import Any, Mapping
 
 
-VALID_DB_BACKENDS = frozenset({"sqlite", "postgres"})
+VALID_DB_BACKENDS = frozenset({"postgres"})
 
 
 @dataclass(frozen=True)
 class DatabaseBackendConfig:
     backend: str
-    sqlite_path: str
     postgres_dsn: str | None = None
     postgres_host: str | None = None
     postgres_port: int = 5432
@@ -39,12 +38,11 @@ def load_database_backend_config(
     inferred_dsn = _optional_value(env.get("MOBGUARD_POSTGRES_DSN") or env.get("DATABASE_URL"))
     backend = str(env.get("MOBGUARD_DB_BACKEND") or settings.get("db_backend") or "").strip().lower()
     if not backend:
-        backend = "postgres" if inferred_dsn and inferred_dsn.startswith("postgres") else "sqlite"
+        backend = "postgres"
     if backend not in VALID_DB_BACKENDS:
         raise ValueError(f"Unsupported database backend: {backend}")
     return DatabaseBackendConfig(
         backend=backend,
-        sqlite_path=str(settings.get("db_file") or "").strip(),
         postgres_dsn=_optional_value(inferred_dsn or settings.get("postgres_dsn")),
         postgres_host=_optional_value(env.get("MOBGUARD_POSTGRES_HOST") or settings.get("postgres_host")),
         postgres_port=_coerce_port(env.get("MOBGUARD_POSTGRES_PORT") or settings.get("postgres_port")),

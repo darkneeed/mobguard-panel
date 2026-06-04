@@ -10,7 +10,6 @@ from fastapi import HTTPException
 
 from mobguard_platform import review_reason_for_bundle, validate_live_rules_patch
 from mobguard_platform.usage_profile import build_usage_profile_snapshot
-from mobguard_platform.storage.sqlite import is_sqlite_busy_error
 
 from .modules import _analyze_event, _build_batch_context
 from .review_auto_resolution import AUTO_REVIEW_ACTOR, match_review_auto_resolution
@@ -170,8 +169,8 @@ async def recheck_open_reviews(
             if not batch_ids or page * int(listing.get("page_size") or 100) >= int(listing.get("count") or 0):
                 break
             page += 1
-    except sqlite3.OperationalError as exc:
-        if skip_on_busy and is_sqlite_busy_error(exc):
+    except Exception as exc:
+        if skip_on_busy and "database is locked" in str(exc):
             logger.info("Skipping open-review recheck because SQLite is busy during listing")
             return _recheck_busy_payload(revision=revision)
         raise
@@ -245,6 +244,7 @@ async def _recheck_case_ids(
                 reason_codes=bundle.reason_codes,
                 reasons=bundle.reasons,
                 ongoing_duration_seconds=detail.get("usage_profile_ongoing_duration_seconds"),
+                stationary_threshold_hours=scoring_runtime.settings.get("lifetime_stationary_hours"),
             )
             recheck_review_reason = (
                 next_review_reason
@@ -275,8 +275,8 @@ async def _recheck_case_ids(
                     None,
                     auto_review_match.build_note(),
                 )
-        except sqlite3.OperationalError as exc:
-            if skip_on_busy and is_sqlite_busy_error(exc):
+        except Exception as exc:
+            if skip_on_busy and "database is locked" in str(exc):
                 logger.info("Skipping review recheck because SQLite is busy at case_id=%s", case_id)
                 return _recheck_busy_payload(revision=revision, counts=changed_counts, items=items)
             raise
@@ -414,8 +414,8 @@ async def recheck_provider_sensitive_reviews(
                 if not batch_ids or page * int(listing.get("page_size") or 100) >= int(listing.get("count") or 0):
                     break
                 page += 1
-    except sqlite3.OperationalError as exc:
-        if skip_on_busy and is_sqlite_busy_error(exc):
+    except Exception as exc:
+        if skip_on_busy and "database is locked" in str(exc):
             logger.info("Skipping provider-sensitive review recheck because SQLite is busy during listing")
             return _recheck_busy_payload(revision=revision)
         raise

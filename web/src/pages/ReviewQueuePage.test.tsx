@@ -230,7 +230,7 @@ describe("ReviewQueuePage", () => {
 
     expect((await screen.findAllByText("alpha")).length).toBeGreaterThan(0);
     await userEvent.click(screen.getByRole("button", { name: "Select page" }));
-    await userEvent.click(screen.getByRole("button", { name: "Set selected to MOBILE" }));
+    await userEvent.click(screen.getByRole("button", { name: "Mark as mobile" }));
 
     await waitFor(() => {
       expect(api.resolveReview).toHaveBeenNthCalledWith(1, "1", "MOBILE", "bulk action from queue (3)");
@@ -258,7 +258,7 @@ describe("ReviewQueuePage", () => {
     expect(screen.getByText("IP only")).toBeInTheDocument();
     expect(screen.getByText("2 IPs on this device")).toBeInTheDocument();
     expect(screen.getByText("1 IPs on this account")).toBeInTheDocument();
-    expect(screen.getByText("This IP only")).toBeInTheDocument();
+    expect(screen.getByText("1 IPs in this IP-only context")).toBeInTheDocument();
     expect(screen.getByText("1.1.1.1 ×2 · 1h")).toBeInTheDocument();
     expect(screen.getByText("3.3.3.3 ×1 · 0m")).toBeInTheDocument();
     expect(screen.getByText("ISP A")).toBeInTheDocument();

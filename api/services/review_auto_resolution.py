@@ -54,6 +54,18 @@ def _activity_duration_hours(ongoing_duration_seconds: Any) -> float | None:
     return duration_seconds / 3600.0
 
 
+def _stationary_threshold_hours(value: Any) -> float | None:
+    if value in (None, ""):
+        return None
+    try:
+        threshold = float(value)
+    except (TypeError, ValueError):
+        return None
+    if threshold <= 0:
+        return None
+    return threshold
+
+
 def _provider_key(provider_evidence: Mapping[str, Any] | None) -> str:
     if not isinstance(provider_evidence, Mapping):
         return ""
@@ -93,6 +105,7 @@ def _extract_keywords(reasons: Iterable[Any] | None) -> set[str]:
 def _build_match(
     *,
     rule_id: str,
+    resolution: str = "MOBILE",
     precision: float,
     support: int,
     review_reason: str,
@@ -101,6 +114,7 @@ def _build_match(
     activity_duration_hours: float | None,
     keywords: set[str],
     reason_codes: set[str],
+    extra_audit: Mapping[str, Any] | None = None,
 ) -> AutoReviewMatch:
     audit_payload: dict[str, Any] = {
         "rule_id": rule_id,
@@ -117,9 +131,13 @@ def _build_match(
         audit_payload["keywords"] = sorted(keywords)
     if reason_codes:
         audit_payload["reason_codes"] = sorted(reason_codes)
+    if extra_audit:
+        for key, value in dict(extra_audit).items():
+            if value is not None:
+                audit_payload[str(key)] = value
     return AutoReviewMatch(
         rule_id=rule_id,
-        resolution="MOBILE",
+        resolution=resolution,
         precision=precision,
         support=support,
         audit_payload=audit_payload,
@@ -134,6 +152,7 @@ def match_review_auto_resolution(
     reason_codes: Iterable[str] | None,
     reasons: Iterable[Any] | None,
     ongoing_duration_seconds: Any = None,
+    stationary_threshold_hours: Any = None,
     now: datetime | None = None,
 ) -> AutoReviewMatch | None:
     current_time = now or datetime.utcnow().replace(microsecond=0)
@@ -142,7 +161,35 @@ def match_review_auto_resolution(
     normalized_reason_codes = _normalized_reason_codes(reason_codes)
     keywords = _extract_keywords(reasons)
     age_hours = _case_age_hours(opened_at, current_time)
+    if age_hours is not None and age_hours > 96.0:
+        return None
     activity_hours = _activity_duration_hours(ongoing_duration_seconds)
+    threshold_hours = _stationary_threshold_hours(stationary_threshold_hours)
+
+    # Long-lived stationary activity should auto-resolve to HOME once threshold is reached.
+    if threshold_hours is not None:
+        effective_hours = activity_hours if activity_hours is not None else age_hours
+        if (
+            effective_hours is not None
+            and effective_hours >= threshold_hours
+            and normalized_review_reason in {"probable_home", "home_requires_review", "provider_conflict"}
+        ):
+            return _build_match(
+                rule_id="home_stationary_threshold",
+                resolution="HOME",
+                precision=1.0,
+                support=1,
+                review_reason=normalized_review_reason,
+                provider_key=normalized_provider_key,
+                case_age_hours=age_hours,
+                activity_duration_hours=activity_hours,
+                keywords=keywords,
+                reason_codes=normalized_reason_codes,
+                extra_audit={
+                    "stationary_threshold_hours": round(threshold_hours, 3),
+                    "effective_activity_hours": round(effective_hours, 3),
+                },
+            )
 
     if normalized_review_reason == "provider_conflict" and activity_hours is not None and activity_hours < 12:
         return _build_match(

@@ -316,7 +316,7 @@ export const ruDictionary: TranslationDictionary = {
       open: "Только открытые",
       providerConflict: "Конфликт провайдера",
       critical: "Критичные",
-      punitive: "С санкцией",
+      punitive: "С ограничением",
       shortActivity: "Активность < 12ч",
     },
     filters: {
@@ -357,8 +357,8 @@ export const ruDictionary: TranslationDictionary = {
       severityMedium: "Средний",
       severityLow: "Низкий",
       allSeverity: "Любая срочность",
-      punitiveAny: "Любой режим санкций",
-      punitiveOnly: "Только с санкцией",
+      punitiveAny: "Любой статус ограничений",
+      punitiveOnly: "Только с ограничением",
       reviewOnly: "Только ручное ревью",
       sortPriorityDesc: "Сначала высокий приоритет",
       sortPriorityAsc: "Сначала низкий приоритет",
@@ -769,7 +769,7 @@ export const ruDictionary: TranslationDictionary = {
         label: "Реакция",
         description:
           "Определяет, будут ли нарушения ограничиваться предупреждениями или повышаться до ограничений.",
-        enforce: "Наказания",
+        enforce: "Ограничения",
         warningOnly: "Только предупреждения",
       },
     },
@@ -867,6 +867,9 @@ export const ruDictionary: TranslationDictionary = {
       dry_run: "режим dry-run не даёт выполнять удалённые действия",
       shadow_mode: "теневой режим блокирует жёсткие действия",
       warning_only_mode: "эскалация ограничена предупреждениями",
+      limiter_observe: "limiter работает в режиме наблюдения",
+      limiter_warning_only: "limiter разрешает только предупреждения",
+      limiter_enforce: "limiter разрешает автоматические ограничения",
     },
     flags: {
       auto_enforce_requires_hard_or_multi_signal:
@@ -969,8 +972,14 @@ export const ruDictionary: TranslationDictionary = {
     integrationFields: {
       remnawaveApiUrl: "URL Remnawave API",
       remnawaveApiUrlDescription:
-        "Базовый URL Remnawave API для online-метрик нод и lookup пользователей.",
-      remnawaveApiUrlPlaceholder: "https://panel.example.com/api",
+        "Базовый URL Remnawave для online-метрик нод и lookup пользователей (допустимы варианты с /api и без).",
+      remnawaveApiUrlPlaceholder: "https://panel.example.com",
+      bedolagaApiUrl: "URL Bedolaga API",
+      bedolagaApiUrlDescription: "Базовый URL сервиса Bedolaga для интеграции.",
+      bedolagaApiToken: "Токен Bedolaga API",
+      bedolagaApiTokenDescription: "Секретный токен для авторизации запросов в Bedolaga.",
+      bedolagaTimeout: "Таймаут Bedolaga (сек)",
+      bedolagaTimeoutDescription: "Максимальное время ожидания ответа от Bedolaga.",
     },
     interfaceTitle: "Интерфейс на этом устройстве",
     interfaceDescription:
@@ -1480,12 +1489,12 @@ export const ruDictionary: TranslationDictionary = {
       exempt_ids: {
         label: "Исключённые системные ID",
         description:
-          "Системные user.id, исключённые из анализа и авто-санкций.",
+          "Системные user.id, исключенные из анализа и авто-ограничений.",
         recommendation: "Добавляйте только служебные или доверенные аккаунты.",
       },
       exempt_tg_ids: {
         label: "Исключённые Telegram ID",
-        description: "Telegram IDs, исключённые из анализа и авто-санкций.",
+        description: "Telegram ID, исключенные из анализа и авто-ограничений.",
         recommendation:
           "Используйте, если удобнее администрировать исключения по Telegram ID.",
       },
@@ -1682,13 +1691,13 @@ export const ruDictionary: TranslationDictionary = {
       shadow_mode: {
         label: "Теневой режим",
         description:
-          "Если включено, система анализирует и пишет кейсы, но не применяет санкции жёстко.",
+          "Если включено, система анализирует и пишет кейсы, но не применяет ограничения доступа.",
         recommendation: "Новый запуск безопаснее начинать с включённого режима.",
       },
       probable_home_warning_only: {
         label: "Probable HOME: только предупреждение",
         description:
-          "Для кейсов с вердиктом Probable HOME система ограничивается предупреждением и не повышает реакцию до жёстких санкций.",
+          "Для кейсов с вердиктом Probable HOME система ограничивается предупреждением и не применяет ограничения доступа.",
         recommendation:
           "Рекомендуется держать включённым для осторожного режима.",
       },
@@ -1784,7 +1793,7 @@ export const ruDictionary: TranslationDictionary = {
       usage_time_threshold: {
         label: "Минимальная длительность подозрительного использования (сек)",
         description:
-          "Как долго подозрительная сессия должна оставаться активной до начала санкций.",
+          "Как долго подозрительная сессия должна оставаться активной до начала ограничений доступа.",
       },
       warning_timeout_seconds: {
         label: "Пауза между предупреждениями (сек)",
@@ -1798,7 +1807,7 @@ export const ruDictionary: TranslationDictionary = {
       warning_only_mode: {
         label: "Режим только предупреждений",
         description:
-          "Никогда не повышать санкции до ограничений доступа автоматически.",
+          "Никогда не применять ограничения доступа автоматически.",
       },
       manual_review_mixed_home_enabled: {
         label: "Смешанные домашние кейсы только вручную",

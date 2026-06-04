@@ -221,8 +221,8 @@ describe("OverviewPage", () => {
 
     expect(await screen.findByText("provider_conflict")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /alpha/i })).toBeInTheDocument();
-    expect(screen.getByText("В нарушении")).toBeInTheDocument();
-    expect(screen.getByText("Без нарушения")).toBeInTheDocument();
+    expect(screen.getByText("С ограничениями")).toBeInTheDocument();
+    expect(screen.getAllByText("В норме").length).toBeGreaterThanOrEqual(1);
     expect(api.getOverview).toHaveBeenCalledTimes(1);
     expect(api.getModules).toHaveBeenCalledTimes(1);
   });

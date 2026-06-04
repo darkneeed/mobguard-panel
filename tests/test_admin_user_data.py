@@ -1,6 +1,15 @@
-import sqlite3
 import unittest
 from unittest.mock import patch
+import datetime as real_datetime
+
+class MockDatetime(real_datetime.datetime):
+    @classmethod
+    def utcnow(cls):
+        return real_datetime.datetime(2026, 4, 20, 12, 0, 0)
+    
+    @classmethod
+    def fromisoformat(cls, *args, **kwargs):
+        return real_datetime.datetime.fromisoformat(*args, **kwargs)
 
 from api import main
 from api.services.runtime_state import (
@@ -11,105 +20,77 @@ from api.services.runtime_state import (
 from mobguard_platform.panel_client import PanelClient
 
 
+class MockCursor:
+    def __init__(self, rows):
+        self.rows = rows
+    def fetchone(self):
+        return self.rows[0] if self.rows else None
+    def fetchall(self):
+        return self.rows
+
+class MockConnection:
+    def __init__(self, fetch_responses):
+        self.fetch_responses = fetch_responses
+    def execute(self, query, args=()):
+        query_str = query.strip().lower()
+        if "from review_cases" in query_str:
+            return MockCursor([self.fetch_responses["review_case"]])
+        if "from analysis_events" in query_str:
+            return MockCursor([self.fetch_responses["analysis_event"]])
+        if "sqlite_master" in query_str or "information_schema" in query_str:
+            return MockCursor([{"1": 1}])
+        return MockCursor([])
+    def commit(self): pass
+    def close(self): pass
+    def __enter__(self): return self
+    def __exit__(self, *args): pass
+
 class FakeStore:
     def __init__(self):
-        self.conn = sqlite3.connect(":memory:")
-        self.conn.row_factory = sqlite3.Row
-        self.conn.executescript(
-            """
-            CREATE TABLE review_cases (
-                id INTEGER PRIMARY KEY,
-                uuid TEXT,
-                username TEXT,
-                system_id INTEGER,
-                telegram_id TEXT,
-                status TEXT,
-                review_reason TEXT,
-                ip TEXT,
-                verdict TEXT,
-                confidence_band TEXT,
-                opened_at TEXT,
-                updated_at TEXT
-            );
-            CREATE TABLE analysis_events (
-                id INTEGER PRIMARY KEY,
-                uuid TEXT,
-                username TEXT,
-                system_id INTEGER,
-                telegram_id TEXT,
-                created_at TEXT,
-                ip TEXT,
-                tag TEXT,
-                verdict TEXT,
-                confidence_band TEXT,
-                score INTEGER,
-                isp TEXT,
-                asn INTEGER,
-                reasons_json TEXT,
-                signal_flags_json TEXT,
-                bundle_json TEXT
-            );
-            """
-        )
-        self.conn.execute(
-            """
-            INSERT INTO review_cases (
-                id, uuid, username, system_id, telegram_id, status, review_reason, ip, verdict,
-                confidence_band, opened_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                1,
-                "a878b04c-31a9-4b81-9c2c-3d0b19a2e1ad",
-                "alice",
-                42,
-                "1001",
-                "OPEN",
-                "review",
-                "10.0.0.1",
-                "HOME",
-                "PROBABLE_HOME",
-                "2026-04-09T10:00:00",
-                "2026-04-09T10:05:00",
-            ),
-        )
-        self.conn.execute(
-            """
-            INSERT INTO analysis_events (
-                id, uuid, username, system_id, telegram_id, created_at, ip, tag, verdict,
-                confidence_band, score, isp, asn, reasons_json, signal_flags_json, bundle_json
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                10,
-                "a878b04c-31a9-4b81-9c2c-3d0b19a2e1ad",
-                "alice",
-                42,
-                "1001",
-                "2026-04-09T10:04:00",
-                "10.0.0.1",
-                "TAG",
-                "HOME",
-                "PROBABLE_HOME",
-                75,
-                "ISP",
-                12345,
-                '[{"code":"provider_home_marker","source":"provider_profile","direction":"HOME","weight":-18}]',
-                '{"provider_evidence":{"provider_key":"beeline","provider_classification":"mixed","service_type_hint":"home","service_conflict":false,"review_recommended":true}}',
-                '{"reasons":[{"code":"provider_home_marker","source":"provider_profile","direction":"HOME","weight":-18}],"signal_flags":{"provider_evidence":{"provider_key":"beeline","provider_classification":"mixed","service_type_hint":"home","service_conflict":false,"review_recommended":true}}}',
-            ),
-        )
-        self.conn.commit()
+        self.mock_data = {
+            "review_case": {
+                "id": 1,
+                "uuid": "a878b04c-31a9-4b81-9c2c-3d0b19a2e1ad",
+                "username": "alice",
+                "system_id": 42,
+                "telegram_id": "1001",
+                "status": "OPEN",
+                "review_reason": "review",
+                "ip": "10.0.0.1",
+                "verdict": "HOME",
+                "confidence_band": "PROBABLE_HOME",
+                "opened_at": "2026-04-09T10:00:00",
+                "updated_at": "2026-04-09T10:05:00",
+            },
+            "analysis_event": {
+                "id": 10,
+                "uuid": "a878b04c-31a9-4b81-9c2c-3d0b19a2e1ad",
+                "username": "alice",
+                "system_id": 42,
+                "telegram_id": "1001",
+                "created_at": "2026-04-09T10:04:00",
+                "ip": "10.0.0.1",
+                "tag": "TAG",
+                "verdict": "HOME",
+                "confidence_band": "PROBABLE_HOME",
+                "score": 75,
+                "isp": "ISP",
+                "asn": 12345,
+                "reasons_json": '[{"code":"provider_home_marker","source":"provider_profile","direction":"HOME","weight":-18}]',
+                "signal_flags_json": '{"provider_evidence":{"provider_key":"beeline","provider_classification":"mixed","service_type_hint":"home","service_conflict":false,"review_recommended":true}}',
+                "bundle_json": '{"reasons":[{"code":"provider_home_marker","source":"provider_profile","direction":"HOME","weight":-18}],"signal_flags":{"provider_evidence":{"provider_key":"beeline","provider_classification":"mixed","service_type_hint":"home","service_conflict":false,"review_recommended":true}}}'
+            }
+        }
+        self.conn = MockConnection(self.mock_data)
 
     def _connect(self):
         return self.conn
+    
+    def _fast_read_connect(self):
+        return self.conn
 
     def _table_exists(self, conn, table_name):
-        row = conn.execute(
-            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
-            (table_name,),
-        ).fetchone()
-        return row is not None
+        return True
 
     def get_live_rules_state(self):
         return {
@@ -121,6 +102,13 @@ class FakeStore:
 
 
 class AdminUserDataTests(unittest.TestCase):
+    def setUp(self):
+        self.mock_dt_patcher = patch("mobguard_platform.usage_profile.datetime", MockDatetime)
+        self.mock_dt_patcher.start()
+
+    def tearDown(self):
+        self.mock_dt_patcher.stop()
+
     def test_get_user_card_coerces_optional_ids_and_skips_invalid_exempt_values(self):
         fake_store = FakeStore()
         identity = {
@@ -198,13 +186,21 @@ class PanelClientTests(unittest.TestCase):
             calls.append((method, endpoint, body))
             if endpoint == "/api/users/resolve":
                 return {"response": {"uuid": "uuid-1", "username": "alice"}}
+            if endpoint == "/api/users/uuid-1":
+                return {"response": {"uuid": "uuid-1", "username": "alice", "telegramId": "1001"}}
             return None
 
         with patch.object(client, "_request", side_effect=fake_request):
             payload = client.get_user_data("alice")
 
         self.assertEqual(payload["username"], "alice")
-        self.assertEqual(calls, [("POST", "/api/users/resolve", {"username": "alice"})])
+        self.assertEqual(
+            calls,
+            [
+                ("POST", "/api/users/resolve", {"username": "alice"}),
+                ("GET", "/api/users/uuid-1", None),
+            ],
+        )
 
     def test_repeat_lookup_uses_user_cache(self):
         client = PanelClient("https://panel.example.com", "secret")
@@ -212,7 +208,11 @@ class PanelClientTests(unittest.TestCase):
 
         def fake_request(method, endpoint, body=None):
             calls.append((method, endpoint, body))
-            return {"response": {"uuid": "uuid-1", "username": "alice"}}
+            if endpoint == "/api/users/resolve":
+                return {"response": {"uuid": "uuid-1", "username": "alice"}}
+            if endpoint == "/api/users/uuid-1":
+                return {"response": {"uuid": "uuid-1", "username": "alice", "telegramId": "1001"}}
+            return None
 
         with patch.object(client, "_request", side_effect=fake_request):
             first = client.get_user_data("alice")
@@ -220,7 +220,39 @@ class PanelClientTests(unittest.TestCase):
 
         self.assertEqual(first["uuid"], "uuid-1")
         self.assertEqual(second["uuid"], "uuid-1")
-        self.assertEqual(calls, [("POST", "/api/users/resolve", {"username": "alice"})])
+        self.assertEqual(
+            calls,
+            [
+                ("POST", "/api/users/resolve", {"username": "alice"}),
+                ("GET", "/api/users/uuid-1", None),
+            ],
+        )
+
+    def test_username_lookup_hydrates_minimal_resolve_payload_with_full_user_profile(self):
+        client = PanelClient("https://panel.example.com", "secret")
+        calls = []
+
+        def fake_request(method, endpoint, body=None):
+            calls.append((method, endpoint, body))
+            if endpoint == "/api/users/resolve":
+                return {"response": {"uuid": "uuid-1", "username": "alice"}}
+            if endpoint == "/api/users/uuid-1":
+                return {"response": {"uuid": "uuid-1", "username": "alice", "id": 42, "telegramId": "1001"}}
+            return None
+
+        with patch.object(client, "_request", side_effect=fake_request):
+            payload = client.get_user_data_by_username("alice")
+
+        self.assertEqual(payload["uuid"], "uuid-1")
+        self.assertEqual(payload["id"], 42)
+        self.assertEqual(payload["telegramId"], "1001")
+        self.assertEqual(
+            calls,
+            [
+                ("POST", "/api/users/resolve", {"username": "alice"}),
+                ("GET", "/api/users/uuid-1", None),
+            ],
+        )
 
     def test_numeric_typed_lookups_do_not_collide_between_system_and_telegram_ids(self):
         client = PanelClient("https://panel.example.com", "secret")
@@ -286,6 +318,8 @@ class PanelClientTests(unittest.TestCase):
             calls.append((method, endpoint, body))
             if endpoint == "/api/users/by-username/alice":
                 return {"response": {"uuid": "uuid-1", "username": "alice"}}
+            if endpoint == "/api/users/uuid-1":
+                return {"response": {"uuid": "uuid-1", "username": "alice", "telegramId": "1001"}}
             return None
 
         with patch.object(client, "_request", side_effect=fake_request):
@@ -298,6 +332,7 @@ class PanelClientTests(unittest.TestCase):
                 "/api/users/resolve",
                 "/api/users/resolve",
                 "/api/users/by-username/alice",
+                "/api/users/uuid-1",
             ],
         )
 

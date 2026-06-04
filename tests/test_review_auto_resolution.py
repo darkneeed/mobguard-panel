@@ -8,6 +8,62 @@ from mobguard_platform import DecisionBundle
 
 
 class ReviewAutoResolutionTests(unittest.TestCase):
+    def test_stationary_threshold_resolves_probable_home_to_home(self):
+        bundle = DecisionBundle(
+            ip="10.10.10.20",
+            verdict="PROBABLE_HOME",
+            confidence_band="PROBABLE_HOME",
+            score=-30,
+            isp="Rostelecom",
+        )
+        bundle.signal_flags["provider_evidence"] = {
+            "provider_key": "rostelecom",
+            "review_recommended": True,
+        }
+
+        match = match_review_auto_resolution(
+            opened_at="2026-05-05T10:00:00",
+            review_reason="probable_home",
+            provider_evidence=bundle.signal_flags["provider_evidence"],
+            reason_codes=bundle.reason_codes,
+            reasons=bundle.reasons,
+            ongoing_duration_seconds=13 * 3600,
+            stationary_threshold_hours=12,
+            now=datetime.fromisoformat("2026-05-06T00:00:00"),
+        )
+
+        self.assertIsNotNone(match)
+        self.assertEqual(match.rule_id, "home_stationary_threshold")
+        self.assertEqual(match.resolution, "HOME")
+        self.assertEqual(match.audit_payload.get("stationary_threshold_hours"), 12.0)
+        self.assertEqual(match.audit_payload.get("effective_activity_hours"), 13.0)
+
+    def test_stationary_threshold_does_not_match_below_threshold(self):
+        bundle = DecisionBundle(
+            ip="10.10.10.21",
+            verdict="PROBABLE_HOME",
+            confidence_band="PROBABLE_HOME",
+            score=-20,
+            isp="Rostelecom",
+        )
+        bundle.signal_flags["provider_evidence"] = {
+            "provider_key": "rostelecom",
+            "review_recommended": True,
+        }
+
+        match = match_review_auto_resolution(
+            opened_at="2026-05-05T10:00:00",
+            review_reason="probable_home",
+            provider_evidence=bundle.signal_flags["provider_evidence"],
+            reason_codes=bundle.reason_codes,
+            reasons=bundle.reasons,
+            ongoing_duration_seconds=11 * 3600,
+            stationary_threshold_hours=12,
+            now=datetime.fromisoformat("2026-05-05T22:00:00"),
+        )
+
+        self.assertIsNone(match)
+
     def test_short_provider_conflict_matches_mobile_rule(self):
         bundle = DecisionBundle(
             ip="10.10.10.10",
@@ -151,6 +207,33 @@ class ReviewAutoResolutionTests(unittest.TestCase):
             reasons=[],
             ongoing_duration_seconds=72 * 3600,
             now=datetime.fromisoformat("2026-05-06T12:30:00"),
+        )
+
+        self.assertIsNone(match)
+
+    def test_case_older_than_96_hours_does_not_auto_resolve(self):
+        # Even if a rule matches (like mobile_short_provider_conflict), it should return None if case age > 96h
+        bundle = DecisionBundle(
+            ip="10.10.10.10",
+            verdict="UNSURE",
+            confidence_band="UNSURE",
+            score=15,
+            isp="MTS",
+        )
+        bundle.signal_flags["provider_evidence"] = {
+            "provider_key": "mts",
+            "review_recommended": True,
+        }
+
+        # Case age = 97 hours (more than 96 hours)
+        match = match_review_auto_resolution(
+            opened_at="2026-05-01T10:00:00",
+            review_reason="provider_conflict",
+            provider_evidence=bundle.signal_flags["provider_evidence"],
+            reason_codes=bundle.reason_codes,
+            reasons=bundle.reasons,
+            ongoing_duration_seconds=11 * 3600,
+            now=datetime.fromisoformat("2026-05-05T11:00:00"),
         )
 
         self.assertIsNone(match)

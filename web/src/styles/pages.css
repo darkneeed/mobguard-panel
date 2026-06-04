@@ -18,6 +18,12 @@
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
 }
 
+.settings-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+}
+
 .dashboard-grid-hero {
   grid-template-columns: minmax(0, 1.4fr) minmax(320px, 0.9fr);
 }
@@ -45,6 +51,60 @@
 
 .overview-flow-meta {
   margin-top: 1rem;
+}
+
+.automation-overview {
+  margin-top: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.automation-overview-mode {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  padding: 0.9rem 1rem;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background:
+    linear-gradient(145deg, rgba(15, 118, 110, 0.12), rgba(255, 255, 255, 0)),
+    var(--surface-soft);
+}
+
+.automation-overview-mode strong {
+  font-family: "Space Grotesk", sans-serif;
+}
+
+.automation-overview-grid {
+  display: grid;
+  gap: 0.85rem;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+
+.automation-overview-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 0.95rem 1rem;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: var(--surface-soft);
+}
+
+.automation-overview-section h3 {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.automation-pill-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
 }
 
 .panel-hero {
@@ -302,6 +362,8 @@
   .sidebar {
     position: static;
     height: auto;
+    max-height: none;
+    align-self: stretch;
     overflow: visible;
     border-right: 0;
     border-bottom: 1px solid var(--line);

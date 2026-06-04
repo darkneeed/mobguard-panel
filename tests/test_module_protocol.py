@@ -5,6 +5,7 @@ import shutil
 import sqlite3
 import tempfile
 import unittest
+from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -165,6 +166,75 @@ class ModuleProtocolTests(unittest.TestCase):
         self.assertEqual(result["telegramId"], "42")
         self.assertEqual(calls, [("tg", "42")])
 
+    def test_resolve_remote_user_fallbacks_to_username_when_uuid_payload_lacks_telegram(self):
+        calls: list[tuple[str, str]] = []
+
+        class TypedClient:
+            enabled = True
+
+            def get_user_data_by_uuid(self, value):
+                calls.append(("uuid", str(value)))
+                return {"uuid": str(value), "username": "alice"}
+
+            def get_user_data_by_username(self, value):
+                calls.append(("username", str(value)))
+                return {"uuid": "uuid-from-username", "username": str(value), "telegramId": "1001"}
+
+            def get_user_data(self, value):
+                calls.append(("generic", str(value)))
+                return {"uuid": "uuid-generic", "username": str(value)}
+
+        runtime = SimpleNamespace(remnawave_client=TypedClient())
+        payload = {"uuid": "uuid-1", "username": "alice"}
+
+        result = asyncio.run(module_service._resolve_remote_user(runtime, payload))
+
+        self.assertEqual(result["uuid"], "uuid-1")
+        self.assertEqual(result["username"], "alice")
+        self.assertEqual(result["telegramId"], "1001")
+        self.assertEqual(calls, [("uuid", "uuid-1"), ("username", "alice")])
+
+    def test_resolve_remote_user_uses_raw_username_endpoint_when_cached_profile_has_no_telegram(self):
+        calls: list[tuple[str, str]] = []
+
+        class TypedClient:
+            enabled = True
+
+            def get_user_data_by_uuid(self, value):
+                calls.append(("uuid", str(value)))
+                return {"uuid": str(value), "username": "alice"}
+
+            def get_user_data_by_username(self, value):
+                calls.append(("username", str(value)))
+                return {"uuid": "uuid-1", "username": str(value)}
+
+            def _request(self, method, endpoint, body=None):
+                calls.append((method.lower(), str(endpoint)))
+                if method == "GET" and endpoint == "/api/users/by-username/alice":
+                    return {"response": {"uuid": "uuid-1", "username": "alice", "telegramId": "1001"}}
+                return None
+
+            def _extract_user(self, payload):
+                if not isinstance(payload, dict):
+                    return None
+                response = payload.get("response", payload)
+                return response if isinstance(response, dict) else None
+
+            def get_user_data(self, value):
+                calls.append(("generic", str(value)))
+                return {"uuid": "uuid-generic"}
+
+        runtime = SimpleNamespace(remnawave_client=TypedClient())
+        payload = {"uuid": "uuid-1", "username": "alice"}
+
+        result = asyncio.run(module_service._resolve_remote_user(runtime, payload))
+
+        self.assertEqual(result["telegramId"], "1001")
+        self.assertEqual(
+            calls,
+            [("uuid", "uuid-1"), ("username", "alice"), ("get", "/api/users/by-username/alice")],
+        )
+
     def test_event_batch_deduplicates_by_event_uid(self):
         self.store.create_managed_module(
             "node-a",
@@ -218,6 +288,65 @@ class ModuleProtocolTests(unittest.TestCase):
         self.assertEqual(result["queued"], 1)
         self.assertEqual(result["status"], "queued")
 
+    def test_attach_runtime_metrics_uses_highest_online_signal_for_healthy_module(self):
+        modules = [
+            {
+                "module_id": "module-vk",
+                "module_name": "VK",
+                "healthy": True,
+                "health_status": "ok",
+                "install_state": "online",
+            }
+        ]
+        container = SimpleNamespace()
+
+        with (
+            patch.object(
+                module_service,
+                "_heartbeat_detail_map",
+                return_value={
+                    "module-vk": {
+                        "activity": {
+                            "active_users": 18,
+                            "recent_events": 9,
+                            "window_seconds": 60,
+                        }
+                    }
+                },
+            ),
+            patch.object(
+                module_service,
+                "_panel_nodes_online_map",
+                return_value={"vk": 5},
+            ),
+            patch.object(
+                module_service,
+                "_module_remnawave_node_aliases",
+                return_value={},
+            ),
+            patch.object(
+                module_service,
+                "_activity_snapshot",
+                return_value={
+                    "window_seconds": 3600,
+                    "modules": {
+                        "module-vk": {
+                            "active_users": 40,
+                            "recent_events": 50,
+                        }
+                    },
+                    "totals": {
+                        "active_users_total": 40,
+                        "recent_events_total": 50,
+                    },
+                },
+            ),
+        ):
+            items, summary = module_service._attach_runtime_metrics(container, modules)
+
+        self.assertEqual(items[0]["runtime_metrics"]["active_users"], 40)
+        self.assertEqual(summary["active_users_total"], 40)
+
     def test_plan_enforcement_tx_dry_run_warning_does_not_persist_warning_state(self):
         bundle = DecisionBundle(
             ip="1.2.3.4",
@@ -232,6 +361,7 @@ class ModuleProtocolTests(unittest.TestCase):
                 "dry_run": True,
                 "shadow_mode": False,
                 "warning_only_mode": False,
+                "usage_time_threshold": 0,
                 "ban_durations_minutes": [15, 60],
             }
         )
@@ -262,7 +392,7 @@ class ModuleProtocolTests(unittest.TestCase):
         )
         self._assert_no_persisted_enforcement_state()
 
-    def test_plan_enforcement_tx_dry_run_ban_does_not_persist_strike_state(self):
+    def test_plan_enforcement_tx_dry_run_returns_non_persistent_warning(self):
         bundle = DecisionBundle(
             ip="1.2.3.5",
             verdict="HOME",
@@ -276,6 +406,7 @@ class ModuleProtocolTests(unittest.TestCase):
                 "dry_run": True,
                 "shadow_mode": False,
                 "warning_only_mode": False,
+                "usage_time_threshold": 0,
                 "ban_durations_minutes": [15, 60],
             }
         )
@@ -297,16 +428,139 @@ class ModuleProtocolTests(unittest.TestCase):
         self.assertEqual(
             enforcement,
             {
-                "type": "ban",
-                "strike": 1,
-                "ban_minutes": 15,
+                "type": "warning",
+                "warning_count": 1,
+                "warning_only": True,
                 "delivery_status": "applied",
-                "job_id": None,
                 "dry_run": True,
-                "warning_only": False,
             },
         )
         self._assert_no_persisted_enforcement_state()
+
+    def test_plan_enforcement_tx_warning_only_mode_does_not_persist_warning_state(self):
+        bundle = DecisionBundle(
+            ip="1.2.3.6",
+            verdict="HOME",
+            confidence_band="HIGH_HOME",
+            score=-80,
+            isp="ISP",
+            punitive_eligible=True,
+        )
+        runtime = SimpleNamespace(
+            settings={
+                "dry_run": False,
+                "shadow_mode": False,
+                "warning_only_mode": True,
+                "usage_time_threshold": 0,
+                "ban_durations_minutes": [15, 60],
+            }
+        )
+
+        with self.store._connect() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            enforcement = ingest_pipeline._plan_enforcement_tx(
+                conn,
+                runtime,
+                {"uuid": "uuid-warning-only"},
+                {"ip": "1.2.3.6", "tag": "SELFSTEAL_RU-YANDEX_TCP"},
+                bundle,
+                event_uid="warning-only-1",
+                analysis_event_id=1,
+                review_case_id=None,
+            )
+            conn.commit()
+
+        self.assertEqual(enforcement["type"], "warning")
+        self.assertTrue(enforcement["warning_only"])
+        self._assert_no_persisted_enforcement_state()
+
+    def test_plan_enforcement_tx_is_suppressed_until_usage_threshold_is_reached(self):
+        bundle = DecisionBundle(
+            ip="1.2.3.66",
+            verdict="HOME",
+            confidence_band="HIGH_HOME",
+            score=-80,
+            isp="ISP",
+            punitive_eligible=True,
+        )
+        runtime = SimpleNamespace(
+            settings={
+                "dry_run": False,
+                "shadow_mode": False,
+                "warning_only_mode": False,
+                "usage_time_threshold": 900,
+                "ban_durations_minutes": [15, 60],
+            }
+        )
+        now = datetime.utcnow().replace(microsecond=0).isoformat()
+
+        with self.store._connect() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            conn.execute(
+                "INSERT INTO active_trackers (key, start_time, last_seen) VALUES (?, ?, ?)",
+                ("uuid-threshold:1.2.3.66", now, now),
+            )
+            enforcement = ingest_pipeline._plan_enforcement_tx(
+                conn,
+                runtime,
+                {"uuid": "uuid-threshold"},
+                {"ip": "1.2.3.66", "tag": "SELFSTEAL_RU-YANDEX_TCP"},
+                bundle,
+                event_uid="threshold-1",
+                analysis_event_id=1,
+                review_case_id=None,
+            )
+            conn.commit()
+
+        self.assertEqual(enforcement["type"], "suppressed")
+        self.assertEqual(enforcement["reason"], "usage_threshold")
+        self.assertEqual(enforcement["required_seconds"], 900)
+        self.assertLess(enforcement["elapsed_seconds"], 900)
+        self._assert_no_persisted_enforcement_state()
+
+    def test_dispatch_enforcement_jobs_are_suppressed_outside_enforce_mode(self):
+        class FakeStore:
+            def __init__(self):
+                self.applied_ids: list[int] = []
+                self.snapshot_dirty = False
+
+            def claim_enforcement_jobs(self, owner: str, *, limit: int, claim_timeout_seconds: int):
+                return [{"id": 17, "attempt_count": 0}]
+
+            def get_live_rules_state(self):
+                return {
+                    "rules": {
+                        "settings": {
+                            "dry_run": False,
+                            "shadow_mode": False,
+                            "warning_only_mode": True,
+                            "limiter_rollout_mode": "warning_only",
+                        }
+                    }
+                }
+
+            def mark_enforcement_job_applied(self, job_id: int) -> None:
+                self.applied_ids.append(int(job_id))
+
+            def mark_ingest_pipeline_snapshot_dirty(self) -> None:
+                self.snapshot_dirty = True
+
+        fake_store = FakeStore()
+        container = SimpleNamespace(store=fake_store)
+
+        with patch.object(
+            ingest_pipeline,
+            "_dispatch_remote_job",
+            side_effect=AssertionError("remote dispatch must not run in warning-only mode"),
+        ):
+            summary = asyncio.run(ingest_pipeline.dispatch_enforcement_batch_once(container))
+
+        self.assertEqual(summary["claimed"], 1)
+        self.assertEqual(summary["applied"], 1)
+        self.assertEqual(summary["retried"], 0)
+        self.assertEqual(summary["failed"], 0)
+        self.assertEqual(fake_store.applied_ids, [17])
+        self.assertTrue(fake_store.snapshot_dirty)
 
     def test_plan_enforcement_tx_respects_limiter_rollout_modes(self):
         bundle = DecisionBundle(
@@ -322,6 +576,7 @@ class ModuleProtocolTests(unittest.TestCase):
                 "dry_run": False,
                 "shadow_mode": False,
                 "warning_only_mode": False,
+                "usage_time_threshold": 0,
                 "ban_durations_minutes": [15, 60],
                 "limiter_enabled": True,
                 "limiter_threshold_count": 1,
@@ -381,6 +636,7 @@ class ModuleProtocolTests(unittest.TestCase):
                 "dry_run": True,
                 "shadow_mode": False,
                 "warning_only_mode": False,
+                "usage_time_threshold": 0,
                 "ban_durations_minutes": [15, 60],
             },
         )
@@ -405,7 +661,7 @@ class ModuleProtocolTests(unittest.TestCase):
         )
         self._assert_no_persisted_enforcement_state()
 
-    def test_apply_enforcement_if_needed_dry_run_ban_does_not_persist_strike_state(self):
+    def test_apply_enforcement_if_needed_dry_run_returns_non_persistent_warning(self):
         bundle = DecisionBundle(
             ip="1.2.3.7",
             verdict="HOME",
@@ -421,6 +677,7 @@ class ModuleProtocolTests(unittest.TestCase):
                 "dry_run": True,
                 "shadow_mode": False,
                 "warning_only_mode": False,
+                "usage_time_threshold": 0,
                 "ban_durations_minutes": [15, 60],
             },
         )
@@ -437,13 +694,55 @@ class ModuleProtocolTests(unittest.TestCase):
         self.assertEqual(
             enforcement,
             {
-                "type": "ban",
-                "strike": 1,
-                "ban_minutes": 15,
-                "remote_updated": False,
+                "type": "warning",
+                "warning_count": 1,
+                "warning_only": True,
                 "dry_run": True,
             },
         )
+        self._assert_no_persisted_enforcement_state()
+
+    def test_apply_enforcement_if_needed_is_suppressed_until_usage_threshold_is_reached(self):
+        bundle = DecisionBundle(
+            ip="1.2.3.77",
+            verdict="HOME",
+            confidence_band="HIGH_HOME",
+            score=-120,
+            isp="ISP",
+            punitive_eligible=True,
+        )
+        now = datetime.utcnow().replace(microsecond=0).isoformat()
+        asyncio.run(
+            self.analysis_store.execute(
+                "INSERT INTO active_trackers (key, start_time, last_seen) VALUES (?, ?, ?)",
+                ("uuid-module-threshold:1.2.3.77", now, now),
+            )
+        )
+        runtime = SimpleNamespace(
+            container=self.container,
+            remnawave_client=SimpleNamespace(enabled=True),
+            settings={
+                "dry_run": False,
+                "shadow_mode": False,
+                "warning_only_mode": False,
+                "usage_time_threshold": 900,
+                "ban_durations_minutes": [15, 60],
+            },
+        )
+
+        enforcement = asyncio.run(
+            module_service._apply_enforcement_if_needed(
+                runtime,
+                {"uuid": "uuid-module-threshold"},
+                {"ip": "1.2.3.77", "tag": "SELFSTEAL_RU-YANDEX_TCP"},
+                bundle,
+            )
+        )
+
+        self.assertEqual(enforcement["type"], "suppressed")
+        self.assertEqual(enforcement["reason"], "usage_threshold")
+        self.assertEqual(enforcement["required_seconds"], 900)
+        self.assertLess(enforcement["elapsed_seconds"], 900)
         self._assert_no_persisted_enforcement_state()
 
     def test_event_batch_returns_503_when_storage_is_temporarily_busy(self):

@@ -45,11 +45,23 @@ export function automationModeLabel(t: TranslateFn, status: AutomationStatus | n
   return t(`automationStatus.modes.${mode}`);
 }
 
+function _fallbackReasonLabel(reason: string): string {
+  return reason.replace(/_/g, " ");
+}
+
 export function automationModeReasonLabels(t: TranslateFn, status: AutomationStatus | null | undefined): string[] {
-  return (status?.mode_reasons || []).map((reason) => t(`automationStatus.reasons.${reason}`));
+  return (status?.mode_reasons || []).map((reason) => {
+    const key = `automationStatus.reasons.${reason}`;
+    const translated = t(key);
+    return translated === key ? _fallbackReasonLabel(reason) : translated;
+  });
 }
 
 export function automationGuardrailLabels(t: TranslateFn, status: AutomationStatus | null | undefined): string[] {
   const flags = status?.flags || {};
-  return GUARDRAIL_KEYS.filter((key) => Boolean(flags[key])).map((key) => t(`automationStatus.flags.${key}`));
+  return GUARDRAIL_KEYS.filter((key) => Boolean(flags[key])).map((key) => {
+    const translationKey = `automationStatus.flags.${key}`;
+    const translated = t(translationKey);
+    return translated === translationKey ? _fallbackReasonLabel(key) : translated;
+  });
 }

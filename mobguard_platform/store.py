@@ -21,7 +21,7 @@ from .repositories.modules_admin import ModuleAdminRepository
 from .repositories.review_admin import ReviewAdminRepository
 from .repositories.sessions import AdminSessionRepository
 from .runtime import canonicalize_runtime_bound_settings
-from .storage.sqlite import SQLiteStorage, is_sqlite_busy_error, is_sqlite_interrupted_error
+from .storage.postgres import PostgresStorage
 
 
 EDITABLE_TOP_LEVEL_KEYS = {
@@ -553,7 +553,7 @@ class PlatformStore:
         base_config: Optional[dict[str, Any]] = None,
         config_path: Optional[str] = None,
         *,
-        storage: SQLiteStorage | None = None,
+        storage: PostgresStorage,
     ):
         self.db_path = db_path
         self.base_config = copy.deepcopy(base_config or {})
@@ -566,7 +566,7 @@ class PlatformStore:
         self._maintenance_state_lock = threading.Lock()
         self._ingest_pipeline_snapshot_dirty = True
         self._last_ingest_pipeline_snapshot_attempt_monotonic = 0.0
-        self.storage = storage or SQLiteStorage(db_path)
+        self.storage = storage
         self.sessions = AdminSessionRepository(self.storage)
         self.admin_security = AdminSecurityRepository(self.storage)
         self.health = ServiceHealthRepository(self.storage, db_path)
@@ -682,7 +682,8 @@ class PlatformStore:
             self.refresh_ingest_pipeline_snapshot(low_priority=True)
             return {"attempted": True, "refreshed": True, "busy": False}
         except sqlite3.OperationalError as exc:
-            if is_sqlite_busy_error(exc) or is_sqlite_interrupted_error(exc):
+            msg = str(exc).lower()
+            if "database is locked" in msg or "busy" in msg or "interrupted" in msg:
                 return {"attempted": True, "refreshed": False, "busy": True, "reason": str(exc)}
             raise
 
@@ -804,9 +805,9 @@ class PlatformStore:
             return copy.deepcopy(cached[1])
         try:
             payload = loader()
-        except sqlite3.OperationalError as exc:
-            if allow_stale_on_busy and (is_sqlite_busy_error(exc) or is_sqlite_interrupted_error(exc)):
-                reason = "query_timeout" if is_sqlite_interrupted_error(exc) else "database_locked"
+        except Exception as exc:
+            if allow_stale_on_busy and "database is locked" in str(exc):
+                reason = "database_locked"
                 if cached:
                     logger.warning("Serving stale cache for %s because SQLite fast-read hit %s", cache_key, reason)
                     return copy.deepcopy(cached[1])
@@ -1788,7 +1789,7 @@ class PlatformStore:
                 "CREATE INDEX IF NOT EXISTS idx_review_cases_latest_event_id ON review_cases(latest_event_id)"
             )
             conn.execute(
-                "CREATE INDEX IF NOT EXISTS idx_analysis_events_system_id ON analysis_events(system_id)"
+                "CREATE INDEX IF NOT EXISTS idx_analysis_events_system_id ON analysis_events(system_id, created_at DESC)"
             )
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_analysis_events_created_at ON analysis_events(created_at DESC)"
@@ -2448,11 +2449,11 @@ class PlatformStore:
                 return self.refresh_ingest_pipeline_snapshot(fast_read=fast_read)
             self._remember_last_good_snapshot(LAST_GOOD_INGEST_PIPELINE_CACHE_KEY, payload)
             return self._normalize_pipeline_status_payload(payload)
-        except sqlite3.OperationalError as exc:
-            if fast_read and (is_sqlite_busy_error(exc) or is_sqlite_interrupted_error(exc)):
+        except Exception as exc:
+            if fast_read and "database is locked" in str(exc):
                 if cached is not None:
                     return self._normalize_pipeline_status_payload(cached, force_stale=True)
-                reason = "query_timeout" if is_sqlite_interrupted_error(exc) else "database_locked"
+                reason = "database_locked"
                 raise ReadSnapshotUnavailableError("ingest_pipeline", reason=reason) from exc
             raise
 
@@ -3029,7 +3030,7 @@ class PlatformStore:
                 if healthy:
                     lagging_healthy_count += 1
 
-        active_cutoff = (now_dt - timedelta(hours=1)).isoformat()
+        active_cutoff = (now_dt - timedelta(seconds=120)).isoformat()
         with self._snapshot_connect(fast_read=fast_read, low_priority=low_priority) as conn:
             has_active_trackers = self._table_exists(conn, "active_trackers")
             has_violations = self._table_exists(conn, "violations")
@@ -3071,7 +3072,7 @@ class PlatformStore:
                 "active_users": active_users,
                 "violating_users": violating_users,
                 "compliant_users": max(active_users - violating_users, 0),
-                "active_window_seconds": 3600,
+                "active_window_seconds": 120,
             },
             "module_config": {
                 "desired_revision": desired_revision,
@@ -3127,12 +3128,12 @@ class PlatformStore:
                 payload = cached_snapshot
             else:
                 raise
-        except sqlite3.OperationalError as exc:
-            if fast_read and (is_sqlite_busy_error(exc) or is_sqlite_interrupted_error(exc)):
+        except Exception as exc:
+            if fast_read and "database is locked" in str(exc):
                 if _usable(cached_snapshot):
                     payload = cached_snapshot
                 else:
-                    reason = "query_timeout" if is_sqlite_interrupted_error(exc) else "database_locked"
+                    reason = "database_locked"
                     raise ReadSnapshotUnavailableError("overview", reason=reason) from exc
             else:
                 raise
@@ -3430,8 +3431,8 @@ class PlatformStore:
                 checkpoint_mode = "TRUNCATE" if normalized_mode == "emergency" else "PASSIVE"
                 checkpoint_row = conn.execute(f"PRAGMA wal_checkpoint({checkpoint_mode})").fetchone()
                 conn.commit()
-        except sqlite3.OperationalError as exc:
-            if not is_sqlite_busy_error(exc):
+        except Exception as exc:
+            if "database is locked" not in str(exc):
                 raise
             logger.info("DB maintenance skipped: mode=%s reason=database_locked", normalized_mode)
             report["skipped"] = True
@@ -3447,8 +3448,8 @@ class PlatformStore:
                     conn.commit()
                     conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
                     report["vacuumed"] = True
-            except sqlite3.OperationalError as exc:
-                if not is_sqlite_busy_error(exc):
+            except Exception as exc:
+                if "database is locked" not in str(exc):
                     raise
                 logger.info("DB maintenance skipped: mode=%s reason=database_locked", normalized_mode)
                 report["skipped"] = True

@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Optional
+from urllib.parse import quote
 
 from behavioral_analyzers import BehavioralEngine
 from mobguard_core.scoring import ScoringContext, ScoringDependencies, evaluate_mobile_network
@@ -31,7 +32,6 @@ from mobguard_platform.module_secrets import ModuleSecretError, decrypt_module_t
 from mobguard_platform.panel_client import PanelClient
 from mobguard_platform.runtime import read_env_file, read_env_file_only
 from mobguard_platform.runtime_admin_defaults import ENFORCEMENT_SETTINGS_DEFAULTS
-from mobguard_platform.storage.sqlite import is_sqlite_busy_error
 
 from ..context import APIContainer
 from .limiter_engine import evaluate_limiter_policy_tx
@@ -110,6 +110,21 @@ def _require_protocol_version(protocol_version: str) -> str:
 
 def _runtime_settings(container: APIContainer) -> dict[str, Any]:
     return container.store.get_live_rules_state()["rules"].get("settings", {})
+
+
+def _enforcement_mode(settings: dict[str, Any]) -> str:
+    if bool(settings.get("dry_run", ENFORCEMENT_SETTINGS_DEFAULTS["dry_run"])):
+        return "observe"
+    if bool(settings.get("shadow_mode", True)):
+        return "observe"
+    if bool(settings.get("warning_only_mode", ENFORCEMENT_SETTINGS_DEFAULTS["warning_only_mode"])):
+        return "warning_only"
+    limiter_rollout_mode = str(settings.get("limiter_rollout_mode", "observe") or "observe").strip().lower()
+    if limiter_rollout_mode == "observe":
+        return "observe"
+    if limiter_rollout_mode == "warning_only":
+        return "warning_only"
+    return "enforce"
 
 
 def _module_runtime(settings: dict[str, Any]) -> dict[str, Any]:
@@ -539,6 +554,9 @@ def _activity_snapshot(
     created_from = (
         datetime.utcnow().replace(microsecond=0) - timedelta(seconds=max(int(window_seconds), 60))
     ).isoformat()
+    tracker_created_from = (
+        datetime.utcnow().replace(microsecond=0) - timedelta(seconds=120)
+    ).isoformat()
     identity_sql = """
         COALESCE(
             NULLIF(subject_key, ''),
@@ -597,13 +615,14 @@ def _activity_snapshot(
                         ON ae.uuid = atk.uuid
                        AND ae.ip = atk.ip
                     WHERE ae.module_id IS NOT NULL AND ae.module_id != ''
+                      AND ae.created_at >= ?
                 )
                 SELECT module_id, COUNT(*) AS active_users
                 FROM ranked_events
                 WHERE rn = 1
                 GROUP BY module_id
                 """,
-                (created_from,),
+                (tracker_created_from, created_from),
             ).fetchall() if has_active_trackers else []
             active_total_row = conn.execute(
                 """
@@ -614,7 +633,7 @@ def _activity_snapshot(
                     WHERE INSTR(key, ':') > 0 AND last_seen >= ?
                 )
                 """,
-                (created_from,),
+                (tracker_created_from,),
             ).fetchone() if has_active_trackers else None
     except sqlite3.OperationalError:
         if cached:
@@ -752,6 +771,7 @@ def _attach_runtime_metrics(
     mobguard_process_rss_bytes = 0
     resolved_active_users_total = 0
     resolved_recent_events_total = 0
+    panel_online_modules_count = 0
 
     for module in modules:
         payload = dict(module)
@@ -770,15 +790,37 @@ def _attach_runtime_metrics(
         heartbeat_active_users = int(heartbeat_metrics.get("active_users") or 0)
         heartbeat_recent_events = int(heartbeat_metrics.get("recent_events") or 0)
         heartbeat_window_seconds = int(heartbeat_metrics.get("window_seconds") or 0)
-        real_time_active_users = max(heartbeat_active_users, panel_online)
         if payload.get("healthy"):
-            resolved_active_users = (
-                real_time_active_users
-                if real_time_active_users > 0
-                else activity_active_users
-            )
+            is_mapped = False
+            lookup_keys = {
+                module_id.strip().lower(),
+                str(payload.get("module_name") or "").strip().lower(),
+            }
+            for alias_key in (module_id.strip().lower(), str(payload.get("module_name") or "").strip().lower()):
+                raw_alias = panel_node_aliases.get(alias_key)
+                if not raw_alias:
+                    continue
+                for alias in str(raw_alias).split(","):
+                    normalized_alias = alias.strip().lower()
+                    if normalized_alias:
+                        lookup_keys.add(normalized_alias)
+            for key in lookup_keys:
+                if key in panel_online_map:
+                    is_mapped = True
+                    break
+
+            if is_mapped:
+                resolved_active_users = panel_online
+            else:
+                resolved_active_users = max(
+                    panel_online,
+                    heartbeat_active_users,
+                    activity_active_users,
+                )
+            if panel_online > 0:
+                panel_online_modules_count += 1
         else:
-            resolved_active_users = panel_online if panel_online > 0 else 0
+            resolved_active_users = 0
         resolved_recent_events = max(activity_recent_events, heartbeat_recent_events)
         resolved_window_seconds = (
             heartbeat_window_seconds
@@ -827,9 +869,13 @@ def _attach_runtime_metrics(
         "error_modules": error_count,
         "stale_modules": stale_count,
         "modules_with_metrics": sum(1 for item in enriched if item.get("runtime_metrics", {}).get("collected_at")),
-        "active_users_total": max(
-            int(activity.get("totals", {}).get("active_users_total") or 0),
-            int(resolved_active_users_total),
+        "active_users_total": (
+            int(resolved_active_users_total)
+            if panel_online_modules_count > 0
+            else max(
+                int(activity.get("totals", {}).get("active_users_total") or 0),
+                int(resolved_active_users_total),
+            )
         ),
         "recent_events_total": max(
             int(activity.get("totals", {}).get("recent_events_total") or 0),
@@ -883,6 +929,34 @@ async def _resolve_remote_user(
 
         remote_user = await asyncio.to_thread(_lookup)
     user_data = dict(remote_user)
+    if client.enabled and user_data.get("telegramId") in (None, ""):
+        fallback_username = str(payload.get("username") or user_data.get("username") or "").strip()
+        if fallback_username:
+            def _lookup_username() -> dict[str, Any]:
+                resolver = getattr(client, "get_user_data_by_username", None)
+                if callable(resolver):
+                    return resolver(fallback_username) or {}
+                return client.get_user_data(fallback_username) or {}
+
+            enriched = await asyncio.to_thread(_lookup_username)
+            if isinstance(enriched, dict):
+                for key, value in enriched.items():
+                    if user_data.get(key) in (None, "") and value not in (None, ""):
+                        user_data[key] = value
+        if user_data.get("telegramId") in (None, "") and fallback_username:
+            request_raw = getattr(client, "_request", None)
+            extract_user = getattr(client, "_extract_user", None)
+            if callable(request_raw) and callable(extract_user):
+                def _lookup_username_raw() -> dict[str, Any]:
+                    payload_raw = request_raw("GET", f"/api/users/by-username/{quote(fallback_username)}")
+                    resolved = extract_user(payload_raw)
+                    return resolved if isinstance(resolved, dict) else {}
+
+                enriched_raw = await asyncio.to_thread(_lookup_username_raw)
+                if isinstance(enriched_raw, dict):
+                    for key, value in enriched_raw.items():
+                        if user_data.get(key) in (None, "") and value not in (None, ""):
+                            user_data[key] = value
     if payload.get("uuid") and not user_data.get("uuid"):
         user_data["uuid"] = payload["uuid"]
     if payload.get("username") and not user_data.get("username"):
@@ -968,12 +1042,50 @@ async def _apply_enforcement_if_needed(
 ) -> Optional[dict[str, Any]]:
     container = runtime.container
     client = runtime.remnawave_client
-    settings = runtime.settings
+    # Re-read live settings on each event to avoid stale per-batch mode snapshots.
+    settings = dict(runtime.settings or {})
+    live_settings = _runtime_settings(container)
+    if isinstance(live_settings, dict):
+        settings.update(live_settings)
     if bundle.verdict != "HOME" or bundle.confidence_band not in {"HIGH_HOME", "PROBABLE_HOME"}:
         return None
     uuid = str(user_data.get("uuid") or "").strip()
     if not uuid:
         return None
+    ip = str(payload.get("ip") or "").strip()
+    if not ip:
+        return None
+
+    try:
+        usage_threshold_seconds = int(
+            settings.get("usage_time_threshold", ENFORCEMENT_SETTINGS_DEFAULTS["usage_time_threshold"]) or 0
+        )
+    except (TypeError, ValueError):
+        usage_threshold_seconds = int(ENFORCEMENT_SETTINGS_DEFAULTS["usage_time_threshold"])
+    usage_threshold_seconds = max(usage_threshold_seconds, 0)
+    now = datetime.utcnow().replace(microsecond=0)
+    if usage_threshold_seconds > 0:
+        tracker_row = await container.analysis_store.fetch_one(
+            "SELECT start_time FROM active_trackers WHERE key = ?",
+            (f"{uuid}:{ip}",),
+        )
+        elapsed_seconds: int | None = None
+        if tracker_row and tracker_row["start_time"] not in (None, ""):
+            try:
+                started_at = datetime.fromisoformat(str(tracker_row["start_time"]))
+                elapsed_seconds = max(int((now - started_at).total_seconds()), 0)
+            except ValueError:
+                elapsed_seconds = None
+        if elapsed_seconds is None or elapsed_seconds < usage_threshold_seconds:
+            return {
+                "type": "suppressed",
+                "reason": "usage_threshold",
+                "warning_only": False,
+                "delivery_status": "suppressed",
+                "dry_run": bool(settings.get("dry_run", ENFORCEMENT_SETTINGS_DEFAULTS["dry_run"])),
+                "elapsed_seconds": int(elapsed_seconds or 0),
+                "required_seconds": int(usage_threshold_seconds),
+            }
 
     def _evaluate_limiter() -> dict[str, Any]:
         with container.store._connect() as conn:
@@ -1009,15 +1121,25 @@ async def _apply_enforcement_if_needed(
     else:
         warning_only_from_limiter = False
 
+    runtime_mode = _enforcement_mode(settings)
     warning_only = (
         warning_only_from_limiter
+        or runtime_mode != "enforce"
         or bool(settings.get("warning_only_mode", False))
         or bool(settings.get("shadow_mode", True))
         or should_warning_only(bundle)
         or not bundle.punitive_eligible
     )
     observe_only = bool(settings.get("dry_run", ENFORCEMENT_SETTINGS_DEFAULTS["dry_run"])) or not client.enabled
-    now = datetime.utcnow().replace(microsecond=0)
+    non_persistent_warning = warning_only and (
+        runtime_mode != "enforce"
+        or observe_only
+        or bool(settings.get("warning_only_mode", False))
+        or bool(settings.get("shadow_mode", True))
+        or limiter_reason in {"rollout_warning_only", "rollout_observe"}
+        or should_warning_only(bundle)
+        or not bundle.punitive_eligible
+    )
     row = await container.analysis_store.fetch_one(
         """
         SELECT strikes, warning_count
@@ -1031,7 +1153,7 @@ async def _apply_enforcement_if_needed(
 
     if warning_only:
         next_warning_count = warning_count + 1
-        if observe_only:
+        if non_persistent_warning:
             return {
                 "type": "warning",
                 "warning_count": next_warning_count,
@@ -1282,9 +1404,7 @@ def register_module(container: APIContainer, payload: dict[str, Any], token: str
             config_revision_applied=int(payload.get("config_revision_applied") or 0),
             auto_create=False,
         )
-    except sqlite3.OperationalError as exc:
-        if not is_sqlite_busy_error(exc):
-            raise
+    except Exception as exc:
         raise ModuleStorageBusyError(MODULE_INGEST_BUSY_DETAIL) from exc
     stale_after_seconds = _module_stale_after_seconds(container)
     return {
@@ -1306,9 +1426,7 @@ def record_module_heartbeat(container: APIContainer, payload: dict[str, Any], to
             config_revision_applied=int(payload.get("config_revision_applied") or 0),
             details=dict(payload.get("details") or {}),
         )
-    except sqlite3.OperationalError as exc:
-        if not is_sqlite_busy_error(exc):
-            raise
+    except Exception as exc:
         raise ModuleStorageBusyError(MODULE_INGEST_BUSY_DETAIL) from exc
     stale_after_seconds = _module_stale_after_seconds(container)
     return {
@@ -1342,9 +1460,7 @@ async def ingest_module_events(container: APIContainer, payload: dict[str, Any],
     protocol_version = _require_protocol_version(str(payload.get("protocol_version", PROTOCOL_VERSION)))
     try:
         module = container.store.authenticate_module(str(payload.get("module_id") or ""), token)
-    except sqlite3.OperationalError as exc:
-        if not is_sqlite_busy_error(exc):
-            raise
+    except Exception as exc:
         raise ModuleStorageBusyError(MODULE_INGEST_BUSY_DETAIL) from exc
     try:
         items = []
@@ -1358,9 +1474,7 @@ async def ingest_module_events(container: APIContainer, payload: dict[str, Any],
             module["module_name"],
             items,
         )
-    except sqlite3.OperationalError as exc:
-        if not is_sqlite_busy_error(exc):
-            raise
+    except Exception as exc:
         raise ModuleStorageBusyError(MODULE_INGEST_BUSY_DETAIL) from exc
 
     return {

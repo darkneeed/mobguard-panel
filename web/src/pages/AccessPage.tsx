@@ -57,6 +57,12 @@ export function AccessPage({
   const [savedBranding, setSavedBranding] = useState<BrandingConfig>(branding);
   const [remnawaveApiUrlDraft, setRemnawaveApiUrlDraft] = useState("");
   const [savedRemnawaveApiUrl, setSavedRemnawaveApiUrl] = useState("");
+  const [bedolagaApiUrlDraft, setBedolagaApiUrlDraft] = useState("");
+  const [savedBedolagaApiUrl, setSavedBedolagaApiUrl] = useState("");
+  const [bedolagaApiTokenDraft, setBedolagaApiTokenDraft] = useState("");
+  const [savedBedolagaApiToken, setSavedBedolagaApiToken] = useState("");
+  const [bedolagaTimeoutDraft, setBedolagaTimeoutDraft] = useState(12);
+  const [savedBedolagaTimeout, setSavedBedolagaTimeout] = useState(12);
   const [envDraft, setEnvDraft] = useState<Record<string, string>>({});
   const [error, setError] = useState("");
   const [saved, setSaved] = useState("");
@@ -93,6 +99,12 @@ export function AccessPage({
         setSavedBranding(payload.settings);
         setRemnawaveApiUrlDraft(payload.settings.remnawave_api_url || "");
         setSavedRemnawaveApiUrl(payload.settings.remnawave_api_url || "");
+        setBedolagaApiUrlDraft(payload.settings.bedolaga_api_url || "");
+        setSavedBedolagaApiUrl(payload.settings.bedolaga_api_url || "");
+        setBedolagaApiTokenDraft(payload.settings.bedolaga_api_token || "");
+        setSavedBedolagaApiToken(payload.settings.bedolaga_api_token || "");
+        setBedolagaTimeoutDraft(payload.settings.bedolaga_timeout_seconds ?? 12);
+        setSavedBedolagaTimeout(payload.settings.bedolaga_timeout_seconds ?? 12);
         setEnvDraft(buildInitialEnvDraft(payload.env));
       })
       .catch((err: Error) => setError(err.message || t("access.loadFailed")));
@@ -108,11 +120,19 @@ export function AccessPage({
     () => remnawaveApiUrlDraft !== savedRemnawaveApiUrl,
     [remnawaveApiUrlDraft, savedRemnawaveApiUrl],
   );
+  const bedolagaDirty = useMemo(
+    () =>
+      bedolagaApiUrlDraft !== savedBedolagaApiUrl
+      || bedolagaApiTokenDraft !== savedBedolagaApiToken
+      || bedolagaTimeoutDraft !== savedBedolagaTimeout,
+    [bedolagaApiUrlDraft, savedBedolagaApiUrl, bedolagaApiTokenDraft, savedBedolagaApiToken, bedolagaTimeoutDraft, savedBedolagaTimeout],
+  );
+  const integrationDirty = remnawaveDirty || bedolagaDirty;
   const listDirty = useMemo(
     () => JSON.stringify(lists) !== JSON.stringify(savedLists),
     [lists, savedLists],
   );
-  const accessDirty = brandingDirty || remnawaveDirty || listDirty;
+  const accessDirty = brandingDirty || integrationDirty || listDirty;
   const envDirty = useMemo(
     () => isEnvDirty(data?.env, envDraft),
     [data?.env, envDraft],
@@ -204,12 +224,15 @@ export function AccessPage({
     }
   }
 
-  async function saveRemnawaveApiUrl() {
+  async function saveIntegrations() {
     if (!data) return;
     try {
       const response = await api.updateAccessSettings({
         settings: {
           remnawave_api_url: remnawaveApiUrlDraft.trim(),
+          bedolaga_api_url: bedolagaApiUrlDraft.trim(),
+          bedolaga_api_token: bedolagaApiTokenDraft.trim(),
+          bedolaga_timeout_seconds: Number(bedolagaTimeoutDraft),
         },
       });
       setData(response);
@@ -217,6 +240,12 @@ export function AccessPage({
       setSavedBranding(response.settings);
       setRemnawaveApiUrlDraft(response.settings.remnawave_api_url || "");
       setSavedRemnawaveApiUrl(response.settings.remnawave_api_url || "");
+      setBedolagaApiUrlDraft(response.settings.bedolaga_api_url || "");
+      setSavedBedolagaApiUrl(response.settings.bedolaga_api_url || "");
+      setBedolagaApiTokenDraft(response.settings.bedolaga_api_token || "");
+      setSavedBedolagaApiToken(response.settings.bedolaga_api_token || "");
+      setBedolagaTimeoutDraft(response.settings.bedolaga_timeout_seconds ?? 12);
+      setSavedBedolagaTimeout(response.settings.bedolaga_timeout_seconds ?? 12);
       onBrandingChange(response.settings);
       setIntegrationSaved(t("access.integrationSaved"));
       setError("");
@@ -298,6 +327,7 @@ export function AccessPage({
             <strong>{field.value || t("common.notAvailable")}</strong>
           </div>
           <input
+            aria-label={field.key}
             placeholder={field.masked ? t("common.leaveBlankToKeep") : ""}
             value={envDraft[field.key] ?? ""}
             onChange={(event) =>
@@ -497,7 +527,7 @@ export function AccessPage({
             </div>
           </div>
 
-          <div className="dashboard-grid">
+          <div className="settings-grid">
             <div className="panel">
               <div className="panel-heading panel-heading-row">
                 <div>
@@ -507,14 +537,14 @@ export function AccessPage({
                 <div className="action-row">
                   <span
                     className={
-                      remnawaveDirty ? "tag review-only" : "tag severity-low"
+                      integrationDirty ? "tag review-only" : "tag severity-low"
                     }
                   >
-                    {remnawaveDirty
+                    {integrationDirty
                       ? t("common.unsavedChanges")
                       : t("common.saved")}
                   </span>
-                  <button onClick={saveRemnawaveApiUrl} disabled={!remnawaveDirty}>
+                  <button onClick={saveIntegrations} disabled={!integrationDirty}>
                     {t("access.saveIntegration")}
                   </button>
                 </div>
@@ -531,6 +561,43 @@ export function AccessPage({
                     placeholder={t("access.integrationFields.remnawaveApiUrlPlaceholder")}
                     value={remnawaveApiUrlDraft}
                     onChange={(event) => setRemnawaveApiUrlDraft(event.target.value)}
+                  />
+                </div>
+                <div className="rule-field">
+                  <FieldLabel
+                    label={t("access.integrationFields.bedolagaApiUrl")}
+                    description={t("access.integrationFields.bedolagaApiUrlDescription")}
+                  />
+                  <input
+                    aria-label={t("access.integrationFields.bedolagaApiUrl")}
+                    placeholder="https://bedolaga.example.com"
+                    value={bedolagaApiUrlDraft}
+                    onChange={(event) => setBedolagaApiUrlDraft(event.target.value)}
+                  />
+                </div>
+                <div className="rule-field">
+                  <FieldLabel
+                    label={t("access.integrationFields.bedolagaApiToken")}
+                    description={t("access.integrationFields.bedolagaApiTokenDescription")}
+                  />
+                  <input
+                    type="password"
+                    aria-label={t("access.integrationFields.bedolagaApiToken")}
+                    placeholder={t("common.leaveBlankToKeep")}
+                    value={bedolagaApiTokenDraft}
+                    onChange={(event) => setBedolagaApiTokenDraft(event.target.value)}
+                  />
+                </div>
+                <div className="rule-field">
+                  <FieldLabel
+                    label={t("access.integrationFields.bedolagaTimeout")}
+                    description={t("access.integrationFields.bedolagaTimeoutDescription")}
+                  />
+                  <input
+                    type="number"
+                    aria-label={t("access.integrationFields.bedolagaTimeout")}
+                    value={bedolagaTimeoutDraft}
+                    onChange={(event) => setBedolagaTimeoutDraft(Number(event.target.value))}
                   />
                 </div>
               </div>

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import logging
-import sqlite3
 import traceback
 from datetime import datetime
 from pathlib import Path
@@ -52,37 +51,6 @@ class _BaseConsoleLogHandler(logging.Handler):
             payload["exception"] = "".join(traceback.format_exception(*record.exc_info)).strip()
         return payload
 
-
-class SQLiteConsoleLogHandler(_BaseConsoleLogHandler):
-    def __init__(self, db_path: str | Path, *, service_name: str = "mobguard-api") -> None:
-        super().__init__(service_name=service_name)
-        self.db_path = str(db_path)
-
-    def emit(self, record: logging.LogRecord) -> None:
-        if self._should_skip(record):
-            return
-        try:
-            with sqlite3.connect(self.db_path, timeout=0.25) as conn:
-                conn.row_factory = sqlite3.Row
-                conn.execute("PRAGMA busy_timeout = 250")
-                conn.execute(
-                    """
-                    INSERT INTO system_console_events (
-                        service_name, logger_name, level, message, details_json, created_at
-                    ) VALUES (?, ?, ?, ?, ?, ?)
-                    """,
-                    (
-                        self.service_name,
-                        str(record.name or ""),
-                        str(record.levelname or "INFO").upper(),
-                        record.getMessage(),
-                        json.dumps(self._details(record), ensure_ascii=False),
-                        _utcnow(),
-                    ),
-                )
-                conn.commit()
-        except Exception:
-            return
 
 
 class PostgresConsoleLogHandler(_BaseConsoleLogHandler):
@@ -141,8 +109,6 @@ def ensure_console_logging(
         if not dsn:
             return
         root_logger.addHandler(PostgresConsoleLogHandler(dsn, service_name=service_name))
-    else:
-        root_logger.addHandler(SQLiteConsoleLogHandler(str(db_path), service_name=service_name))
     for logger_name in ("api", "mobguard", "mobguard_platform"):
         current_logger = logging.getLogger(logger_name)
         if current_logger.level in {logging.NOTSET, 0} or current_logger.level > logging.INFO:

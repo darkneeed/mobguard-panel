@@ -3,7 +3,18 @@ import os
 import shutil
 import tempfile
 import unittest
+import sqlite3
+from unittest.mock import patch
+import datetime as real_datetime
 
+class MockDatetime(real_datetime.datetime):
+    @classmethod
+    def utcnow(cls):
+        return real_datetime.datetime(2026, 4, 20, 12, 0, 0)
+    
+    @classmethod
+    def fromisoformat(cls, *args, **kwargs):
+        return real_datetime.datetime.fromisoformat(*args, **kwargs)
 from mobguard_platform.models import DecisionBundle
 from mobguard_platform.store import PlatformStore
 from mobguard_platform.usage_profile import (
@@ -17,6 +28,8 @@ from mobguard_platform.usage_profile import (
 
 class UsageProfileTests(unittest.TestCase):
     def setUp(self):
+        self.mock_dt_patcher = patch("mobguard_platform.usage_profile.datetime", MockDatetime)
+        self.mock_dt_patcher.start()
         self.temp_dir = tempfile.mkdtemp(prefix="mobguard-usage-profile-")
         self.db_path = os.path.join(self.temp_dir, "test.sqlite3")
         self.runtime_dir = os.path.join(self.temp_dir, "runtime")
@@ -31,10 +44,22 @@ class UsageProfileTests(unittest.TestCase):
                 "review_ui_base_url": "https://mobguard.example.com",
             }
         }
-        self.store = PlatformStore(self.db_path, self.base_config, self.config_path)
+        
+        class SQLiteTestStorage:
+            def __init__(self, db_path):
+                self.db_path = db_path
+            def connect(self, **kwargs):
+                conn = sqlite3.connect(self.db_path)
+                conn.row_factory = sqlite3.Row
+                return conn
+
+        self.storage = SQLiteTestStorage(self.db_path)
+        self.store = PlatformStore(self.db_path, self.base_config, self.config_path, storage=self.storage)
+        self.store._table_exists = lambda conn, name: conn.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?", (name,)).fetchone() is not None
         self.store.init_schema()
 
     def tearDown(self):
+        self.mock_dt_patcher.stop()
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
     def _record_event(
