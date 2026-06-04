@@ -1,4 +1,4 @@
-export type Session = {
+﻿export type Session = {
   telegram_id: number;
   username?: string;
   first_name?: string;
@@ -627,11 +627,44 @@ export type ViolationsResponse = {
   webhooks?: Array<Record<string, unknown>>;
 };
 
+export type BedolagaUser = {
+  id: number;
+  telegram_id?: number;
+  email?: string | null;
+  username?: string | null;
+  first_name?: string | null;
+  last_name?: string | null;
+  status: string;
+  language?: string;
+  balance_rubles?: number;
+  balance_kopeks?: number;
+  has_had_paid_subscription?: boolean;
+  created_at?: string;
+  last_activity?: string;
+  subscription?: { status?: string; actual_status?: string } | null;
+  promo_group?: { name?: string } | null;
+};
+
+export type BedolagaMetricsSection = {
+  total?: number;
+  active?: number;
+  blocked?: number;
+  new_today?: number;
+  new_this_month?: number;
+  [key: string]: unknown;
+};
+
 export type BedolagaOverviewResponse = {
   enabled: boolean;
   base_url: string;
-  metrics: Record<string, unknown>;
-  clients: Array<Record<string, unknown>>;
+  metrics: {
+    users?: BedolagaMetricsSection;
+    subscriptions?: BedolagaMetricsSection;
+    support?: BedolagaMetricsSection;
+    payments?: BedolagaMetricsSection;
+    [key: string]: unknown;
+  };
+  clients: { items?: BedolagaUser[] } | BedolagaUser[];
   errors: string[];
 };
 
