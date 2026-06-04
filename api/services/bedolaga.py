@@ -36,7 +36,7 @@ def _perform_request(
     body = json.dumps(payload or {}, ensure_ascii=False).encode("utf-8") if payload is not None else None
     headers = {"Content-Type": "application/json"}
     if token:
-        headers["Authorization"] = f"Bearer {token}"
+        headers["X-API-Key"] = token
     req = request.Request(url, data=body, method=method.upper(), headers=headers)
     try:
         with request.urlopen(req, timeout=timeout_seconds) as response:
@@ -68,8 +68,8 @@ def get_bedolaga_overview(container: APIContainer) -> dict[str, Any]:
             "clients": [],
             "errors": ["bedolaga_api_url is not configured"],
         }
-    metrics = _perform_request(base_url, token, timeout_seconds, path="/metrics")
-    clients = _perform_request(base_url, token, timeout_seconds, path="/clients?limit=20")
+    metrics = _perform_request(base_url, token, timeout_seconds, path="/stats")
+    clients = _perform_request(base_url, token, timeout_seconds, path="/users?limit=20")
     errors: list[str] = []
     if not metrics.get("ok"):
         errors.append(f"metrics: {metrics.get('error') or metrics.get('status')}")
