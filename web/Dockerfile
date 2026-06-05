@@ -1,9 +1,19 @@
 FROM node:20.19-alpine AS build
 WORKDIR /app
-COPY package.json package-lock.json tsconfig.json tsconfig.node.json vite.config.ts index.html ./
+
+# Copy package manifests first to utilize caching
+COPY package.json package-lock.json ./
+
+# Run npm ci with cache mounting to preserve package downloads
+RUN --mount=type=cache,target=/root/.npm \
+    npm ci --no-audit --no-fund
+
+# Copy code and configs afterwards
+COPY tsconfig.json tsconfig.node.json vite.config.ts index.html ./
 COPY src ./src
 COPY public ./public
-RUN npm ci --no-audit --no-fund
+
+# Build the application
 RUN npm run build
 
 FROM nginx:1.27-alpine

@@ -524,11 +524,19 @@ export function OverviewPage({ session: _session }: { session?: Session }) {
             </div>
           )}
 
-          <div className="record-meta overview-flow-meta">
-            <span>{pipeline?.queued_count ?? 0} в очереди</span>
-            <span>{pipeline?.processing_count ?? 0} обрабатывается</span>
-            <span>Ошибок {pipeline?.failed_count ?? 0}</span>
-            <span>Последний drain {formatDisplayDateTime(pipeline?.last_successful_drain_at || "", t("common.notAvailable"), language)}</span>
+          <div className="overview-flow-meta" style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", marginTop: "1rem", borderTop: "1px solid var(--line)", paddingTop: "1rem" }}>
+            <span className="flow-meta-badge success">
+              {pipeline?.queued_count ?? 0} в очереди
+            </span>
+            <span className="flow-meta-badge warning">
+              {pipeline?.processing_count ?? 0} обрабатывается
+            </span>
+            <span className="flow-meta-badge danger">
+              Ошибок: {pipeline?.failed_count ?? 0}
+            </span>
+            <span className="flow-meta-badge">
+              Последний drain: <strong>{formatDisplayDateTime(pipeline?.last_successful_drain_at || "", t("common.notAvailable"), language)}</strong>
+            </span>
           </div>
         </div>
       </div>

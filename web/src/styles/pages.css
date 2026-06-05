@@ -1012,6 +1012,38 @@
   background: linear-gradient(90deg, var(--warning), transparent);
 }
 
+/* Traffic Ratio Flow Metadata Badges */
+.flow-meta-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 4px 8px;
+  border-radius: 8px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  border: 1px solid var(--line);
+  background: var(--surface-soft);
+  color: var(--ink);
+}
 
+.flow-meta-badge strong {
+  font-weight: 700;
+}
 
+.flow-meta-badge.success {
+  background: rgba(16, 185, 129, 0.1);
+  border-color: rgba(16, 185, 129, 0.2);
+  color: var(--success, #10b981);
+}
 
+.flow-meta-badge.warning {
+  background: rgba(245, 158, 11, 0.1);
+  border-color: rgba(245, 158, 11, 0.2);
+  color: var(--warning, #f59e0b);
+}
+
+.flow-meta-badge.danger {
+  background: rgba(239, 68, 68, 0.1);
+  border-color: rgba(239, 68, 68, 0.2);
+  color: var(--danger, #ef4444);
+}

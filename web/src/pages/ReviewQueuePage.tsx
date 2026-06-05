@@ -215,7 +215,10 @@ export function ReviewQueuePage({ session }: { session?: Session }) {
     visibleItems: visibleQueueItems,
     hasMore: hasMoreQueueItems,
     loadMoreRef: loadMoreQueueItemsRef,
-  } = useVisibleItems(list.items, { initialCount: 12, step: 12 });
+  } = useVisibleItems(list.items, {
+    initialCount: filters.page_size,
+    step: filters.page_size,
+  });
   const queueSearch = useMemo(
     () => buildSearchParams(effectiveFilters),
     [effectiveFilters],

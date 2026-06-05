@@ -477,36 +477,32 @@ def _heartbeat_detail_map(container: APIContainer, module_ids: list[str]) -> dic
     cached = _HEARTBEAT_DETAIL_CACHE.get(cache_key)
     if cached and cached[0] > time.monotonic():
         return copy.deepcopy(cached[1])
-    placeholders = ", ".join("?" for _ in normalized_module_ids)
-    query = f"""
+    payload: dict[str, dict[str, Any]] = {}
+    query = """
         SELECT module_id, details_json
-        FROM (
-            SELECT
-                mh.module_id,
-                mh.details_json,
-                ROW_NUMBER() OVER (
-                    PARTITION BY mh.module_id
-                    ORDER BY mh.created_at DESC, mh.id DESC
-                ) AS rn
-            FROM module_heartbeats mh
-            WHERE mh.module_id IN ({placeholders})
-        ) ranked
-        WHERE rn = 1
+        FROM module_heartbeats
+        WHERE module_id = ?
+        ORDER BY created_at DESC, id DESC
+        LIMIT 1
     """
     try:
         with container.store._snapshot_connect(fast_read=True) as conn:
-            rows = conn.execute(query, list(normalized_module_ids)).fetchall()
-    except sqlite3.OperationalError:
+            for m_id in normalized_module_ids:
+                row = conn.execute(query, [m_id]).fetchone()
+                if row:
+                    raw_details = row["details_json"]
+                    if isinstance(raw_details, dict):
+                        details = raw_details
+                    else:
+                        raw_details_str = str(raw_details or "").strip() or "{}"
+                        try:
+                            details = json.loads(raw_details_str)
+                        except json.JSONDecodeError:
+                            details = {}
+                    if isinstance(details, dict):
+                        payload[m_id] = details
+    except Exception:
         return copy.deepcopy(cached[1]) if cached else {}
-    payload: dict[str, dict[str, Any]] = {}
-    for row in rows:
-        raw_details = str(row["details_json"] or "").strip() or "{}"
-        try:
-            details = json.loads(raw_details)
-        except json.JSONDecodeError:
-            details = {}
-        if isinstance(details, dict):
-            payload[str(row["module_id"] or "").strip()] = details
     _HEARTBEAT_DETAIL_CACHE[cache_key] = (
         time.monotonic() + HEARTBEAT_DETAIL_CACHE_TTL_SECONDS,
         copy.deepcopy(payload),

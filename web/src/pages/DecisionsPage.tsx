@@ -73,7 +73,7 @@ export function DecisionsPage({ session: _session }: { session?: Session }) {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [lastUpdatedAt, setLastUpdatedAt] = useState("");
-  const [visibleCardsCount, setVisibleCardsCount] = useState(INITIAL_VISIBLE_CARDS);
+  const [visibleCardsCount, setVisibleCardsCount] = useState(filters.page_size);
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -118,8 +118,8 @@ export function DecisionsPage({ session: _session }: { session?: Session }) {
   useVisiblePolling(true, load, DECISIONS_REFRESH_MS, [effectiveFilters, t]);
 
   useEffect(() => {
-    setVisibleCardsCount(INITIAL_VISIBLE_CARDS);
-  }, [data.items]);
+    setVisibleCardsCount(filters.page_size);
+  }, [data.items, filters.page_size]);
 
   useEffect(() => {
     if (loading) {
