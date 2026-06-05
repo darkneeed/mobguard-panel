@@ -810,6 +810,7 @@
   border-radius: var(--radius-md);
   border: 1px solid var(--line);
   background: var(--bg-panel-strong);
+  margin-top: 1.25rem;
   margin-bottom: 1.5rem;
   transition: all 0.2s ease-in-out;
 }
@@ -899,6 +900,116 @@
 .automation-tag-item.danger {
   border-color: color-mix(in srgb, var(--danger) 30%, transparent);
   background: color-mix(in srgb, var(--danger) 4%, transparent);
+}
+
+/* Quality Page Bento Styling */
+.quality-bento-grid {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: 1.25rem;
+  margin-top: 1.5rem;
+}
+
+@media (max-width: 1024px) {
+  .quality-bento-grid {
+    grid-template-columns: repeat(6, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .quality-bento-grid {
+    display: flex;
+    flex-direction: column;
+  }
+}
+
+.quality-bento-item {
+  background: var(--bg-panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: 1.5rem;
+  position: relative;
+  overflow: hidden;
+  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.05);
+}
+
+.quality-bento-item:hover {
+  border-color: var(--accent);
+  box-shadow: 0 8px 30px -4px rgba(0, 0, 0, 0.1), var(--accent-glow);
+  transform: translateY(-2px);
+}
+
+/* Specific item sizes */
+.quality-span-12 { grid-column: span 12; }
+.quality-span-8 { grid-column: span 8; }
+.quality-span-6 { grid-column: span 6; }
+.quality-span-4 { grid-column: span 4; }
+.quality-span-3 { grid-column: span 3; }
+
+/* Stat Highlights inside Bento */
+.quality-stats-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 1.25rem;
+}
+
+.quality-stat-box {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 1rem 1.25rem;
+  background: var(--bg-panel-strong);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--line);
+  transition: all 0.2s ease;
+}
+
+.quality-stat-box:hover {
+  background: color-mix(in srgb, var(--bg-panel-strong) 95%, var(--accent));
+  border-color: var(--accent);
+}
+
+.quality-stat-box span {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.quality-stat-box strong {
+  font-size: 1.75rem;
+  font-weight: 800;
+  color: var(--ink);
+  letter-spacing: -0.025em;
+}
+
+.quality-stat-box.highlighted strong {
+  color: var(--accent);
+  text-shadow: 0 0 10px rgba(59, 130, 246, 0.2);
+}
+
+/* Glassmorphism gradient accents */
+.quality-bento-item::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 4px;
+  background: transparent;
+  transition: background 0.2s ease;
+}
+
+.quality-bento-item.accent-border::before {
+  background: linear-gradient(90deg, var(--accent), transparent);
+}
+
+.quality-bento-item.success-border::before {
+  background: linear-gradient(90deg, var(--success), transparent);
+}
+
+.quality-bento-item.warning-border::before {
+  background: linear-gradient(90deg, var(--warning), transparent);
 }
 
 

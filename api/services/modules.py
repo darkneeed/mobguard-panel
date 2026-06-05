@@ -735,13 +735,23 @@ def _normalize_runtime_metrics(
             if isinstance(item, dict)
         ],
     }
+    collected_at = str(details.get("collected_at") or "").strip() or None
+    if not collected_at or "system" not in details:
+        return {
+            "activity_window_seconds": int(activity_window_seconds),
+            "active_users": int(active_users),
+            "recent_events": int(recent_events),
+            "system": None,
+            "processes": None,
+            "collected_at": None,
+        }
     return {
         "activity_window_seconds": int(activity_window_seconds),
         "active_users": int(active_users),
         "recent_events": int(recent_events),
         "system": system,
         "processes": processes,
-        "collected_at": str(details.get("collected_at") or "").strip() or None,
+        "collected_at": collected_at,
     }
 
 
@@ -850,15 +860,17 @@ def _attach_runtime_metrics(
 
         system = payload["runtime_metrics"]["system"]
         processes = payload["runtime_metrics"]["processes"]
-        cpu_percent = system.get("cpu_percent")
-        if cpu_percent is not None:
-            cpu_values.append(float(cpu_percent))
-        memory_total_bytes += int(system.get("memory_total_bytes") or 0)
-        memory_used_bytes += int(system.get("memory_used_bytes") or 0)
-        disk_total_bytes += int(system.get("disk_total_bytes") or 0)
-        disk_used_bytes += int(system.get("disk_used_bytes") or 0)
-        mobguard_process_cpu_percent += float(processes.get("cpu_percent") or 0.0)
-        mobguard_process_rss_bytes += int(processes.get("rss_bytes") or 0)
+        if system:
+            cpu_percent = system.get("cpu_percent")
+            if cpu_percent is not None:
+                cpu_values.append(float(cpu_percent))
+            memory_total_bytes += int(system.get("memory_total_bytes") or 0)
+            memory_used_bytes += int(system.get("memory_used_bytes") or 0)
+            disk_total_bytes += int(system.get("disk_total_bytes") or 0)
+            disk_used_bytes += int(system.get("disk_used_bytes") or 0)
+        if processes:
+            mobguard_process_cpu_percent += float(processes.get("cpu_percent") or 0.0)
+            mobguard_process_rss_bytes += int(processes.get("rss_bytes") or 0)
 
     remnawave_total_online = None
     try:

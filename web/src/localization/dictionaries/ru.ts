@@ -78,7 +78,7 @@ export const ruDictionary: TranslationDictionary = {
       console: "Консоль",
       rules: "Правила",
       telegram: "Telegram",
-      access: "Доступ",
+      system: "Система",
       data: "Данные",
       quality: "Качество",
       bedolaga: "Bedolaga",
@@ -104,6 +104,10 @@ export const ruDictionary: TranslationDictionary = {
         events: "События",
         exports: "Экспорты",
         audit: "Аудит",
+      },
+      system: {
+        access: "Доступ",
+        branding: "Оформление",
       },
     },
     theme: {

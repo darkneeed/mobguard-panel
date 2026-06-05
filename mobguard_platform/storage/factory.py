@@ -20,8 +20,8 @@ def build_storage_bundle(runtime: RuntimeContext) -> StorageBundle:
     import os
     is_sqlite = (
         getattr(runtime.database, "backend", "sqlite") == "sqlite"
-        or "pytest" in sys.modules
-        or "PYTEST_CURRENT_TEST" in os.environ
+        or ("pytest" in sys.modules and os.environ.get("MOBGUARD_TEST_FORCE_POSTGRES") != "1")
+        or ("PYTEST_CURRENT_TEST" in os.environ and os.environ.get("MOBGUARD_TEST_FORCE_POSTGRES") != "1")
     )
     if is_sqlite:
         db_path = getattr(runtime.database, "sqlite_path", None) or runtime.db_path

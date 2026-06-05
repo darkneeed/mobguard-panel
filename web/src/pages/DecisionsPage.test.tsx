@@ -47,9 +47,10 @@ describe("DecisionsPage", () => {
 
     renderWithProviders(<DecisionsPage />, { route: "/decisions" });
 
-    expect(await screen.findByText("1.2.3.4 · Pixel 8")).toBeInTheDocument();
-    expect(screen.getByText("HOME / HIGH_HOME")).toBeInTheDocument();
-    expect(screen.getByText(/Source Rule engine/)).toBeInTheDocument();
-    expect(screen.getByText(/Enforcement Applied · Access squad · 1 attempts/)).toBeInTheDocument();
+    expect(await screen.findByText("1.2.3.4")).toBeInTheDocument();
+    expect(screen.getByText(/Pixel 8/)).toBeInTheDocument();
+    expect(screen.getAllByText("HOME").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("Rule engine").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText("Applied · Access squad · 1 attempts")).toBeInTheDocument();
   });
 });

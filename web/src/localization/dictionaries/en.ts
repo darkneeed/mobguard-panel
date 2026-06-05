@@ -76,10 +76,10 @@ export const enDictionary: TranslationDictionary = {
       console: "Console",
       rules: "Rules",
       telegram: "Telegram",
-      access: "Access",
+      system: "System",
       data: "Data",
       quality: "Quality",
-      bedolaga: "Bedolaga"
+      bedolaga: "Bedolaga",
     },
     subnav: {
       rules: {
@@ -89,7 +89,7 @@ export const enDictionary: TranslationDictionary = {
         providers: "Providers",
         policy: "Policy",
         learning: "Learning",
-        retention: "Retention"
+        retention: "Retention",
       },
       data: {
         console: "Console",
@@ -101,8 +101,12 @@ export const enDictionary: TranslationDictionary = {
         cases: "Cases",
         events: "Events",
         exports: "Exports",
-        audit: "Audit"
-      }
+        audit: "Audit",
+      },
+      system: {
+        access: "Access",
+        branding: "Appearance",
+      },
     },
     theme: {
       label: "Theme",

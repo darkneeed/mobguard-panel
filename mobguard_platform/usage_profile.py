@@ -72,13 +72,13 @@ def _format_duration(seconds: Any) -> str:
     minutes, _ = divmod(remainder, 60)
     chunks: list[str] = []
     if days:
-        chunks.append(f"{days}d")
+        chunks.append(f"{days}д")
     if hours:
-        chunks.append(f"{hours}h")
+        chunks.append(f"{hours}ч")
     if minutes:
-        chunks.append(f"{minutes}m")
+        chunks.append(f"{minutes}мин")
     if not chunks:
-        chunks.append(f"{total_seconds}s")
+        chunks.append(f"{total_seconds}сек")
     return " ".join(chunks[:3])
 
 
@@ -594,21 +594,26 @@ def build_usage_profile_admin_lines(
     if not bool(profile.get("available")):
         return []
 
-    lines: list[str] = ["<b>Usage snapshot:</b>"]
+    lines: list[str] = ["<b>Профиль использования:</b>"]
     if scenario:
-        lines.append(f"  • <b>Scenario:</b> {html.escape(_clean_text(scenario))}")
+        scenario_ru = {
+            "violation_continues": "продолжающееся нарушение",
+            "usage_profile_risk": "риск профиля использования",
+            "traffic_limit_exceeded": "превышен лимит трафика",
+        }.get(scenario, scenario)
+        lines.append(f"  • <b>Сценарий:</b> {html.escape(_clean_text(scenario_ru))}")
     summary = _clean_text(profile.get("usage_profile_summary"))
     if summary:
-        lines.append(f"  • <b>Summary:</b> {html.escape(summary)}")
+        lines.append(f"  • <b>Сводка:</b> {html.escape(summary)}")
     top_ips = profile.get("top_ips") if isinstance(profile.get("top_ips"), list) else []
     if top_ips:
-        lines.append(f"  • <b>IPs:</b> {_escaped_top_lines(top_ips, key_name='ip')}")
+        lines.append(f"  • <b>IP-адреса:</b> {_escaped_top_lines(top_ips, key_name='ip')}")
     top_providers = profile.get("top_providers") if isinstance(profile.get("top_providers"), list) else []
     if top_providers:
-        lines.append(f"  • <b>Providers:</b> {_escaped_top_lines(top_providers, key_name='provider')}")
+        lines.append(f"  • <b>Провайдеры:</b> {_escaped_top_lines(top_providers, key_name='provider')}")
     nodes = profile.get("nodes") if isinstance(profile.get("nodes"), list) else []
     if nodes:
-        lines.append(f"  • <b>Nodes:</b> {_escaped_join(nodes)}")
+        lines.append(f"  • <b>Узлы:</b> {_escaped_join(nodes)}")
     device_labels = profile.get("device_labels") if isinstance(profile.get("device_labels"), list) else []
     os_families = profile.get("os_families") if isinstance(profile.get("os_families"), list) else []
     if device_labels or os_families:
@@ -616,11 +621,11 @@ def build_usage_profile_admin_lines(
         os_text = _escaped_join(os_families)
         combined = " / ".join(part for part in (device_text, os_text) if part)
         if combined:
-            lines.append(f"  • <b>Devices:</b> {combined}")
+            lines.append(f"  • <b>Устройства:</b> {combined}")
     geo_summary = profile.get("geo_summary") if isinstance(profile.get("geo_summary"), Mapping) else {}
     countries = geo_summary.get("countries") if isinstance(geo_summary.get("countries"), list) else []
     if countries:
-        lines.append(f"  • <b>Geo:</b> {html.escape(_escaped_join(countries))}")
+        lines.append(f"  • <b>Гео:</b> {html.escape(_escaped_join(countries))}")
     travel_flags = profile.get("travel_flags") if isinstance(profile.get("travel_flags"), Mapping) else {}
     impossible = travel_flags.get("impossible_travel") if isinstance(travel_flags.get("impossible_travel"), list) else []
     if impossible:
@@ -631,21 +636,21 @@ def build_usage_profile_admin_lines(
             if _clean_text(value)
         )
         if path:
-            lines.append(f"  • <b>Travel:</b> {path}")
+            lines.append(f"  • <b>Перемещения:</b> {path}")
     elif bool(travel_flags.get("geo_country_jump")):
-        lines.append("  • <b>Travel:</b> country jump")
+        lines.append("  • <b>Перемещения:</b> смена страны")
     burst = profile.get("traffic_burst") if isinstance(profile.get("traffic_burst"), Mapping) else {}
     if burst:
         bytes_text = _clean_text(burst.get("bytes_text"))
         event_count = _clean_text(burst.get("event_count"))
         window_minutes = _clean_text(burst.get("window_minutes"))
         if bytes_text and window_minutes:
-            lines.append(f"  • <b>Traffic burst:</b> {html.escape(bytes_text)} / {window_minutes}m")
+            lines.append(f"  • <b>Всплеск трафика:</b> {html.escape(bytes_text)} / {window_minutes} мин")
         elif event_count and window_minutes:
-            lines.append(f"  • <b>Activity burst:</b> {event_count} events / {window_minutes}m")
+            lines.append(f"  • <b>Всплеск активности:</b> {event_count} событий / {window_minutes} мин")
     ongoing = _clean_text(profile.get("ongoing_duration_text"))
     if ongoing:
-        lines.append(f"  • <b>Ongoing:</b> {html.escape(ongoing)}")
+        lines.append(f"  • <b>Длительность:</b> {html.escape(ongoing)}")
     return lines
 
 
@@ -987,19 +992,19 @@ def build_usage_profile_snapshot(
 
     summary_parts: list[str] = []
     if ip_counter:
-        summary_parts.append(f"IPs {len(ip_counter)}")
+        summary_parts.append(f"IP {len(ip_counter)}")
     if provider_counter:
-        summary_parts.append(f"providers {len(provider_counter)}")
+        summary_parts.append(f"провайдеры {len(provider_counter)}")
     if node_names:
-        summary_parts.append(f"nodes {len(node_names)}")
+        summary_parts.append(f"узлы {len(node_names)}")
     if device_map:
-        summary_parts.append(f"devices {len(device_map)}")
+        summary_parts.append(f"устройства {len(device_map)}")
     if geo_summary["countries"]:
-        summary_parts.append("countries " + ", ".join(geo_summary["countries"][:3]))
+        summary_parts.append("страны " + ", ".join(geo_summary["countries"][:3]))
     if burst and _clean_text(burst.get("bytes_text")):
-        summary_parts.append("traffic " + _clean_text(burst.get("bytes_text")))
+        summary_parts.append("трафик " + _clean_text(burst.get("bytes_text")))
     if soft_reasons:
-        summary_parts.append("flags " + ", ".join(soft_reasons))
+        summary_parts.append("флаги " + ", ".join(soft_reasons))
     usage_profile_summary = "; ".join(summary_parts)
 
     return {

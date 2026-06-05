@@ -115,6 +115,39 @@ def _ensure_demo_module(container: Any) -> dict[str, Any]:
             "last_validation_at": _iso(_utcnow()),
             "spool_depth": 3,
             "access_log_exists": True,
+            "system": {
+                "cpu_percent": 12.5,
+                "cpu_cores": 4,
+                "load_avg_1m": 0.5,
+                "load_avg_5m": 0.3,
+                "load_avg_15m": 0.1,
+                "memory_total_bytes": 17179869184, # 16 GB
+                "memory_used_bytes": 8589934592,   # 8 GB
+                "memory_percent": 50.0,
+                "disk_total_bytes": 256000000000,   # 256 GB
+                "disk_used_bytes": 128000000000,    # 128 GB
+                "disk_percent": 50.0,
+                "disk_read_bps": 1024,
+                "disk_write_bps": 2048,
+                "uptime_seconds": 3600,
+            },
+            "processes": {
+                "match_count": 1,
+                "cpu_percent": 1.5,
+                "rss_bytes": 52428800, # 50 MB
+                "vms_bytes": 104857600, # 100 MB
+                "top": [
+                    {
+                        "pid": 1234,
+                        "name": "mobguard_module",
+                        "cmdline": "python -m mobguard_module",
+                        "cpu_percent": 1.5,
+                        "rss_bytes": 52428800,
+                        "vms_bytes": 104857600,
+                    }
+                ],
+            },
+            "collected_at": _iso(_utcnow()),
         },
     )
     module = container.store.get_module(DEMO_MODULE_ID)

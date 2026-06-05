@@ -221,7 +221,7 @@ class UsageProfileTests(unittest.TestCase):
         )
         context = build_usage_profile_template_context(snapshot)
 
-        self.assertIn("IPs", context["usage_profile_summary"])
+        self.assertIn("IP", context["usage_profile_summary"])
         self.assertEqual(context["usage_profile_ip_count"], 1)
         self.assertEqual(context["usage_profile_device_count"], 1)
 
@@ -270,8 +270,8 @@ class UsageProfileTests(unittest.TestCase):
 
         self.assertGreater(priority["priority"], 0)
         self.assertGreater(priority["signal_count"], 0)
-        self.assertTrue(any("Scenario:" in line for line in lines))
-        self.assertTrue(any("Usage snapshot:" in line for line in lines))
+        self.assertTrue(any("Сценарий:" in line for line in lines))
+        self.assertTrue(any("Профиль использования:" in line for line in lines))
 
     def test_snapshot_prefers_byte_based_traffic_burst_when_series_is_available(self):
         snapshot = build_usage_profile_snapshot(
@@ -292,7 +292,7 @@ class UsageProfileTests(unittest.TestCase):
         self.assertEqual(snapshot["traffic_burst"]["source"], "traffic_bytes")
         self.assertEqual(snapshot["traffic_burst"]["point_count"], 3)
         self.assertIn("traffic_burst", snapshot["soft_reasons"])
-        self.assertIn("traffic", snapshot["usage_profile_summary"])
+        self.assertIn("трафик", snapshot["usage_profile_summary"])
 
     def test_snapshot_can_be_device_scoped_to_avoid_cross_device_travel_noise(self):
         self._record_event(

@@ -583,7 +583,7 @@ export function ModulesPage({ session }: { session?: Session }) {
 
         <div className="action-row" style={{ display: "flex", gap: "0.5rem", marginTop: "auto" }}>
           <button className="ghost" style={{ flex: 1, padding: "0.5rem" }} onClick={() => openModule(item.module_id)}>
-            Настройки
+            {t("modules.open")}
           </button>
           <button className="ghost" style={{ flex: 1, padding: "0.5rem" }} onClick={() => viewLogs(item.module_id)}>
             Лог

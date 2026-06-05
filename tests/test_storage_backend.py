@@ -68,8 +68,10 @@ class StorageBackendTests(unittest.TestCase):
         previous_env_file = os.environ.get("MOBGUARD_ENV_FILE")
         previous_backend = os.environ.get("MOBGUARD_DB_BACKEND")
         previous_database_url = os.environ.get("DATABASE_URL")
+        previous_dsn = os.environ.get("MOBGUARD_POSTGRES_DSN")
         os.environ["MOBGUARD_ENV_FILE"] = str(self.root / ".env")
         os.environ.pop("MOBGUARD_DB_BACKEND", None)
+        os.environ.pop("MOBGUARD_POSTGRES_DSN", None)
         os.environ["DATABASE_URL"] = "postgresql://mobguard:secret@db:5432/mobguard"
         try:
             context = load_runtime_context(self.root, str(self.runtime))
@@ -86,6 +88,10 @@ class StorageBackendTests(unittest.TestCase):
                 os.environ.pop("DATABASE_URL", None)
             else:
                 os.environ["DATABASE_URL"] = previous_database_url
+            if previous_dsn is None:
+                os.environ.pop("MOBGUARD_POSTGRES_DSN", None)
+            else:
+                os.environ["MOBGUARD_POSTGRES_DSN"] = previous_dsn
 
         self.assertEqual(context.database.backend, "postgres")
         self.assertEqual(context.database.resolve_postgres_dsn(), "postgresql://mobguard:secret@db:5432/mobguard")
@@ -96,11 +102,14 @@ class StorageBackendTests(unittest.TestCase):
         previous_env_file = os.environ.get("MOBGUARD_ENV_FILE")
         previous_backend = os.environ.get("MOBGUARD_DB_BACKEND")
         previous_dsn = os.environ.get("MOBGUARD_POSTGRES_DSN")
+        previous_force_postgres = os.environ.get("MOBGUARD_TEST_FORCE_POSTGRES")
         os.environ["MOBGUARD_ENV_FILE"] = str(self.root / ".env")
         os.environ["MOBGUARD_DB_BACKEND"] = "postgres"
         os.environ["MOBGUARD_POSTGRES_DSN"] = "postgresql://mobguard:secret@db:5432/mobguard"
+        os.environ["MOBGUARD_TEST_FORCE_POSTGRES"] = "1"
         try:
             context = load_runtime_context(self.root, str(self.runtime))
+            bundle = build_storage_bundle(context)
         finally:
             if previous_env_file is None:
                 os.environ.pop("MOBGUARD_ENV_FILE", None)
@@ -114,8 +123,10 @@ class StorageBackendTests(unittest.TestCase):
                 os.environ.pop("MOBGUARD_POSTGRES_DSN", None)
             else:
                 os.environ["MOBGUARD_POSTGRES_DSN"] = previous_dsn
-
-        bundle = build_storage_bundle(context)
+            if previous_force_postgres is None:
+                os.environ.pop("MOBGUARD_TEST_FORCE_POSTGRES", None)
+            else:
+                os.environ["MOBGUARD_TEST_FORCE_POSTGRES"] = previous_force_postgres
 
         self.assertEqual(bundle.backend, "postgres")
         self.assertIsInstance(bundle.store.storage, PostgresStorage)

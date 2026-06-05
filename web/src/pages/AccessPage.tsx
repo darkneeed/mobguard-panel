@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useParams } from "react-router-dom";
 
 import {
   api,
@@ -50,6 +51,8 @@ export function AccessPage({
   onThemeChange,
 }: AccessPageProps) {
   const { t } = useI18n();
+  const { section } = useParams<{ section?: string }>();
+  const activeSection = section === "branding" ? "branding" : "access";
   const [data, setData] = useState<AccessSettingsResponse | null>(null);
   const [lists, setLists] = useState<Record<string, string>>({});
   const [savedLists, setSavedLists] = useState<Record<string, string>>({});
@@ -346,7 +349,7 @@ export function AccessPage({
     <section className="page">
       <div className="page-header page-header-stack">
         <div>
-          <h1>{t("access.title")}</h1>
+          <h1>{t("nav.system")}</h1>
         </div>
         <div className="action-row">
           <span
@@ -375,369 +378,373 @@ export function AccessPage({
 
       {data ? (
         <>
-          <div className="stats-grid">
-            <div className="stat-card">
-              <span>{t("access.cards.telegramLogin")}</span>
-              <strong>
-                {data.auth.telegram_enabled ? t("common.on") : t("common.off")}
-              </strong>
-            </div>
-            <div className="stat-card">
-              <span>{t("access.cards.localFallback")}</span>
-              <strong>
-                {data.auth.local_enabled ? t("common.on") : t("common.off")}
-              </strong>
-            </div>
-            <div className="stat-card">
-              <span>{t("access.cards.envFile")}</span>
-              <strong>
-                {data.env_file_writable
-                  ? t("common.writable")
-                  : t("common.readOnly")}
-              </strong>
-            </div>
-          </div>
-
-          <div className="panel">
-            <div className="panel-heading panel-heading-row">
-              <div>
-                <h2>{t("access.brandingTitle")}</h2>
-                <p className="muted">{t("access.brandingDescription")}</p>
-              </div>
-              <div className="action-row">
-                <span
-                  className={
-                    brandingDirty ? "tag review-only" : "tag severity-low"
-                  }
-                >
-                  {brandingDirty
-                    ? t("common.unsavedChanges")
-                    : t("common.saved")}
-                </span>
-                <button
-                  onClick={saveBranding}
-                  disabled={!brandingDirty || !brandingDraft.panel_name.trim()}
-                >
-                  {t("access.saveBranding")}
-                </button>
-              </div>
-            </div>
-            <div className="detail-grid">
-              <div className="settings-group branding-preview-card">
-                <div className="brand">
-                  <BrandLogo
-                    logoUrl={brandingDraft.panel_logo_url}
-                    alt={
-                      brandingDraft.panel_name ||
-                      t("access.brandingFields.serviceName")
-                    }
-                  />
-                  <div className="branding-info">
-                    <strong>
-                      {brandingDraft.panel_name || t("common.notAvailable")}
-                    </strong>
-                    <small>{t("layout.brandSubtitle")}</small>
-                  </div>
-                </div>
-              </div>
-              <div className="settings-group settings-group-stack">
-                <div className="rule-field">
-                  <FieldLabel
-                    label={t("access.brandingFields.serviceName")}
-                    description={t(
-                      "access.brandingFields.serviceNameDescription",
-                    )}
-                  />
-                  <input
-                    aria-label={t("access.brandingFields.serviceName")}
-                    value={brandingDraft.panel_name}
-                    onChange={(event) =>
-                      setBrandingDraft((prev) => ({
-                        ...prev,
-                        panel_name: event.target.value,
-                      }))
-                    }
-                  />
-                </div>
-                <div className="rule-field">
-                  <FieldLabel
-                    label={t("access.brandingFields.logoUrl")}
-                    description={t("access.brandingFields.logoUrlDescription")}
-                  />
-                  <input
-                    aria-label={t("access.brandingFields.logoUrl")}
-                    placeholder={t("access.brandingFields.logoUrlPlaceholder")}
-                    value={brandingDraft.panel_logo_url}
-                    onChange={(event) =>
-                      setBrandingDraft((prev) => ({
-                        ...prev,
-                        panel_logo_url: event.target.value,
-                      }))
-                    }
-                  />
-                </div>
-              </div>
-              <div className="settings-group settings-group-stack">
-                <div>
-                  <h3>{t("access.interfaceTitle")}</h3>
-                  <p className="muted">{t("access.interfaceDescription")}</p>
-                </div>
-                <label className="theme-picker">
-                  <span>{t("layout.language.label")}</span>
-                  <select
-                    value={language}
-                    onChange={(event) =>
-                      onLanguageChange(event.target.value as Language)
-                    }
-                  >
-                    <option value="ru">{t("layout.language.ru")}</option>
-                    <option value="en">{t("layout.language.en")}</option>
-                  </select>
-                </label>
-                <label className="theme-picker">
-                  <span>{t("layout.palette.label")}</span>
-                  <select
-                    value={palette}
-                    onChange={(event) =>
-                      onPaletteChange(event.target.value as PaletteName)
-                    }
-                  >
-                    <option value="green">{t("layout.palette.green")}</option>
-                    <option value="orange">{t("layout.palette.orange")}</option>
-                    <option value="blue">{t("layout.palette.blue")}</option>
-                    <option value="purple">{t("layout.palette.purple")}</option>
-                    <option value="red">{t("layout.palette.red")}</option>
-                  </select>
-                </label>
-                <label className="theme-picker">
-                  <span>{t("layout.theme.label")}</span>
-                  <select
-                    value={theme}
-                    onChange={(event) =>
-                      onThemeChange(event.target.value as ThemeMode)
-                    }
-                  >
-                    <option value="system">{t("layout.theme.system")}</option>
-                    <option value="light">{t("layout.theme.light")}</option>
-                    <option value="dark">{t("layout.theme.dark")}</option>
-                  </select>
-                </label>
-                <p className="muted">{t("access.interfaceSavedHint")}</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="settings-grid">
+          {activeSection === "branding" ? (
             <div className="panel">
               <div className="panel-heading panel-heading-row">
                 <div>
-                  <h2>{t("access.integrationTitle")}</h2>
-                  <p className="muted">{t("access.integrationDescription")}</p>
+                  <h2>{t("access.brandingTitle")}</h2>
+                  <p className="muted">{t("access.brandingDescription")}</p>
                 </div>
                 <div className="action-row">
                   <span
                     className={
-                      integrationDirty ? "tag review-only" : "tag severity-low"
+                      brandingDirty ? "tag review-only" : "tag severity-low"
                     }
                   >
-                    {integrationDirty
+                    {brandingDirty
                       ? t("common.unsavedChanges")
                       : t("common.saved")}
                   </span>
-                  <button onClick={saveIntegrations} disabled={!integrationDirty}>
-                    {t("access.saveIntegration")}
-                  </button>
-                </div>
-              </div>
-              {integrationSaved ? <div className="ok-box">{integrationSaved}</div> : null}
-              <div className="settings-group settings-group-stack">
-                <div className="rule-field">
-                  <FieldLabel
-                    label={t("access.integrationFields.remnawaveApiUrl")}
-                    description={t("access.integrationFields.remnawaveApiUrlDescription")}
-                  />
-                  <input
-                    aria-label={t("access.integrationFields.remnawaveApiUrl")}
-                    placeholder={t("access.integrationFields.remnawaveApiUrlPlaceholder")}
-                    value={remnawaveApiUrlDraft}
-                    onChange={(event) => setRemnawaveApiUrlDraft(event.target.value)}
-                  />
-                </div>
-                <div className="rule-field">
-                  <FieldLabel
-                    label={t("access.integrationFields.bedolagaApiUrl")}
-                    description={t("access.integrationFields.bedolagaApiUrlDescription")}
-                  />
-                  <input
-                    aria-label={t("access.integrationFields.bedolagaApiUrl")}
-                    placeholder="https://bedolaga.example.com"
-                    value={bedolagaApiUrlDraft}
-                    onChange={(event) => setBedolagaApiUrlDraft(event.target.value)}
-                  />
-                </div>
-                <div className="rule-field">
-                  <FieldLabel
-                    label={t("access.integrationFields.bedolagaApiToken")}
-                    description={t("access.integrationFields.bedolagaApiTokenDescription")}
-                  />
-                  <input
-                    type="password"
-                    aria-label={t("access.integrationFields.bedolagaApiToken")}
-                    placeholder={t("common.leaveBlankToKeep")}
-                    value={bedolagaApiTokenDraft}
-                    onChange={(event) => setBedolagaApiTokenDraft(event.target.value)}
-                  />
-                </div>
-                <div className="rule-field">
-                  <FieldLabel
-                    label={t("access.integrationFields.bedolagaTimeout")}
-                    description={t("access.integrationFields.bedolagaTimeoutDescription")}
-                  />
-                  <input
-                    type="number"
-                    aria-label={t("access.integrationFields.bedolagaTimeout")}
-                    value={bedolagaTimeoutDraft}
-                    onChange={(event) => setBedolagaTimeoutDraft(Number(event.target.value))}
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div className="panel">
-              <div className="panel-heading panel-heading-row">
-                <div>
-                  <h2>{t("access.listsTitle")}</h2>
-                  <p className="muted">{t("access.listsDescription")}</p>
-                </div>
-                <div className="action-row">
-                  <span
-                    className={
-                      listDirty ? "tag review-only" : "tag severity-low"
-                    }
+                  <button
+                    onClick={saveBranding}
+                    disabled={!brandingDirty || !brandingDraft.panel_name.trim()}
                   >
-                    {listDirty ? t("common.unsavedChanges") : t("common.saved")}
-                  </span>
-                  <button onClick={save} disabled={!listDirty}>
-                    {t("access.save")}
+                    {t("access.saveBranding")}
                   </button>
                 </div>
               </div>
               <div className="detail-grid">
-                {ACCESS_FIELDS.map((field) => (
-                  <div className="rule-field" key={field.key}>
+                <div className="settings-group branding-preview-card">
+                  <div className="brand">
+                    <BrandLogo
+                      logoUrl={brandingDraft.panel_logo_url}
+                      alt={
+                        brandingDraft.panel_name ||
+                        t("access.brandingFields.serviceName")
+                      }
+                    />
+                    <div className="branding-info">
+                      <strong>
+                        {brandingDraft.panel_name || t("common.notAvailable")}
+                      </strong>
+                      <small>{t("layout.brandSubtitle")}</small>
+                    </div>
+                  </div>
+                </div>
+                <div className="settings-group settings-group-stack">
+                  <div className="rule-field">
                     <FieldLabel
-                      label={t(`rulesMeta.listFields.${field.key}.label`)}
+                      label={t("access.brandingFields.serviceName")}
                       description={t(
-                        `rulesMeta.listFields.${field.key}.description`,
-                      )}
-                      recommendation={t(
-                        `rulesMeta.listFields.${field.key}.recommendation`,
+                        "access.brandingFields.serviceNameDescription",
                       )}
                     />
-                    <textarea
-                      className="note-box tall code-editor-box"
-                      value={lists[field.key] || ""}
+                    <input
+                      aria-label={t("access.brandingFields.serviceName")}
+                      value={brandingDraft.panel_name}
                       onChange={(event) =>
-                        setLists((prev) => ({
+                        setBrandingDraft((prev) => ({
                           ...prev,
-                          [field.key]: event.target.value,
+                          panel_name: event.target.value,
                         }))
                       }
                     />
                   </div>
-                ))}
+                  <div className="rule-field">
+                    <FieldLabel
+                      label={t("access.brandingFields.logoUrl")}
+                      description={t("access.brandingFields.logoUrlDescription")}
+                    />
+                    <input
+                      aria-label={t("access.brandingFields.logoUrl")}
+                      placeholder={t("access.brandingFields.logoUrlPlaceholder")}
+                      value={brandingDraft.panel_logo_url}
+                      onChange={(event) =>
+                        setBrandingDraft((prev) => ({
+                          ...prev,
+                          panel_logo_url: event.target.value,
+                        }))
+                      }
+                    />
+                  </div>
+                </div>
+                <div className="settings-group settings-group-stack">
+                  <div>
+                    <h3>{t("access.interfaceTitle")}</h3>
+                    <p className="muted">{t("access.interfaceDescription")}</p>
+                  </div>
+                  <label className="theme-picker">
+                    <span>{t("layout.language.label")}</span>
+                    <select
+                      value={language}
+                      onChange={(event) =>
+                        onLanguageChange(event.target.value as Language)
+                      }
+                    >
+                      <option value="ru">{t("layout.language.ru")}</option>
+                      <option value="en">{t("layout.language.en")}</option>
+                    </select>
+                  </label>
+                  <label className="theme-picker">
+                    <span>{t("layout.palette.label")}</span>
+                    <select
+                      value={palette}
+                      onChange={(event) =>
+                        onPaletteChange(event.target.value as PaletteName)
+                      }
+                    >
+                      <option value="green">{t("layout.palette.green")}</option>
+                      <option value="orange">{t("layout.palette.orange")}</option>
+                      <option value="blue">{t("layout.palette.blue")}</option>
+                      <option value="purple">{t("layout.palette.purple")}</option>
+                      <option value="red">{t("layout.palette.red")}</option>
+                    </select>
+                  </label>
+                  <label className="theme-picker">
+                    <span>{t("layout.theme.label")}</span>
+                    <select
+                      value={theme}
+                      onChange={(event) =>
+                        onThemeChange(event.target.value as ThemeMode)
+                      }
+                    >
+                      <option value="system">{t("layout.theme.system")}</option>
+                      <option value="light">{t("layout.theme.light")}</option>
+                      <option value="dark">{t("layout.theme.dark")}</option>
+                    </select>
+                  </label>
+                  <p className="muted">{t("access.interfaceSavedHint")}</p>
+                </div>
               </div>
             </div>
+          ) : (
+            <>
+              <div className="stats-grid">
+                <div className="stat-card">
+                  <span>{t("access.cards.telegramLogin")}</span>
+                  <strong>
+                    {data.auth.telegram_enabled ? t("common.on") : t("common.off")}
+                  </strong>
+                </div>
+                <div className="stat-card">
+                  <span>{t("access.cards.localFallback")}</span>
+                  <strong>
+                    {data.auth.local_enabled ? t("common.on") : t("common.off")}
+                  </strong>
+                </div>
+                <div className="stat-card">
+                  <span>{t("access.cards.envFile")}</span>
+                  <strong>
+                    {data.env_file_writable
+                      ? t("common.writable")
+                      : t("common.readOnly")}
+                  </strong>
+                </div>
+              </div>
 
-          <div className="panel">
-            <div className="panel-heading panel-heading-row">
-              <div>
-                <h2>{t("access.ownerSecurity.title")}</h2>
-                <p className="muted">{t("access.ownerSecurity.description")}</p>
-              </div>
-              <div className="action-row">
-                <span
-                  className={
-                    data.owner_security.totp_enabled
-                      ? "tag review-only"
-                      : "tag status-resolved"
-                  }
-                >
-                  {ownerSecurityStatus(data.owner_security)}
-                </span>
-                <button
-                  onClick={disableOwnerTotp}
-                  disabled={
-                    securitySubmitting || !data.owner_security.enabled_owner_count
-                  }
-                >
-                  {securitySubmitting
-                    ? t("access.ownerSecurity.disabling")
-                    : t("access.ownerSecurity.disableAction")}
-                </button>
-              </div>
-            </div>
-            {securityError ? <div className="error-box">{securityError}</div> : null}
-            {securitySaved ? <div className="ok-box">{securitySaved}</div> : null}
-            <div className="detail-list">
-              <div>
-                <dt>{t("access.ownerSecurity.statusLabel")}</dt>
-                <dd>{ownerSecurityStatus(data.owner_security)}</dd>
-              </div>
-              <div>
-                <dt>{t("access.ownerSecurity.ownerCountLabel")}</dt>
-                <dd>{data.owner_security.owner_identity_count}</dd>
-              </div>
-              <div>
-                <dt>{t("access.ownerSecurity.enabledCountLabel")}</dt>
-                <dd>{data.owner_security.enabled_owner_count}</dd>
-              </div>
-              <div>
-                <dt>{t("access.ownerSecurity.pendingLabel")}</dt>
-                <dd>{data.owner_security.pending_challenge_count}</dd>
-              </div>
-            </div>
-          </div>
+              <div className="settings-grid">
+                <div className="panel">
+                  <div className="panel-heading panel-heading-row">
+                    <div>
+                      <h2>{t("access.integrationTitle")}</h2>
+                      <p className="muted">{t("access.integrationDescription")}</p>
+                    </div>
+                    <div className="action-row">
+                      <span
+                        className={
+                          integrationDirty ? "tag review-only" : "tag severity-low"
+                        }
+                      >
+                        {integrationDirty
+                          ? t("common.unsavedChanges")
+                          : t("common.saved")}
+                      </span>
+                      <button onClick={saveIntegrations} disabled={!integrationDirty}>
+                        {t("access.saveIntegration")}
+                      </button>
+                    </div>
+                  </div>
+                  {integrationSaved ? <div className="ok-box">{integrationSaved}</div> : null}
+                  <div className="settings-group settings-group-stack">
+                    <div className="rule-field">
+                      <FieldLabel
+                        label={t("access.integrationFields.remnawaveApiUrl")}
+                        description={t("access.integrationFields.remnawaveApiUrlDescription")}
+                      />
+                      <input
+                        aria-label={t("access.integrationFields.remnawaveApiUrl")}
+                        placeholder={t("access.integrationFields.remnawaveApiUrlPlaceholder")}
+                        value={remnawaveApiUrlDraft}
+                        onChange={(event) => setRemnawaveApiUrlDraft(event.target.value)}
+                      />
+                    </div>
+                    <div className="rule-field">
+                      <FieldLabel
+                        label={t("access.integrationFields.bedolagaApiUrl")}
+                        description={t("access.integrationFields.bedolagaApiUrlDescription")}
+                      />
+                      <input
+                        aria-label={t("access.integrationFields.bedolagaApiUrl")}
+                        placeholder="https://bedolaga.example.com"
+                        value={bedolagaApiUrlDraft}
+                        onChange={(event) => setBedolagaApiUrlDraft(event.target.value)}
+                      />
+                    </div>
+                    <div className="rule-field">
+                      <FieldLabel
+                        label={t("access.integrationFields.bedolagaApiToken")}
+                        description={t("access.integrationFields.bedolagaApiTokenDescription")}
+                      />
+                      <input
+                        type="password"
+                        aria-label={t("access.integrationFields.bedolagaApiToken")}
+                        placeholder={t("common.leaveBlankToKeep")}
+                        value={bedolagaApiTokenDraft}
+                        onChange={(event) => setBedolagaApiTokenDraft(event.target.value)}
+                      />
+                    </div>
+                    <div className="rule-field">
+                      <FieldLabel
+                        label={t("access.integrationFields.bedolagaTimeout")}
+                        description={t("access.integrationFields.bedolagaTimeoutDescription")}
+                      />
+                      <input
+                        type="number"
+                        aria-label={t("access.integrationFields.bedolagaTimeout")}
+                        value={bedolagaTimeoutDraft}
+                        onChange={(event) => setBedolagaTimeoutDraft(Number(event.target.value))}
+                      />
+                    </div>
+                  </div>
+                </div>
 
-          <div className="panel">
-            <div className="panel-heading panel-heading-row">
-              <div>
-                <h2>{t("access.envTitle")}</h2>
-                  <p className="muted">{t("access.envDescription")}</p>
+                <div className="panel">
+                  <div className="panel-heading panel-heading-row">
+                    <div>
+                      <h2>{t("access.listsTitle")}</h2>
+                      <p className="muted">{t("access.listsDescription")}</p>
+                    </div>
+                    <div className="action-row">
+                      <span
+                        className={
+                          listDirty ? "tag review-only" : "tag severity-low"
+                        }
+                      >
+                        {listDirty ? t("common.unsavedChanges") : t("common.saved")}
+                      </span>
+                      <button onClick={save} disabled={!listDirty}>
+                        {t("access.save")}
+                      </button>
+                    </div>
+                  </div>
+                  <div className="detail-grid">
+                    {ACCESS_FIELDS.map((field) => (
+                      <div className="rule-field" key={field.key}>
+                        <FieldLabel
+                          label={t(`rulesMeta.listFields.${field.key}.label`)}
+                          description={t(
+                            `rulesMeta.listFields.${field.key}.description`,
+                          )}
+                          recommendation={t(
+                            `rulesMeta.listFields.${field.key}.recommendation`,
+                          )}
+                        />
+                        <textarea
+                          className="note-box tall code-editor-box"
+                          value={lists[field.key] || ""}
+                          onChange={(event) =>
+                            setLists((prev) => ({
+                              ...prev,
+                              [field.key]: event.target.value,
+                            }))
+                          }
+                        />
+                      </div>
+                    ))}
+                  </div>
                 </div>
-                <div className="action-row">
-                  <span className="tag severity-low">
-                    {t("access.envCount", {
-                      present: envPresentCount,
-                      total: envFieldCount,
-                    })}
-                  </span>
-                  <span
-                    className={
-                      envDirty ? "tag review-only" : "tag severity-low"
-                    }
-                  >
-                    {envDirty ? t("common.unsavedChanges") : t("common.saved")}
-                  </span>
-                  <button
-                    onClick={saveEnv}
-                    disabled={!envDirty || !data.env_file_writable}
-                  >
-                    {t("access.saveEnv")}
-                  </button>
+
+                <div className="panel">
+                  <div className="panel-heading panel-heading-row">
+                    <div>
+                      <h2>{t("access.ownerSecurity.title")}</h2>
+                      <p className="muted">{t("access.ownerSecurity.description")}</p>
+                    </div>
+                    <div className="action-row">
+                      <span
+                        className={
+                          data.owner_security.totp_enabled
+                            ? "tag review-only"
+                            : "tag status-resolved"
+                        }
+                      >
+                        {ownerSecurityStatus(data.owner_security)}
+                      </span>
+                      <button
+                        onClick={disableOwnerTotp}
+                        disabled={
+                          securitySubmitting || !data.owner_security.enabled_owner_count
+                        }
+                      >
+                        {securitySubmitting
+                          ? t("access.ownerSecurity.disabling")
+                          : t("access.ownerSecurity.disableAction")}
+                      </button>
+                    </div>
+                  </div>
+                  {securityError ? <div className="error-box">{securityError}</div> : null}
+                  {securitySaved ? <div className="ok-box">{securitySaved}</div> : null}
+                  <div className="detail-list">
+                    <div>
+                      <dt>{t("access.ownerSecurity.statusLabel")}</dt>
+                      <dd>{ownerSecurityStatus(data.owner_security)}</dd>
+                    </div>
+                    <div>
+                      <dt>{t("access.ownerSecurity.ownerCountLabel")}</dt>
+                      <dd>{data.owner_security.owner_identity_count}</dd>
+                    </div>
+                    <div>
+                      <dt>{t("access.ownerSecurity.enabledCountLabel")}</dt>
+                      <dd>{data.owner_security.enabled_owner_count}</dd>
+                    </div>
+                    <div>
+                      <dt>{t("access.ownerSecurity.pendingLabel")}</dt>
+                      <dd>{data.owner_security.pending_challenge_count}</dd>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="panel">
+                  <div className="panel-heading panel-heading-row">
+                    <div>
+                      <h2>{t("access.envTitle")}</h2>
+                      <p className="muted">{t("access.envDescription")}</p>
+                    </div>
+                    <div className="action-row">
+                      <span className="tag severity-low">
+                        {t("access.envCount", {
+                          present: envPresentCount,
+                          total: envFieldCount,
+                        })}
+                      </span>
+                      <span
+                        className={
+                          envDirty ? "tag review-only" : "tag severity-low"
+                        }
+                      >
+                        {envDirty ? t("common.unsavedChanges") : t("common.saved")}
+                      </span>
+                      <button
+                        onClick={saveEnv}
+                        disabled={!envDirty || !data.env_file_writable}
+                      >
+                        {t("access.saveEnv")}
+                      </button>
+                    </div>
+                  </div>
+                  <div className="settings-group-stack">
+                    <div className="settings-file-row">
+                      <span className="muted">{t("common.envFile")}</span>
+                      <strong>{data.env_file_path}</strong>
+                    </div>
+                    {envError ? <div className="error-box">{envError}</div> : null}
+                    {envSaved ? <div className="ok-box">{envSaved}</div> : null}
+                    {Object.values(data.env).map(renderEnvField)}
+                  </div>
                 </div>
               </div>
-              <div className="settings-group-stack">
-                <div className="settings-file-row">
-                  <span className="muted">{t("common.envFile")}</span>
-                  <strong>{data.env_file_path}</strong>
-                </div>
-                {envError ? <div className="error-box">{envError}</div> : null}
-                {envSaved ? <div className="ok-box">{envSaved}</div> : null}
-                {Object.values(data.env).map(renderEnvField)}
-              </div>
-            </div>
-          </div>
+            </>
+          )}
         </>
       ) : null}
     </section>

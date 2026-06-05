@@ -174,8 +174,9 @@ export function AppRouter({
             </PermissionRoute>
           }
         />
+        <Route path="/system" element={<Navigate to="/system/access" replace />} />
         <Route
-          path="/access"
+          path="/system/:section"
           element={
             <PermissionRoute session={session} permission="settings.access.read">
               <AccessPage

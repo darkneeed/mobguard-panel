@@ -135,7 +135,8 @@ describe("AccessPage", () => {
         onPaletteChange={() => undefined}
         theme="system"
         onThemeChange={() => undefined}
-      />
+      />,
+      { route: "/system/branding", path: "/system/:section" }
     );
 
     const serviceNameInput = await screen.findByRole("textbox", { name: "Service name" });

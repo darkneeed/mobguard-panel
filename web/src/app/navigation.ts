@@ -28,7 +28,7 @@ export const primaryNavigation: NavigationGroup[] = [
     items: [
       { to: "/rules/general", labelKey: "layout.nav.rules", permission: "rules.read" },
       { to: "/telegram", labelKey: "layout.nav.telegram", permission: "settings.telegram.read" },
-      { to: "/access", labelKey: "layout.nav.access", permission: "settings.access.read" }
+      { to: "/system/access", labelKey: "layout.nav.system", permission: "settings.access.read" }
     ]
   },
   {
@@ -55,12 +55,20 @@ export const dataNavigation: NavigationItem[] = [
   { to: "/data/events", labelKey: "layout.subnav.data.events", permission: "data.read" },
 ];
 
+export const systemNavigation: NavigationItem[] = [
+  { to: "/system/access", labelKey: "layout.subnav.system.access", permission: "settings.access.read" },
+  { to: "/system/branding", labelKey: "layout.subnav.system.branding", permission: "settings.access.read" },
+];
+
 export function getSecondaryNavigation(pathname: string): NavigationItem[] {
   if (pathname.startsWith("/rules")) {
     return rulesNavigation;
   }
   if (pathname.startsWith("/data")) {
     return dataNavigation;
+  }
+  if (pathname.startsWith("/system")) {
+    return systemNavigation;
   }
   return [];
 }

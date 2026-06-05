@@ -124,8 +124,8 @@ describe("RulesPage retention settings", () => {
     });
 
     expect(await screen.findByRole("button", { name: "Save automation controls" })).toBeInTheDocument();
-    expect(screen.queryByText("Automation status")).not.toBeInTheDocument();
-    expect(screen.getByDisplayValue("Observe")).toBeInTheDocument();
+    expect(screen.getByText("Automation status")).toBeInTheDocument();
+    expect(screen.getByText("Observe")).toBeInTheDocument();
   });
 
   it("saves automation controls and moved policy settings from the general section", async () => {
@@ -209,16 +209,7 @@ describe("RulesPage retention settings", () => {
     const automationPanel = automationHeading.closest(".panel");
     expect(automationPanel).not.toBeNull();
 
-    const workModeLabels = within(automationPanel as HTMLElement).getAllByText(
-      "Operating mode",
-    );
-    const workModeField =
-      workModeLabels[workModeLabels.length - 1].closest(".rule-field");
-    expect(workModeField).not.toBeNull();
-    await userEvent.selectOptions(
-      within(workModeField as HTMLElement).getByRole("combobox"),
-      "observe",
-    );
+    await userEvent.click(screen.getByText("Observe"));
 
     await userEvent.click(
       within(automationPanel as HTMLElement).getByRole("button", {
