@@ -141,17 +141,17 @@ export function QualityPage() {
         {
           name: t("quality.cards.resolvedHome"),
           value: data.resolved_home,
-          fill: "#0f766e",
+          fill: "var(--success, #10b981)",
         },
         {
           name: t("quality.cards.resolvedMobile"),
           value: data.resolved_mobile,
-          fill: "#155e75",
+          fill: "var(--accent, #3b82f6)",
         },
         {
           name: t("quality.cards.skipped"),
           value: data.skipped,
-          fill: "#c77d1a",
+          fill: "var(--warning, #f59e0b)",
         },
       ]
     : [];
@@ -311,11 +311,11 @@ export function QualityPage() {
                     axisLine={false}
                   />
                   <Tooltip />
-                  <Bar dataKey="value" fill="#155e75" radius={[10, 10, 0, 0]} />
+                  <Bar dataKey="value" fill="var(--accent, #3b82f6)" radius={[10, 10, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
-
+ 
             <div className="panel chart-panel">
               <div className="panel-heading">
                 <h2>{t("quality.topMixedProvidersTitle")}</h2>
@@ -332,10 +332,10 @@ export function QualityPage() {
                     axisLine={false}
                   />
                   <Tooltip />
-                  <Bar dataKey="open" fill="#0f766e" radius={[10, 10, 0, 0]} />
+                  <Bar dataKey="open" fill="var(--success, #10b981)" radius={[10, 10, 0, 0]} />
                   <Bar
                     dataKey="conflict"
-                    fill="#c77d1a"
+                    fill="var(--warning, #f59e0b)"
                     radius={[10, 10, 0, 0]}
                   />
                 </BarChart>

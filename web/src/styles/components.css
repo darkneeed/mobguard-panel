@@ -953,8 +953,11 @@
   padding: 0.85rem;
   overflow: auto;
   border-radius: 14px;
-  background: var(--surface-soft);
-  color: var(--text);
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid var(--line);
+  color: #e2e8f0;
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
   white-space: pre-wrap;
   word-break: break-word;
 }

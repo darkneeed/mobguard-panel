@@ -92,37 +92,18 @@ function MetricCard({ title, icon, data }: MetricCardProps) {
   }
 
   return (
-    <div className="panel" style={{ display: "flex", flexDirection: "column", gap: "0.85rem" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
-        <span style={{ fontSize: "1.4rem" }}>{icon}</span>
-        <h2 style={{ margin: 0, fontSize: "1rem", fontFamily: "'Space Grotesk', sans-serif" }}>
-          {title}
-        </h2>
+    <div className="panel bedolaga-metric-card">
+      <div className="bedolaga-metric-card-head">
+        <span className="bedolaga-metric-card-icon">{icon}</span>
+        <h2 className="bedolaga-metric-card-title">{title}</h2>
       </div>
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))",
-          gap: "0.65rem",
-        }}
-      >
+      <div className="bedolaga-metric-card-grid">
         {items.map(({ label, value }) => (
-          <div
-            key={label}
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: "0.15rem",
-              padding: "0.65rem 0.85rem",
-              borderRadius: "14px",
-              background: "var(--surface-soft, rgba(0,0,0,0.04))",
-              border: "1px solid var(--line)",
-            }}
-          >
-            <span style={{ fontSize: "1.25rem", fontWeight: 700, fontFamily: "'Space Grotesk', sans-serif" }}>
+          <div key={label} className="bedolaga-metric-card-item">
+            <span className="bedolaga-metric-card-value">
               {typeof value === "number" ? value.toLocaleString("ru-RU") : String(value)}
             </span>
-            <span style={{ fontSize: "0.75rem", color: "var(--muted)", lineHeight: 1.3 }}>{label}</span>
+            <span className="bedolaga-metric-card-label">{label}</span>
           </div>
         ))}
       </div>
@@ -169,38 +150,15 @@ export function BedolagaPage() {
       {/* Header */}
       <div className="page-header">
         <div>
-          <h1 style={{ margin: 0, fontFamily: "'Space Grotesk', sans-serif" }}>Bedolaga</h1>
-          <p className="page-lede" style={{ marginTop: "0.4rem" }}>
+          <h1>Bedolaga</h1>
+          <p className="page-lede">
             Мониторинг Telegram-бота и статистика пользователей
           </p>
         </div>
-        <div style={{ display: "flex", gap: "0.65rem", alignItems: "center" }}>
+        <div className="bedolaga-header-controls">
           {data && (
-            <span
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "0.45rem",
-                padding: "0.4rem 0.9rem",
-                borderRadius: "999px",
-                fontSize: "0.82rem",
-                fontWeight: 600,
-                background: data.enabled
-                  ? "rgba(34,197,94,0.12)"
-                  : "rgba(239,68,68,0.12)",
-                color: data.enabled ? "#22c55e" : "#ef4444",
-                border: `1px solid ${data.enabled ? "rgba(34,197,94,0.3)" : "rgba(239,68,68,0.3)"}`,
-              }}
-            >
-              <span
-                style={{
-                  width: 7,
-                  height: 7,
-                  borderRadius: "50%",
-                  background: data.enabled ? "#22c55e" : "#ef4444",
-                  display: "inline-block",
-                }}
-              />
+            <span className={`bedolaga-status-pill ${data.enabled ? "status-connected" : "status-disconnected"}`}>
+              <span className="status-led" />
               {data.enabled ? "Подключено" : "Не подключено"}
             </span>
           )}
@@ -208,11 +166,10 @@ export function BedolagaPage() {
             className="ghost small-button"
             onClick={() => setRefreshAt(Date.now())}
             disabled={loading}
-            style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}
           >
             <span style={{ display: "inline-block", transform: loading ? "rotate(180deg)" : "none", transition: "transform 0.4s" }}>
               ↻
-            </span>
+            </span>{" "}
             Обновить
           </button>
         </div>
@@ -220,37 +177,16 @@ export function BedolagaPage() {
 
       {/* Connection info */}
       {data?.base_url && (
-        <div
-          style={{
-            padding: "0.75rem 1rem",
-            borderRadius: "14px",
-            border: "1px solid var(--line)",
-            background: "var(--surface-soft)",
-            display: "flex",
-            alignItems: "center",
-            gap: "0.65rem",
-            fontSize: "0.88rem",
-          }}
-        >
-          <span style={{ color: "var(--muted)" }}>API:</span>
-          <code style={{ fontFamily: "monospace", color: "var(--accent)" }}>{data.base_url}</code>
+        <div className="bedolaga-api-box">
+          <span className="muted">API:</span>
+          <code>{data.base_url}</code>
         </div>
       )}
 
       {/* Errors */}
       {data?.errors && data.errors.length > 0 && (
-        <div
-          style={{
-            padding: "1rem",
-            borderRadius: "16px",
-            border: "1px solid rgba(239,68,68,0.3)",
-            background: "rgba(239,68,68,0.07)",
-            display: "flex",
-            flexDirection: "column",
-            gap: "0.45rem",
-          }}
-        >
-          <strong style={{ color: "#ef4444", fontSize: "0.9rem" }}>⚠ Ошибки подключения</strong>
+        <div className="bedolaga-errors-box">
+          <strong>⚠ Ошибки подключения</strong>
           {data.errors.map((e, i) => (
             <p key={i} style={{ margin: 0, fontSize: "0.85rem", color: "var(--muted)" }}>{e}</p>
           ))}
@@ -286,46 +222,16 @@ export function BedolagaPage() {
       {/* Users table */}
       {data?.enabled && users.length > 0 && (
         <div className="panel" style={{ overflow: "hidden" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
-            <h2 style={{ margin: 0, fontFamily: "'Space Grotesk', sans-serif", fontSize: "1rem" }}>
-              Последние пользователи
-            </h2>
-            <span
-              style={{
-                padding: "0.25rem 0.65rem",
-                borderRadius: "999px",
-                background: "var(--accent-soft)",
-                color: "var(--accent)",
-                fontSize: "0.8rem",
-                fontWeight: 600,
-              }}
-            >
-              {users.length}
-            </span>
+          <div className="bedolaga-table-header">
+            <h2>Последние пользователи</h2>
+            <span className="bedolaga-table-count-badge">{users.length}</span>
           </div>
-          <div style={{ overflowX: "auto" }}>
-            <table
-              style={{
-                width: "100%",
-                borderCollapse: "collapse",
-                fontSize: "0.875rem",
-              }}
-            >
+          <div className="bedolaga-table-container">
+            <table className="bedolaga-table">
               <thead>
                 <tr>
                   {["Пользователь", "Статус", "Подписка", "Группа", "Баланс", "Зарегистрирован"].map((h) => (
-                    <th
-                      key={h}
-                      style={{
-                        textAlign: "left",
-                        padding: "0.6rem 0.85rem",
-                        color: "var(--muted)",
-                        fontWeight: 500,
-                        fontSize: "0.8rem",
-                        borderBottom: "1px solid var(--line)",
-                        whiteSpace: "nowrap",
-                      }}
-                    >
+                    <th key={h} className="bedolaga-th">
                       {h}
                     </th>
                   ))}
@@ -333,58 +239,37 @@ export function BedolagaPage() {
               </thead>
               <tbody>
                 {users.map((u) => (
-                  <tr
-                    key={u.id}
-                    style={{ borderBottom: "1px solid var(--line)" }}
-                    onMouseEnter={(e) => {
-                      (e.currentTarget as HTMLElement).style.background = "var(--surface-soft)";
-                    }}
-                    onMouseLeave={(e) => {
-                      (e.currentTarget as HTMLElement).style.background = "transparent";
-                    }}
-                  >
-                    <td style={{ padding: "0.65rem 0.85rem" }}>
-                      <div style={{ fontWeight: 500 }}>{getUserName(u)}</div>
+                  <tr key={u.id} className="bedolaga-tr">
+                    <td className="bedolaga-td">
+                      <div className="username-box">{getUserName(u)}</div>
                       {u.telegram_id && (
-                        <div style={{ fontSize: "0.75rem", color: "var(--muted)" }}>
-                          tg: {u.telegram_id}
-                        </div>
+                        <div className="telegram-box">tg: {u.telegram_id}</div>
                       )}
                     </td>
-                    <td style={{ padding: "0.65rem 0.85rem" }}>
+                    <td className="bedolaga-td">
                       <span
-                        style={{
-                          display: "inline-flex",
-                          alignItems: "center",
-                          gap: "0.35rem",
-                          padding: "0.25rem 0.65rem",
-                          borderRadius: "999px",
-                          fontSize: "0.78rem",
-                          fontWeight: 600,
-                          background: `${statusColor(u.status)}18`,
-                          color: statusColor(u.status),
-                          border: `1px solid ${statusColor(u.status)}40`,
-                        }}
+                        className="bedolaga-user-status-pill"
+                        style={{ "--status-color": statusColor(u.status) } as React.CSSProperties}
                       >
                         {statusLabel(u.status)}
                       </span>
                     </td>
-                    <td style={{ padding: "0.65rem 0.85rem", color: "var(--muted)", fontSize: "0.82rem" }}>
+                    <td className="bedolaga-td" style={{ color: "var(--muted)", fontSize: "0.82rem" }}>
                       {u.subscription?.actual_status
                         ? statusLabel(u.subscription.actual_status)
                         : u.subscription?.status
                           ? statusLabel(u.subscription.status)
                           : "—"}
                     </td>
-                    <td style={{ padding: "0.65rem 0.85rem", color: "var(--muted)", fontSize: "0.82rem" }}>
+                    <td className="bedolaga-td" style={{ color: "var(--muted)", fontSize: "0.82rem" }}>
                       {u.promo_group?.name ?? "—"}
                     </td>
-                    <td style={{ padding: "0.65rem 0.85rem", fontVariantNumeric: "tabular-nums" }}>
+                    <td className="bedolaga-td" style={{ fontVariantNumeric: "tabular-nums" }}>
                       {typeof u.balance_rubles === "number"
                         ? `${u.balance_rubles.toFixed(2)} ₽`
                         : "—"}
                     </td>
-                    <td style={{ padding: "0.65rem 0.85rem", color: "var(--muted)", fontSize: "0.82rem", whiteSpace: "nowrap" }}>
+                    <td className="bedolaga-td" style={{ color: "var(--muted)", fontSize: "0.82rem", whiteSpace: "nowrap" }}>
                       {formatDate(u.created_at)}
                     </td>
                   </tr>
@@ -397,12 +282,10 @@ export function BedolagaPage() {
 
       {/* Not configured state */}
       {data && !data.enabled && (
-        <div className="panel" style={{ textAlign: "center", padding: "3rem 2rem" }}>
-          <div style={{ fontSize: "3rem", marginBottom: "1rem" }}>🔌</div>
-          <h2 style={{ margin: "0 0 0.5rem", fontFamily: "'Space Grotesk', sans-serif" }}>
-            Bedolaga не настроен
-          </h2>
-          <p className="muted" style={{ maxWidth: "36rem", margin: "0 auto" }}>
+        <div className="panel bedolaga-empty-state">
+          <div className="bedolaga-empty-state-icon">🔌</div>
+          <h2>Bedolaga не настроен</h2>
+          <p className="muted">
             Перейдите в <strong>Настройки → Доступ</strong> и укажите URL и токен Bedolaga API
           </p>
         </div>

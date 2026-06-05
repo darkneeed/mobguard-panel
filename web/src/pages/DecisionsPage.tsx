@@ -335,13 +335,16 @@ export function DecisionsPage({ session: _session }: { session?: Session }) {
                 const targetTo = identifier
                   ? `/data/users?identifier=${encodeURIComponent(identifier)}`
                   : "";
+                const isVerdictHome = item.verdict === "HOME";
+                const isVerdictMobile = item.verdict === "MOBILE";
+                const verdictClass = isVerdictHome ? "status-resolved" : isVerdictMobile ? "severity-medium" : "severity-low";
                 const cardBody = (
                   <>
                     <div className="record-main">
                       <span className="record-title">
                         {item.target_ip || item.ip} · {contextDisplay}
                       </span>
-                      <span className="tag">
+                      <span className={`tag ${verdictClass}`}>
                         {item.verdict} / {item.confidence_band}
                       </span>
                     </div>

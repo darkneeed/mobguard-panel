@@ -466,11 +466,22 @@ export function ReviewDetailPage({ session }: { session?: Session }) {
               <dl className="detail-list">
                 <div>
                   <dt>{t("reviewDetail.fields.ip")}</dt>
-                  <dd>{primaryIp}</dd>
+                  <dd
+                    className="monospace clickable-copy"
+                    onClick={() => copyValue(primaryIp)}
+                    title={t("reviewDetail.copyIp")}
+                  >
+                    {primaryIp} <span className="copy-icon">📋</span>
+                  </dd>
                 </div>
                 <div>
                   <dt>{scopeContext.contextLabel}</dt>
-                  <dd>{deviceDisplay}</dd>
+                  <dd
+                    className={deviceDisplay !== t("common.notAvailable") ? "monospace clickable-copy" : ""}
+                    onClick={() => deviceDisplay !== t("common.notAvailable") && copyValue(deviceDisplay)}
+                  >
+                    {deviceDisplay} {deviceDisplay !== t("common.notAvailable") && <span className="copy-icon">📋</span>}
+                  </dd>
                 </div>
                 <div>
                   <dt>{t("reviewDetail.fields.isp")}</dt>
@@ -478,11 +489,21 @@ export function ReviewDetailPage({ session }: { session?: Session }) {
                 </div>
                 <div>
                   <dt>{t("reviewDetail.fields.asn")}</dt>
-                  <dd>{summaryAsn}</dd>
+                  <dd
+                    className={summaryAsn !== t("common.notAvailable") ? "monospace clickable-copy" : ""}
+                    onClick={() => summaryAsn !== t("common.notAvailable") && copyValue(summaryAsn)}
+                  >
+                    {summaryAsn} {summaryAsn !== t("common.notAvailable") && <span className="copy-icon">📋</span>}
+                  </dd>
                 </div>
                 <div>
                   <dt>{t("reviewDetail.fields.tag")}</dt>
-                  <dd>{inboundTag}</dd>
+                  <dd
+                    className={inboundTag !== t("common.notAvailable") ? "monospace clickable-copy" : ""}
+                    onClick={() => inboundTag !== t("common.notAvailable") && copyValue(inboundTag)}
+                  >
+                    {inboundTag} {inboundTag !== t("common.notAvailable") && <span className="copy-icon">📋</span>}
+                  </dd>
                 </div>
                 <div>
                   <dt>{t("reviewDetail.fields.reviewReason")}</dt>
@@ -490,13 +511,15 @@ export function ReviewDetailPage({ session }: { session?: Session }) {
                 </div>
                 <div>
                   <dt>{t("reviewDetail.fields.verdict")}</dt>
-                  <dd>{formatValue(data.verdict as string | undefined)}</dd>
+                  <dd>
+                    <span className={`tag ${data.verdict === "HOME" ? "status-resolved" : data.verdict === "MOBILE" ? "severity-medium" : "severity-low"}`}>
+                      {formatValue(data.verdict as string | undefined)}
+                    </span>
+                  </dd>
                 </div>
                 <div>
                   <dt>{t("reviewDetail.fields.confidence")}</dt>
-                  <dd>
-                    {formatValue(data.confidence_band as string | undefined)}
-                  </dd>
+                  <dd>{formatValue(data.confidence_band as string | undefined)}</dd>
                 </div>
                 <div>
                   <dt>{t("reviewDetail.fields.opened")}</dt>
@@ -520,29 +543,48 @@ export function ReviewDetailPage({ session }: { session?: Session }) {
                 </div>
                 <div>
                   <dt>{t("reviewDetail.fields.username")}</dt>
-                  <dd>
-                    {formatValue(data.username as string | null | undefined)}
+                  <dd
+                    className={data.username ? "clickable-copy" : ""}
+                    onClick={() => data.username && copyValue(data.username)}
+                  >
+                    {formatValue(data.username as string | null | undefined)} {data.username && <span className="copy-icon">📋</span>}
                   </dd>
                 </div>
                 <div>
                   <dt>{t("reviewDetail.fields.systemId")}</dt>
-                  <dd>
-                    {formatValue(data.system_id as number | null | undefined)}
+                  <dd
+                    className={data.system_id ? "monospace clickable-copy" : ""}
+                    onClick={() => data.system_id && copyValue(data.system_id)}
+                  >
+                    {formatValue(data.system_id as number | null | undefined)} {data.system_id && <span className="copy-icon">📋</span>}
                   </dd>
                 </div>
                 <div>
                   <dt>{t("reviewDetail.fields.telegramId")}</dt>
-                  <dd>
-                    {formatValue(data.telegram_id as string | null | undefined)}
+                  <dd
+                    className={data.telegram_id ? "monospace clickable-copy" : ""}
+                    onClick={() => data.telegram_id && copyValue(data.telegram_id)}
+                  >
+                    {formatValue(data.telegram_id as string | null | undefined)} {data.telegram_id && <span className="copy-icon">📋</span>}
                   </dd>
                 </div>
                 <div>
                   <dt>{t("reviewDetail.fields.uuid")}</dt>
-                  <dd>{formatValue(data.uuid as string | null | undefined)}</dd>
+                  <dd
+                    className={data.uuid ? "monospace clickable-copy" : ""}
+                    onClick={() => data.uuid && copyValue(data.uuid)}
+                  >
+                    {formatValue(data.uuid as string | null | undefined)} {data.uuid && <span className="copy-icon">📋</span>}
+                  </dd>
                 </div>
                 <div>
                   <dt>{t("reviewDetail.fields.reviewUrl")}</dt>
-                  <dd>{formatValue(data.review_url as string | undefined)}</dd>
+                  <dd
+                    className={data.review_url ? "clickable-copy" : ""}
+                    onClick={() => data.review_url && copyValue(data.review_url)}
+                  >
+                    {formatValue(data.review_url as string | undefined)} {data.review_url && <span className="copy-icon">📋</span>}
+                  </dd>
                 </div>
               </dl>
               {scopeContext.sharedAccessWarning ? (
@@ -570,31 +612,40 @@ export function ReviewDetailPage({ session }: { session?: Session }) {
                       </span>
                     </li>
                   ) : null}
-                  {reasons.map((reason, index) => (
-                    <li
-                      className="review-detail-item"
-                      key={`${String(reason.code)}-${index}`}
-                    >
-                      <strong
-                        className="review-detail-item-title"
-                        title={
-                          describeReasonCode(String(reason.code || ""))
-                            .description
-                        }
+                  {reasons.map((reason, index) => {
+                    const dirUpper = String(reason.direction || "").toUpperCase();
+                    const isHome = dirUpper === "HOME";
+                    const isMobile = dirUpper === "MOBILE";
+                    const directionClass = isHome ? "direction-home" : isMobile ? "direction-mobile" : "";
+                    const isWeightNeg = Number(reason.weight || 0) < 0;
+                    return (
+                      <li
+                        className={`review-detail-item ${directionClass}`}
+                        key={`${String(reason.code)}-${index}`}
                       >
-                        {describeReasonCode(String(reason.code || "")).label}
-                      </strong>
-                      <span className="review-detail-item-copy">
-                        {formatValue(reason.message)}
-                      </span>
-                      <span className="review-detail-item-meta">
-                        {formatValue(reason.code)} ·{" "}
-                        {formatValue(reason.source)} ·{" "}
-                        {formatValue(reason.direction)} ·{" "}
-                        {formatValue(reason.weight)}
-                      </span>
-                    </li>
-                  ))}
+                        <strong
+                          className="review-detail-item-title"
+                          title={
+                            describeReasonCode(String(reason.code || ""))
+                              .description
+                          }
+                        >
+                          {describeReasonCode(String(reason.code || "")).label}
+                        </strong>
+                        <span className="review-detail-item-copy">
+                          {formatValue(reason.message)}
+                        </span>
+                        <span className="review-detail-item-meta">
+                          <span className="monospace-tag">{formatValue(reason.code)}</span> ·{" "}
+                          <span className="source-tag">{formatValue(reason.source)}</span> ·{" "}
+                          <span className={`direction-tag ${directionClass}`}>{formatValue(reason.direction)}</span> ·{" "}
+                          <span className={`weight-tag ${isWeightNeg ? "weight-neg" : "weight-pos"}`}>
+                            {formatValue(reason.weight)}
+                          </span>
+                        </span>
+                      </li>
+                    );
+                  })}
                 </ul>
               </div>
 
@@ -1044,19 +1095,21 @@ export function ReviewDetailPage({ session }: { session?: Session }) {
               />
               <div className="action-row action-row-vertical">
                 <button
+                  className="button-mobile"
                   disabled={resolving || !canResolve}
                   onClick={() => resolve("MOBILE")}
                 >
                   {t("reviewDetail.resolution.mobile")}
                 </button>
                 <button
+                  className="button-home"
                   disabled={resolving || !canResolve}
                   onClick={() => resolve("HOME")}
                 >
                   {t("reviewDetail.resolution.home")}
                 </button>
                 <button
-                  className="ghost"
+                  className="ghost button-skip"
                   disabled={resolving || !canResolve}
                   onClick={() => resolve("SKIP")}
                 >

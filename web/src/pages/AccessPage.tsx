@@ -635,7 +635,7 @@ export function AccessPage({
                       )}
                     />
                     <textarea
-                      className="note-box tall"
+                      className="note-box tall code-editor-box"
                       value={lists[field.key] || ""}
                       onChange={(event) =>
                         setLists((prev) => ({

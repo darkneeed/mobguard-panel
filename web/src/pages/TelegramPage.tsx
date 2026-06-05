@@ -641,7 +641,7 @@ export function TelegramPage() {
                             description={meta.description}
                           />
                           <textarea
-                            className="note-box tall"
+                            className="note-box tall code-editor-box"
                             value={templates[field.key] || ""}
                             onChange={(event) =>
                               setTemplates((prev) => ({
