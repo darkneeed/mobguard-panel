@@ -860,6 +860,30 @@ def _attach_runtime_metrics(
         mobguard_process_cpu_percent += float(processes.get("cpu_percent") or 0.0)
         mobguard_process_rss_bytes += int(processes.get("rss_bytes") or 0)
 
+    remnawave_total_online = None
+    try:
+        client = _remnawave_client(container)
+        if client.enabled:
+            rows = client.get_nodes_online_usage()
+            seen_uuids = set()
+            total = 0
+            for row in rows:
+                if not isinstance(row, dict):
+                    continue
+                uuid = str(row.get("uuid") or "").strip().lower()
+                if uuid:
+                    if uuid in seen_uuids:
+                        continue
+                    seen_uuids.add(uuid)
+                try:
+                    users_online = max(int(row.get("users_online") or 0), 0)
+                except (TypeError, ValueError):
+                    users_online = 0
+                total += users_online
+            remnawave_total_online = total
+    except Exception:
+        pass
+
     return enriched, {
         "activity_window_seconds": activity_window_seconds,
         "total_modules": len(enriched),
@@ -870,11 +894,15 @@ def _attach_runtime_metrics(
         "stale_modules": stale_count,
         "modules_with_metrics": sum(1 for item in enriched if item.get("runtime_metrics", {}).get("collected_at")),
         "active_users_total": (
-            int(resolved_active_users_total)
-            if panel_online_modules_count > 0
-            else max(
-                int(activity.get("totals", {}).get("active_users_total") or 0),
-                int(resolved_active_users_total),
+            remnawave_total_online
+            if remnawave_total_online is not None
+            else (
+                int(resolved_active_users_total)
+                if panel_online_modules_count > 0
+                else max(
+                    int(activity.get("totals", {}).get("active_users_total") or 0),
+                    int(resolved_active_users_total),
+                )
             )
         ),
         "recent_events_total": max(
@@ -1589,5 +1617,14 @@ def request_module_restart(
         requested_by=requested_by,
         reason="panel_manual_restart",
     )
+    stale_after_seconds = _module_stale_after_seconds(container)
+    return {"module": _apply_module_freshness(module, stale_after_seconds=stale_after_seconds)}
+
+def toggle_module_enabled(
+    container: APIContainer,
+    module_id: str,
+    enabled: bool,
+) -> dict[str, Any]:
+    module = container.store.toggle_module_enabled(module_id, 1 if enabled else 0)
     stale_after_seconds = _module_stale_after_seconds(container)
     return {"module": _apply_module_freshness(module, stale_after_seconds=stale_after_seconds)}

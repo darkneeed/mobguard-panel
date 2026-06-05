@@ -1288,3 +1288,53 @@
   }
 }
 
+/* Custom Toggle Switch Slider */
+.switch-new {
+  position: relative;
+  display: inline-block;
+  width: 38px;
+  height: 20px;
+}
+
+.switch-new input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.slider-new {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: var(--muted);
+  transition: .2s;
+  border-radius: 20px;
+}
+
+.slider-new:before {
+  position: absolute;
+  content: "";
+  height: 14px;
+  width: 14px;
+  left: 3px;
+  bottom: 3px;
+  background-color: white;
+  transition: .2s;
+  border-radius: 50%;
+}
+
+input:checked + .slider-new {
+  background-color: var(--success);
+}
+
+input:focus + .slider-new {
+  box-shadow: 0 0 1px var(--success);
+}
+
+input:checked + .slider-new:before {
+  transform: translateX(18px);
+}
+

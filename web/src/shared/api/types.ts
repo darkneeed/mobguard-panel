@@ -1,4 +1,4 @@
-﻿export type Session = {
+export type Session = {
   telegram_id: number;
   username?: string;
   first_name?: string;
@@ -205,6 +205,7 @@ export type ModuleRecord = {
   open_review_cases?: number;
   analysis_events_count?: number;
   runtime_metrics?: ModuleRuntimeMetrics;
+  enabled?: boolean;
 };
 
 export type ModuleListResponse = {

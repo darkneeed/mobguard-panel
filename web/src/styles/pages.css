@@ -204,19 +204,20 @@
 }
 
 .queue-filter-sections {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 1.25rem;
 }
 
 .queue-filter-section {
   display: flex;
   flex-direction: column;
-  gap: 0.85rem;
-  padding: 1rem;
+  gap: 1rem;
+  padding: 1.25rem;
   border: 1px solid var(--line);
-  border-radius: 20px;
+  border-radius: 14px;
   background: var(--surface-soft);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.02);
 }
 
 .queue-filter-section-header {
@@ -514,22 +515,22 @@
   transform: translateY(-1px);
 }
 .button-mobile {
-  background: var(--accent) !important;
-  color: var(--button-fg) !important;
-  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.2);
-}
-.button-mobile:hover {
-  background: var(--accent-strong) !important;
-  box-shadow: 0 6px 16px rgba(59, 130, 246, 0.35);
-}
-.button-home {
   background: var(--success) !important;
   color: var(--button-fg) !important;
   box-shadow: 0 4px 12px rgba(16, 185, 129, 0.2);
 }
-.button-home:hover {
-  background: var(--success) !important;
+.button-mobile:hover {
+  opacity: 0.9;
   box-shadow: 0 6px 16px rgba(16, 185, 129, 0.35);
+}
+.button-home {
+  background: var(--danger) !important;
+  color: var(--button-fg) !important;
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.2);
+}
+.button-home:hover {
+  opacity: 0.9;
+  box-shadow: 0 6px 16px rgba(239, 68, 68, 0.35);
 }
 .button-skip {
   border: 1px dashed var(--line) !important;
@@ -799,6 +800,107 @@
   border-color: var(--accent) !important;
   box-shadow: var(--accent-glow) !important;
 }
+
+/* Automation Status UI */
+.automation-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 1.25rem;
+  padding: 1.5rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--line);
+  background: var(--bg-panel-strong);
+  margin-bottom: 1.5rem;
+  transition: all 0.2s ease-in-out;
+}
+.automation-banner.status-resolved {
+  background: color-mix(in srgb, var(--success) 8%, transparent);
+  border-color: color-mix(in srgb, var(--success) 30%, transparent);
+}
+.automation-banner.severity-high {
+  background: color-mix(in srgb, var(--warning) 8%, transparent);
+  border-color: color-mix(in srgb, var(--warning) 30%, transparent);
+}
+.automation-banner.review-only {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 30%, transparent);
+}
+.automation-banner-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+.automation-banner-icon svg {
+  color: var(--bg-panel-strong);
+}
+.automation-banner-content {
+  flex-grow: 1;
+}
+.automation-banner-title {
+  font-family: var(--font-display);
+  font-size: 1.2rem;
+  font-weight: 700;
+  margin: 0 0 0.35rem 0;
+  color: var(--ink);
+}
+.automation-banner-desc {
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.automation-info-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1.5rem;
+  margin-top: 1rem;
+}
+.automation-info-card {
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 1.25rem;
+}
+.automation-info-card h4 {
+  margin: 0 0 0.75rem 0;
+  font-family: var(--font-sans);
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+.automation-tag-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+.automation-tag-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel-strong);
+  border: 1px solid var(--line);
+  color: var(--ink);
+}
+.automation-tag-item.warning {
+  border-color: color-mix(in srgb, var(--warning) 30%, transparent);
+  background: color-mix(in srgb, var(--warning) 4%, transparent);
+}
+.automation-tag-item.danger {
+  border-color: color-mix(in srgb, var(--danger) 30%, transparent);
+  background: color-mix(in srgb, var(--danger) 4%, transparent);
+}
+
 
 
 

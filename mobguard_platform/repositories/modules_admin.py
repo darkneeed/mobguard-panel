@@ -79,6 +79,7 @@ def _apply_module_metadata(payload: dict[str, Any], metadata_raw: Any) -> dict[s
     payload["spool_depth"] = _coerce_module_int(payload.get("spool_depth"), 0)
     payload["access_log_exists"] = _coerce_module_bool(payload.get("access_log_exists"))
     payload["token_reveal_available"] = bool(str(payload.pop("token_ciphertext", "") or "").strip())
+    payload["enabled"] = bool(payload.get("enabled") if payload.get("enabled") is not None else 1)
     return payload
 
 
@@ -157,7 +158,7 @@ class ModuleAdminRepository(SQLiteRepository):
                 SELECT module_id, module_name, status, version, protocol_version,
                        config_revision_applied, first_seen_at, last_seen_at, install_state, managed,
                        health_status, error_text, last_validation_at, spool_depth, access_log_exists,
-                       metadata_json, token_ciphertext
+                       metadata_json, token_ciphertext, enabled
                 FROM modules
                 WHERE module_id = ?
                 """,
@@ -404,7 +405,7 @@ class ModuleAdminRepository(SQLiteRepository):
                 SELECT module_id, module_name, token_hash, token_ciphertext, status, version, protocol_version,
                        config_revision_applied, first_seen_at, last_seen_at, install_state, managed,
                        health_status, error_text, last_validation_at, spool_depth, access_log_exists,
-                       metadata_json
+                       metadata_json, enabled
                 FROM modules
                 WHERE module_id = ?
                 """,
@@ -412,6 +413,8 @@ class ModuleAdminRepository(SQLiteRepository):
             ).fetchone()
         if not row or str(row["token_hash"]) != _sha256_hex(token):
             raise ValueError("Invalid module credentials")
+        if not bool(row["enabled"] if row["enabled"] is not None else 1):
+            raise ValueError("Module is disabled")
         payload = dict(row)
         payload.pop("token_hash", None)
         return _apply_module_metadata(payload, row["metadata_json"])
@@ -526,7 +529,7 @@ class ModuleAdminRepository(SQLiteRepository):
                     SELECT m.module_id, m.module_name, m.status, m.version, m.protocol_version,
                            m.config_revision_applied, m.first_seen_at, m.last_seen_at, m.install_state,
                            m.managed, m.health_status, m.error_text, m.last_validation_at,
-                           m.spool_depth, m.access_log_exists, m.metadata_json,
+                           m.spool_depth, m.access_log_exists, m.metadata_json, m.enabled,
                            COALESCE(occ.open_review_cases, 0) AS open_review_cases,
                            COALESCE(ac.analysis_events_count, 0) AS analysis_events_count
                     FROM modules m
@@ -541,7 +544,7 @@ class ModuleAdminRepository(SQLiteRepository):
                     SELECT m.module_id, m.module_name, m.status, m.version, m.protocol_version,
                            m.config_revision_applied, m.first_seen_at, m.last_seen_at, m.install_state,
                            m.managed, m.health_status, m.error_text, m.last_validation_at,
-                           m.spool_depth, m.access_log_exists, m.metadata_json
+                           m.spool_depth, m.access_log_exists, m.metadata_json, m.enabled
                     FROM modules m
                     ORDER BY m.last_seen_at DESC, m.module_id ASC
                     """
@@ -614,3 +617,19 @@ class ModuleAdminRepository(SQLiteRepository):
                 (_utcnow(), analysis_event_id, review_case_id, event_uid),
             )
             conn.commit()
+
+    def toggle_module_enabled(self, module_id: str, enabled: int) -> dict[str, Any]:
+        normalized_id = str(module_id or "").strip()
+        with self.connect() as conn:
+            row = conn.execute(
+                "SELECT 1 FROM modules WHERE module_id = ?",
+                (normalized_id,),
+            ).fetchone()
+            if not row:
+                raise ValueError("Module is not registered")
+            conn.execute(
+                "UPDATE modules SET enabled = ? WHERE module_id = ?",
+                (1 if enabled else 0, normalized_id),
+            )
+            conn.commit()
+        return self.get_module(normalized_id)

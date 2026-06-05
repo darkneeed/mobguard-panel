@@ -730,8 +730,8 @@ export function RulesPage() {
   function renderAutomationControlsPanel() {
     if (!generalDraft) return null;
     return (
-      <div className="panel">
-        <div className="panel-heading panel-heading-row">
+      <div className="panel" style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
+        <div className="panel-heading panel-heading-row" style={{ borderBottom: "1px solid var(--line)", paddingBottom: "1rem" }}>
           <div>
             <h2>{t("rules.automationControls.title")}</h2>
             <p className="muted">{t("rules.automationControls.description")}</p>
@@ -749,64 +749,199 @@ export function RulesPage() {
         </div>
         {automationError ? <div className="error-box">{automationError}</div> : null}
         {automationSaved ? <div className="ok-box">{automationSaved}</div> : null}
-        <div className="form-grid compact-form-grid">
-          <div className="rule-field compact-rule-field">
-            <FieldLabel
-              label={t("rules.automationControls.workMode.label")}
-              description={t("rules.automationControls.workMode.description")}
-            />
-            <select
-              value={workMode}
-              onChange={(event) =>
-                updateWorkMode(event.target.value as "observe" | "react")
-              }
-            >
-              <option value="observe">
-                {t("rules.automationControls.workMode.observe")}
-              </option>
-              <option value="react">
-                {t("rules.automationControls.workMode.react")}
-              </option>
-            </select>
-          </div>
-          <div className="rule-field compact-rule-field">
-            <FieldLabel
-              label={t("rules.automationControls.reactionMode.label")}
-              description={t(
-                "rules.automationControls.reactionMode.description",
-              )}
-            />
-            <select
-              value={reactionMode}
-              onChange={(event) =>
-                updateReactionMode(
-                  event.target.value as "warning_only" | "enforce",
-                )
-              }
-            >
-              <option value="enforce">
-                {t("rules.automationControls.reactionMode.enforce")}
-              </option>
-              <option value="warning_only">
-                {t("rules.automationControls.reactionMode.warningOnly")}
-              </option>
-            </select>
-          </div>
-          {ADVANCED_AUTOMATION_GENERAL_FIELD_KEYS.map((key) => {
-            const meta = generalFieldMeta(key);
-            return (
-              <div className="rule-field compact-rule-field" key={key}>
-                <FieldLabel label={meta.label} description={meta.description} />
-                <select
-                  value={generalDraft[key] || "false"}
-                  onChange={(event) => updateGeneralField(key, event.target.value)}
-                >
-                  <option value="true">{t("common.true")}</option>
-                  <option value="false">{t("common.false")}</option>
-                </select>
+
+        {/* WORK MODE CARDS SECTOR */}
+        <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+          <div>
+            <h3 style={{ fontSize: "0.85rem", textTransform: "uppercase", color: "var(--muted)", marginBottom: "0.6rem", letterSpacing: "0.05em", fontWeight: 600 }}>
+              {t("rules.automationControls.workMode.label")}
+            </h3>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "1rem" }}>
+              <div
+                style={{
+                  border: workMode === "observe" ? "2px solid var(--accent)" : "1px solid var(--line)",
+                  background: workMode === "observe" ? "var(--accent-soft)" : "rgba(255, 255, 255, 0.01)",
+                  borderRadius: "14px",
+                  padding: "1.25rem",
+                  cursor: "pointer",
+                  transition: "all 0.2s ease",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "0.35rem"
+                }}
+                onClick={() => updateWorkMode("observe")}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <strong style={{ color: "var(--ink)", fontSize: "1.05rem" }}>
+                    {t("rules.automationControls.workMode.observe")}
+                  </strong>
+                  <input
+                    type="radio"
+                    name="workMode"
+                    checked={workMode === "observe"}
+                    onChange={() => {}}
+                    style={{ pointerEvents: "none" }}
+                  />
+                </div>
+                <p style={{ margin: 0, fontSize: "0.85rem", color: "var(--muted)", lineHeight: "1.4" }}>
+                  Режим наблюдения (Shadow Mode). Система анализирует трафик, выставляет баллы и логирует вердикты в фоновом режиме без наложения ограничений на пользователей.
+                </p>
               </div>
-            );
-          })}
+
+              <div
+                style={{
+                  border: workMode === "react" ? "2px solid var(--accent)" : "1px solid var(--line)",
+                  background: workMode === "react" ? "var(--accent-soft)" : "rgba(255, 255, 255, 0.01)",
+                  borderRadius: "14px",
+                  padding: "1.25rem",
+                  cursor: "pointer",
+                  transition: "all 0.2s ease",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "0.35rem"
+                }}
+                onClick={() => updateWorkMode("react")}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <strong style={{ color: "var(--ink)", fontSize: "1.05rem" }}>
+                    {t("rules.automationControls.workMode.react")}
+                  </strong>
+                  <input
+                    type="radio"
+                    name="workMode"
+                    checked={workMode === "react"}
+                    onChange={() => {}}
+                    style={{ pointerEvents: "none" }}
+                  />
+                </div>
+                <p style={{ margin: 0, fontSize: "0.85rem", color: "var(--muted)", lineHeight: "1.4" }}>
+                  Активный режим (Enforcement Mode). Система автоматически применяет ограничения к подозрительным подключениям согласно настроенным правилам.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* REACTION MODE SECTOR */}
+          <div style={{ opacity: workMode === "react" ? 1 : 0.45, transition: "opacity 0.2s ease" }}>
+            <h3 style={{ fontSize: "0.85rem", textTransform: "uppercase", color: "var(--muted)", marginBottom: "0.6rem", letterSpacing: "0.05em", fontWeight: 600 }}>
+              {t("rules.automationControls.reactionMode.label")}
+            </h3>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "1rem" }}>
+              <div
+                style={{
+                  border: reactionMode === "enforce" && workMode === "react" ? "2px solid var(--success)" : "1px solid var(--line)",
+                  background: reactionMode === "enforce" && workMode === "react" ? "var(--success-soft)" : "rgba(255, 255, 255, 0.01)",
+                  borderRadius: "14px",
+                  padding: "1.25rem",
+                  cursor: workMode === "react" ? "pointer" : "not-allowed",
+                  transition: "all 0.2s ease",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "0.35rem"
+                }}
+                onClick={() => workMode === "react" && updateReactionMode("enforce")}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <strong style={{ color: "var(--ink)", fontSize: "1.05rem" }}>
+                    {t("rules.automationControls.reactionMode.enforce")}
+                  </strong>
+                  <input
+                    type="radio"
+                    name="reactionMode"
+                    checked={reactionMode === "enforce"}
+                    disabled={workMode !== "react"}
+                    onChange={() => {}}
+                    style={{ pointerEvents: "none" }}
+                  />
+                </div>
+                <p style={{ margin: 0, fontSize: "0.85rem", color: "var(--muted)", lineHeight: "1.4" }}>
+                  Жесткая блокировка. Обнаруженные угрозы блокируются сразу, пресекая несанкционированный доступ.
+                </p>
+              </div>
+
+              <div
+                style={{
+                  border: reactionMode === "warning_only" && workMode === "react" ? "2px solid var(--warning)" : "1px solid var(--line)",
+                  background: reactionMode === "warning_only" && workMode === "react" ? "var(--warning-soft)" : "rgba(255, 255, 255, 0.01)",
+                  borderRadius: "14px",
+                  padding: "1.25rem",
+                  cursor: workMode === "react" ? "pointer" : "not-allowed",
+                  transition: "all 0.2s ease",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "0.35rem"
+                }}
+                onClick={() => workMode === "react" && updateReactionMode("warning_only")}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <strong style={{ color: "var(--ink)", fontSize: "1.05rem" }}>
+                    {t("rules.automationControls.reactionMode.warningOnly")}
+                  </strong>
+                  <input
+                    type="radio"
+                    name="reactionMode"
+                    checked={reactionMode === "warning_only"}
+                    disabled={workMode !== "react"}
+                    onChange={() => {}}
+                    style={{ pointerEvents: "none" }}
+                  />
+                </div>
+                <p style={{ margin: 0, fontSize: "0.85rem", color: "var(--muted)", lineHeight: "1.4" }}>
+                  Только предупреждения. При обнаружении угрозы пользователю высылается предупреждение без блокировки его сессии.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* ADVANCED PARAMETERS */}
+          <div>
+            <h3 style={{ fontSize: "0.85rem", textTransform: "uppercase", color: "var(--muted)", marginBottom: "0.8rem", letterSpacing: "0.05em", fontWeight: 600 }}>
+              Дополнительные параметры автоматизации
+            </h3>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "1rem" }}>
+              {ADVANCED_AUTOMATION_GENERAL_FIELD_KEYS.map((key) => {
+                const meta = generalFieldMeta(key);
+                const isTrue = generalDraft[key] === "true";
+                return (
+                  <div
+                    key={key}
+                    style={{
+                      border: isTrue ? "2px solid var(--accent)" : "1px solid var(--line)",
+                      background: isTrue ? "var(--accent-soft)" : "rgba(255, 255, 255, 0.01)",
+                      borderRadius: "14px",
+                      padding: "1.25rem",
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "flex-start",
+                      gap: "0.85rem",
+                      transition: "all 0.2s ease"
+                    }}
+                    onClick={() => updateGeneralField(key, isTrue ? "false" : "true")}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isTrue}
+                      onChange={() => {}}
+                      style={{ marginTop: "0.2rem", pointerEvents: "none" }}
+                    />
+                    <div>
+                      <strong style={{ display: "block", color: "var(--ink)", fontSize: "0.95rem", marginBottom: "0.25rem" }}>
+                        {meta.label}
+                      </strong>
+                      <span style={{ fontSize: "0.8rem", color: "var(--muted)", lineHeight: "1.35", display: "block" }}>
+                        {meta.description}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        {/* EMBEDDED REALTIME AUTOMATION STATUS DISPLAY */}
+        <div style={{ borderTop: "1px solid var(--line)", paddingTop: "1.25rem" }}>
+          {renderAutomationStatusPanel()}
         </div>
       </div>
     );

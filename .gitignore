@@ -25,6 +25,8 @@ runtime/*.db
 runtime/*.db-*
 runtime/health/
 runtime/dev/
+runtime/config.json
+!runtime/config.example.json
 
 # Local environment files
 .env

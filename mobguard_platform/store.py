@@ -971,10 +971,15 @@ class PlatformStore:
                     last_validation_at TEXT NOT NULL DEFAULT '',
                     spool_depth INTEGER NOT NULL DEFAULT 0,
                     access_log_exists INTEGER NOT NULL DEFAULT 0,
-                    metadata_json TEXT NOT NULL DEFAULT '{}'
+                    metadata_json TEXT NOT NULL DEFAULT '{}',
+                    enabled INTEGER NOT NULL DEFAULT 1
                 )
                 """
             )
+            try:
+                conn.execute("ALTER TABLE modules ADD COLUMN enabled INTEGER NOT NULL DEFAULT 1")
+            except sqlite3.OperationalError:
+                pass
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS module_heartbeats (
@@ -1941,6 +1946,9 @@ class PlatformStore:
             requested_by=requested_by,
             reason=reason,
         )
+
+    def toggle_module_enabled(self, module_id: str, enabled: int) -> dict[str, Any]:
+        return self.modules_admin.toggle_module_enabled(module_id, enabled)
 
     def register_module(
         self,

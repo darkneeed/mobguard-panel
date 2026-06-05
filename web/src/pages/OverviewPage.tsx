@@ -327,6 +327,82 @@ export function OverviewPage({ session: _session }: { session?: Session }) {
         </div>
       </div>
 
+      {!loading ? (
+        <div className="panel" style={{ marginBottom: "1.5rem" }}>
+          <div className="panel-heading">
+            <h2>Автоматизация решений</h2>
+            <p className="muted">
+              Текущий режим работы и критерии автоматического применения мер к пользователям.
+            </p>
+          </div>
+          
+          <div className={`automation-banner ${automationModeBadgeClass}`}>
+            <div className="automation-banner-icon">
+              <Shield size={24} />
+            </div>
+            <div className="automation-banner-content">
+              <h3 className="automation-banner-title">
+                Режим: {automationMode}
+              </h3>
+              <p className="automation-banner-desc">
+                {overview?.automation_status?.mode === "enforce"
+                  ? "Все ограничения применяются на Remnawave в реальном времени автоматически."
+                  : overview?.automation_status?.mode === "warning_only"
+                    ? "Режим симуляции (Dry Run). Решения записываются в журнал решений, но не применяются на Remnawave."
+                    : "Автоматическое принятие решений отключено. Все инциденты направляются на ручную модерацию."}
+              </p>
+            </div>
+          </div>
+
+          <div className="automation-info-grid">
+            <div className="automation-info-card">
+              <h4>Причины переключения режима</h4>
+              {automationModeReasons.length ? (
+                <div className="automation-tag-list">
+                  {automationModeReasons.map((reason) => (
+                    <div className="automation-tag-item warning" key={reason}>
+                      <span>⚠️</span>
+                      <span>{reason}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="muted" style={{ margin: 0, fontSize: "0.85rem" }}>
+                  Активных условий переключения режима нет (штатный режим).
+                </p>
+              )}
+            </div>
+
+            <div className="automation-info-card">
+              <h4>Активные предохранители (Guardrails)</h4>
+              {automationGuardrails.length ? (
+                <div className="automation-tag-list">
+                  {automationGuardrails.map((guardrail) => (
+                    <div className="automation-tag-item danger" key={guardrail}>
+                      <span>🛡️</span>
+                      <span>{guardrail}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="muted" style={{ margin: 0, fontSize: "0.85rem" }}>
+                  Предохранители не активны (система работает без ограничений скорости блокировок).
+                </p>
+              )}
+            </div>
+          </div>
+
+          <div className="action-row" style={{ marginTop: "1.5rem", borderTop: "1px solid var(--line)", paddingTop: "1rem" }}>
+            <Link className="button-link" to="/rules/general">
+              Настроить правила и лимиты
+            </Link>
+            <Link className="button-link ghost" to="/decisions">
+              История авто-решений
+            </Link>
+          </div>
+        </div>
+      ) : null}
+
       <div className="dashboard-grid dashboard-grid-hero overview-split-grid">
         <div className="panel panel-hero">
           <div className="panel-heading panel-heading-row">
@@ -337,7 +413,7 @@ export function OverviewPage({ session: _session }: { session?: Session }) {
               </p>
             </div>
           </div>
-          <div className="overview-server-grid">
+          <div className="overview-server-grid stats-grid">
             <div className="module-ops-chip">
               <span>RAM</span>
               <strong>{formatBytes(panelServer?.memory_used_bytes)} / {formatBytes(panelServer?.memory_total_bytes)}</strong>
@@ -473,152 +549,49 @@ export function OverviewPage({ session: _session }: { session?: Session }) {
       ) : null}
 
       {!loading ? (
-        <>
-          <div className="panel">
-            <div className="panel-heading">
-              <h2>Автоматические решения</h2>
+        <div className="panel">
+          <div className="panel-heading panel-heading-row">
+            <div>
+              <h2>Модули</h2>
               <p className="muted">
-                Текущие решения принимаются на основе настроек и обучения.
+                Список подключенных модулей анализа и их текущий статус.
               </p>
             </div>
-            <div className="automation-overview">
-              <div className="automation-overview-mode">
-                <span>{t("rules.automationStatus.modeLabel")}</span>
-                <strong>{automationMode}</strong>
-                <span className={`status-badge ${automationModeBadgeClass}`}>{automationMode}</span>
-              </div>
-              <div className="automation-overview-grid">
-                <section className="automation-overview-section">
-                  <h3>{t("rules.automationStatus.modeReasonsLabel")}</h3>
-                  {automationModeReasons.length ? (
-                    <ul className="automation-pill-list">
-                      {automationModeReasons.map((reason) => (
-                        <li className="tag severity-high" key={reason}>
-                          {reason}
-                        </li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <p className="muted">{t("rules.automationStatus.noModeReasons")}</p>
-                  )}
-                </section>
-                <section className="automation-overview-section">
-                  <h3>{t("rules.automationStatus.guardrailsLabel")}</h3>
-                  {automationGuardrails.length ? (
-                    <ul className="automation-pill-list">
-                      {automationGuardrails.map((guardrail) => (
-                        <li className="tag review-only" key={guardrail}>
-                          {guardrail}
-                        </li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <p className="muted">{t("rules.automationStatus.noGuardrails")}</p>
-                  )}
-                </section>
-              </div>
-            </div>
-            <div className="action-row">
-              <Link className="button-link ghost" to="/rules/general">
-                Настроить правила
-              </Link>
-              <Link className="button-link ghost" to="/decisions">
-                Открыть решения
-              </Link>
-            </div>
+            <Link
+              className="button-link ghost"
+              to="/modules"
+              onMouseEnter={() => prefetchRouteModule("/modules")}
+              onFocus={() => prefetchRouteModule("/modules")}
+            >
+              Все модули
+            </Link>
           </div>
-
-          <div className="panel">
-            <div className="panel-heading panel-heading-row">
-              <div>
-                <h2>Модули</h2>
-                <p className="muted">
-                  Общий онлайн по модулям и текущая нагрузка по каждому.
-                </p>
-              </div>
-              <Link
-                className="button-link ghost"
-                to="/modules"
-                onMouseEnter={() => prefetchRouteModule("/modules")}
-                onFocus={() => prefetchRouteModule("/modules")}
-              >
-                Все модули
-              </Link>
-            </div>
-            <div className="queue-grid module-ops-grid-list">
-              {topModules.map((module) => {
-                const system = module.runtime_metrics?.system;
-                return (
-                  <div className="queue-card module-ops-card module-ops-card-compact" key={module.module_id}>
-                    <div className="queue-card-top">
-                      <div>
-                        <strong>{module.module_name}</strong>
-                        <div className="queue-card-identifiers">
-                          <span>{module.module_id}</span>
-                          <span>{module.version || "—"}</span>
-                        </div>
-                      </div>
-                      <span className={`status-badge module-status-pill ${moduleVariant(module)}`}>
-                        {moduleStatusText(module)}
-                      </span>
-                    </div>
-                    <div className="module-ops-grid">
-                      <div className="module-ops-chip">
-                        <span>Онлайн</span>
-                        <strong>{module.runtime_metrics?.active_users ?? 0}</strong>
-                      </div>
-                      <div className="module-ops-chip">
-                        <span>События</span>
-                        <strong>{module.runtime_metrics?.recent_events ?? 0}</strong>
-                      </div>
-                    </div>
-                    <div className="module-meters">
-                      {renderMeter("CPU", system?.cpu_percent, 75, 90)}
-                      {renderMeter("RAM", system?.memory_percent, 80, 92)}
-                      {renderMeter("Диск", system?.disk_percent, 82, 92)}
-                    </div>
-                    <div className="record-meta module-ops-meta">
-                      <span>RSS {formatBytes(module.runtime_metrics?.processes?.rss_bytes)}</span>
-                      <span>Spool {module.spool_depth}</span>
-                      <span>Heartbeat {formatAge(module.seconds_since_last_seen)}</span>
-                    </div>
-                    {module.error_text ? <div className="error-box module-inline-error">{module.error_text}</div> : null}
+          <div className="record-list">
+            {modules?.items.length ? (
+              modules.items.map((module) => (
+                <Link
+                  key={module.module_id}
+                  to="/modules"
+                  className="record-item inline-link"
+                  onMouseEnter={() => prefetchRouteModule("/modules")}
+                  onFocus={() => prefetchRouteModule("/modules")}
+                >
+                  <div className="record-main">
+                    <span className="record-title" style={{ fontWeight: 600 }}>{module.module_name}</span>
+                    <span className="muted" style={{ fontSize: "0.8rem", marginLeft: "0.5rem" }}>({module.module_id})</span>
                   </div>
-                );
-              })}
-            </div>
+                  <div>
+                    <span className={`status-badge ${moduleVariant(module)}`}>
+                      {moduleStatusText(module)}
+                    </span>
+                  </div>
+                </Link>
+              ))
+            ) : (
+              <div className="provider-empty">Нет подключенных модулей</div>
+            )}
           </div>
-          <div className="panel">
-            <div className="panel-heading">
-              <h2>Последние кейсы</h2>
-              <p className="muted">Свежие спорные кейсы без лишнего служебного шума.</p>
-            </div>
-            <div className="record-list">
-              {queue?.items.length ? (
-                queue.items.slice(0, 5).map((item) => (
-                  <Link
-                    key={item.id}
-                    to={`/reviews/${item.id}`}
-                    className="record-item inline-link"
-                    onMouseEnter={() => prefetchRouteModule(`/reviews/${item.id}`)}
-                    onFocus={() => prefetchRouteModule(`/reviews/${item.id}`)}
-                  >
-                    <div className="record-main">
-                      <span className="record-title">#{item.id} · {item.username || item.uuid || item.ip}</span>
-                      <span className="tag">{item.review_reason}</span>
-                    </div>
-                    <div className="record-meta">
-                      <span>{item.ip}</span>
-                      <span>{formatDisplayDateTime(item.updated_at, t("common.notAvailable"), language)}</span>
-                    </div>
-                  </Link>
-                ))
-              ) : (
-                <div className="provider-empty">Открытых кейсов сейчас нет</div>
-              )}
-            </div>
-          </div>
-        </>
+        </div>
       ) : null}
     </section>
   );

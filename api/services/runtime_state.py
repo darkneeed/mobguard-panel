@@ -164,6 +164,15 @@ def write_runtime_settings(
         runtime_config["settings"].pop(key, None)
     updated = update_json_file(str(container.runtime.config_path), {"settings": runtime_config["settings"]})
     container.runtime.reload_config()
+    try:
+        with container.store._connect() as conn:
+            conn.execute(
+                "INSERT OR REPLACE INTO runtime_settings_backup (key_name, settings_json) VALUES (?, ?)",
+                ("global", json.dumps(runtime_config.get("settings", {}), ensure_ascii=False))
+            )
+            conn.commit()
+    except Exception:
+        pass
     container.store.sync_runtime_config(container.runtime.config)
     return updated
 

@@ -140,6 +140,10 @@ export const dataApi = {
     request<ModuleRestartResponse>(`/admin/modules/${encodeURIComponent(moduleId)}/restart`, {
       method: "POST"
     }),
+  toggleModuleEnabled: (moduleId: string, enabled: boolean) =>
+    request<ModuleDetailResponse>(`/admin/modules/${encodeURIComponent(moduleId)}/toggle?enabled=${enabled}`, {
+      method: "POST"
+    }),
   getHealth: () => request<HealthSnapshot>("/health"),
   getBedolagaOverview: () => request<BedolagaOverviewResponse>("/admin/bedolaga/overview"),
   postBedolagaAction: (path: string, method: string, payload: Record<string, unknown> = {}) =>

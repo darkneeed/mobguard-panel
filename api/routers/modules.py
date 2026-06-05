@@ -213,3 +213,25 @@ def admin_restart_module(
         details={},
     )
     return result
+
+@router.post("/admin/modules/{module_id}/toggle")
+def admin_toggle_module(
+    module_id: str,
+    enabled: bool = Query(...),
+    session: dict[str, Any] = Depends(require_permission(PERMISSION_MODULES_WRITE, require_owner_totp=True)),
+    container=Depends(get_container),
+) -> dict[str, Any]:
+    try:
+        result = module_service.toggle_module_enabled(container, module_id, enabled)
+    except ValueError as exc:
+        status_code = 404 if "not registered" in str(exc).lower() else 400
+        raise HTTPException(status_code=status_code, detail=str(exc)) from exc
+    record_admin_action(
+        container,
+        session,
+        action="modules.toggle",
+        target_type="module",
+        target_id=module_id,
+        details={"enabled": enabled},
+    )
+    return result

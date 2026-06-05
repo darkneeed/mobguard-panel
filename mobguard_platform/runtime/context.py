@@ -100,7 +100,18 @@ def load_runtime_context(base_dir: str | Path, explicit_runtime_dir: str | None 
     load_dotenv(env_path)
     config_path = runtime_dir / "config.json"
     if not config_path.exists():
-        raise FileNotFoundError(f"Required runtime config not found: {config_path}")
+        example_path = runtime_dir / "config.example.json"
+        if example_path.exists():
+            try:
+                config_path.write_text(example_path.read_text(encoding="utf-8"), encoding="utf-8")
+            except OSError as exc:
+                logger.warning("Failed to copy config.example.json to config.json: %s", exc)
+        if not config_path.exists():
+            fallback = normalize_runtime_bound_settings(_safe_runtime_config_default(), runtime_dir)
+            try:
+                config_path.write_text(json.dumps(fallback, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+            except OSError as exc:
+                logger.warning("Failed to write default config.json: %s", exc)
     config = _load_runtime_config_payload(config_path, runtime_dir)
     env = {key: str(value) for key, value in os.environ.items()}
     database = load_database_backend_config(config.get("settings", {}), env)

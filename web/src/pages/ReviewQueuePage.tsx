@@ -14,7 +14,10 @@ import {
   Home,
   Smartphone,
   AlertTriangle,
-  X
+  X,
+  User,
+  Clock,
+  SlidersHorizontal
 } from "lucide-react";
 
 import { hasPermission } from "../app/permissions";
@@ -617,6 +620,7 @@ export function ReviewQueuePage({ session }: { session?: Session }) {
             ) : null}
             <button
               className="small-button"
+              style={{ background: "var(--success)", color: "#fff", border: "1px solid var(--success)" }}
               disabled={
                 !canResolve || selectedIds.length === 0 || resolvingId !== null
               }
@@ -626,6 +630,7 @@ export function ReviewQueuePage({ session }: { session?: Session }) {
             </button>
             <button
               className="small-button"
+              style={{ background: "var(--danger)", color: "#fff", border: "1px solid var(--danger)" }}
               disabled={
                 !canResolve || selectedIds.length === 0 || resolvingId !== null
               }
@@ -647,23 +652,48 @@ export function ReviewQueuePage({ session }: { session?: Session }) {
       </div>
 
       {filtersOpen ? (
-        <div className="panel reveal-panel filter-drawer queue-filters-shell">
-          <div className="queue-presets">
-            {presets.map((preset) => (
-              <button
-                className="ghost small-button"
-                key={preset.key}
-                onClick={preset.apply}
-              >
-                {preset.label}
-              </button>
-            ))}
+        <div className="panel reveal-panel filter-drawer queue-filters-shell" style={{ border: "1px solid var(--line)", background: "var(--bg-panel-glass, rgba(30, 30, 40, 0.45))", backdropFilter: "blur(16px)", padding: "1.25rem", borderRadius: "var(--radius-lg)" }}>
+          <div className="queue-presets" style={{ borderBottom: "1px solid var(--line)", paddingBottom: "0.85rem", display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+            {presets.map((preset) => {
+              const isActive = (preset.key === "open" && filters.status === "OPEN" && !filters.review_reason && !filters.severity && !filters.punitive_eligible && !filters.activity_duration_max_hours) ||
+                (preset.key === "conflict" && filters.status === "OPEN" && filters.review_reason === "provider_conflict") ||
+                (preset.key === "critical" && filters.status === "OPEN" && filters.severity === "critical") ||
+                (preset.key === "punitive" && filters.status === "OPEN" && filters.punitive_eligible === "true") ||
+                (preset.key === "short-activity" && filters.status === "OPEN" && filters.activity_duration_max_hours === "12");
+              return (
+                <button
+                  key={preset.key}
+                  onClick={preset.apply}
+                  className={isActive ? "primary small-button" : "ghost small-button"}
+                  style={{
+                    borderRadius: "20px",
+                    padding: "0.35rem 0.9rem",
+                    fontWeight: 600,
+                    fontSize: "0.8rem",
+                    transition: "all 0.2s ease-in-out",
+                    ...(isActive ? {
+                      background: "var(--accent)",
+                      borderColor: "var(--accent)",
+                      color: "#fff",
+                      boxShadow: "0 2px 8px rgba(99, 102, 241, 0.35)"
+                    } : {
+                      border: "1px solid var(--line)"
+                    })
+                  }}
+                >
+                  {preset.label}
+                </button>
+              );
+            })}
           </div>
           <div className="queue-filter-sections">
             <section className="queue-filter-section">
               <div className="queue-filter-section-header">
                 <div>
-                  <h3>{t("reviewQueue.filters.sections.identity")}</h3>
+                  <h3 style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.95rem", fontWeight: 700 }}>
+                    <User size={16} style={{ color: "var(--accent)" }} />
+                    {t("reviewQueue.filters.sections.identity")}
+                  </h3>
                   <p>{t("reviewQueue.filters.sections.identityHint")}</p>
                 </div>
               </div>
@@ -730,7 +760,10 @@ export function ReviewQueuePage({ session }: { session?: Session }) {
             <section className="queue-filter-section">
               <div className="queue-filter-section-header">
                 <div>
-                  <h3>{t("reviewQueue.filters.sections.timing")}</h3>
+                  <h3 style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.95rem", fontWeight: 700 }}>
+                    <Clock size={16} style={{ color: "var(--accent)" }} />
+                    {t("reviewQueue.filters.sections.timing")}
+                  </h3>
                   <p>{t("reviewQueue.filters.sections.timingHint")}</p>
                 </div>
               </div>
@@ -835,7 +868,10 @@ export function ReviewQueuePage({ session }: { session?: Session }) {
             <section className="queue-filter-section">
               <div className="queue-filter-section-header">
                 <div>
-                  <h3>{t("reviewQueue.filters.sections.decision")}</h3>
+                  <h3 style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.95rem", fontWeight: 700 }}>
+                    <SlidersHorizontal size={16} style={{ color: "var(--accent)" }} />
+                    {t("reviewQueue.filters.sections.decision")}
+                  </h3>
                   <p>{t("reviewQueue.filters.sections.decisionHint")}</p>
                 </div>
               </div>
@@ -1235,7 +1271,7 @@ export function ReviewQueuePage({ session }: { session?: Session }) {
                         <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1.2fr 1fr", gap: "0.35rem" }}>
                           <button
                             className="small-button"
-                            style={{ background: "var(--accent-soft)", color: "var(--accent)", border: "1px solid var(--accent)", padding: "0.5rem" }}
+                            style={{ background: "var(--success-soft)", color: "var(--success)", border: "1px solid var(--success)", padding: "0.5rem" }}
                             disabled={resolvingId === item.id}
                             onClick={(event) =>
                               quickResolve(event, item, "MOBILE")
@@ -1245,7 +1281,7 @@ export function ReviewQueuePage({ session }: { session?: Session }) {
                           </button>
                           <button
                             className="small-button"
-                            style={{ background: "rgba(16, 185, 129, 0.08)", color: "var(--success)", border: "1px solid var(--success)", padding: "0.5rem" }}
+                            style={{ background: "var(--danger-soft)", color: "var(--danger)", border: "1px solid var(--danger)", padding: "0.5rem" }}
                             disabled={resolvingId === item.id}
                             onClick={(event) => quickResolve(event, item, "HOME")}
                           >
@@ -1354,14 +1390,14 @@ export function ReviewQueuePage({ session }: { session?: Session }) {
           <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
             <button
               onClick={() => resolveSelected("MOBILE")}
-              style={{ background: "var(--accent)", color: "var(--button-fg)", border: 0, padding: "0.5rem 1rem", fontSize: "0.82rem", fontWeight: 600 }}
+              style={{ background: "var(--success, #10b981)", color: "#fff", border: 0, padding: "0.5rem 1rem", fontSize: "0.82rem", fontWeight: 600, borderRadius: "var(--radius-sm)" }}
               disabled={resolvingId !== null}
             >
               <Smartphone size={14} /> Мобильный
             </button>
             <button
               onClick={() => resolveSelected("HOME")}
-              style={{ background: "var(--success, #10b981)", color: "#fff", border: 0, padding: "0.5rem 1rem", fontSize: "0.82rem", fontWeight: 600 }}
+              style={{ background: "var(--danger, #ef4444)", color: "#fff", border: 0, padding: "0.5rem 1rem", fontSize: "0.82rem", fontWeight: 600, borderRadius: "var(--radius-sm)" }}
               disabled={resolvingId !== null}
             >
               <Home size={14} /> Домашний

@@ -174,6 +174,9 @@ export function ModulesPage({ session }: { session?: Session }) {
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [restartingModuleId, setRestartingModuleId] = useState("");
+  const [logsModuleId, setLogsModuleId] = useState<string | null>(null);
+  const [moduleLogs, setModuleLogs] = useState<any[]>([]);
+  const [loadingLogs, setLoadingLogs] = useState(false);
 
   const activeModule = modalMode === "detail" ? (detail?.module ?? null) : null;
   const draftDirty = useMemo(
@@ -373,6 +376,47 @@ export function ModulesPage({ session }: { session?: Session }) {
     }
   }
 
+  async function toggleModule(item: ModuleRecord) {
+    if (!canManageModules) return;
+    const nextEnabled = !item.enabled;
+    try {
+      const response = (await api.toggleModuleEnabled(item.module_id, nextEnabled)) as ModuleDetailResponse;
+      const updatedModule = response?.module;
+      if (updatedModule) {
+        setData((prev) =>
+          prev
+            ? {
+                ...prev,
+                items: prev.items.map((moduleItem) =>
+                  moduleItem.module_id === updatedModule.module_id ? updatedModule : moduleItem,
+                ),
+              }
+            : prev,
+        );
+        pushToast("success", nextEnabled ? "Модуль успешно включен" : "Модуль успешно выключен");
+      }
+    } catch (err) {
+      pushToast(
+        "error",
+        err instanceof Error ? err.message : "Не удалось изменить статус модуля",
+      );
+    }
+  }
+
+  async function viewLogs(moduleId: string) {
+    setLogsModuleId(moduleId);
+    setLoadingLogs(true);
+    setModuleLogs([]);
+    try {
+      const response = (await api.getConsoleEntries({ module_id: moduleId, page_size: 100 })) as any;
+      setModuleLogs(response.items || []);
+    } catch (err) {
+      pushToast("error", err instanceof Error ? err.message : "Не удалось загрузить логи модуля");
+    } finally {
+      setLoadingLogs(false);
+    }
+  }
+
   async function restartModule(item: ModuleRecord) {
     if (!canManageModules || item.install_state === "pending_install") return;
     setRestartingModuleId(item.module_id);
@@ -444,28 +488,29 @@ export function ModulesPage({ session }: { session?: Session }) {
     const isActive = modalMode === "detail" && selectedId === item.module_id;
     const runtime = item.runtime_metrics;
     const system = runtime?.system;
-    const activeUsers = runtime?.active_users ?? 0;
     const recentEvents = runtime?.recent_events ?? 0;
+    const isModuleEnabled = item.enabled !== false;
 
     return (
       <article
         className={`queue-card module-ops-card ${isActive ? "module-card-active" : ""}`}
         key={item.module_id}
+        style={{ opacity: isModuleEnabled ? 1 : 0.65, display: "flex", flexDirection: "column", gap: "1rem" }}
       >
-        <div className="queue-card-top">
+        <div className="queue-card-top" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "1rem" }}>
           <div>
-            <strong>{item.module_name}</strong>
-            <div className="queue-card-identifiers">
-              <span>{t("modules.moduleId", { value: item.module_id })}</span>
-              <span>
-                {t("modules.version", {
-                  value: item.version || t("common.notAvailable"),
-                })}
+            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
+              <strong style={{ fontSize: "1.1rem" }}>{item.module_name}</strong>
+              <span className={`status-badge ${isModuleEnabled ? "status-resolved" : "severity-low"}`} style={{ fontSize: "0.7rem", padding: "0.15rem 0.4rem" }}>
+                {isModuleEnabled ? "Активен" : "Отключен"}
               </span>
-              <span>{t("modules.protocol", { value: item.protocol_version || "v1" })}</span>
+            </div>
+            <div className="queue-card-identifiers" style={{ marginTop: "0.25rem", display: "flex", flexDirection: "column", gap: "0.15rem" }}>
+              <span>ID: {item.module_id}</span>
+              <span>Версия: {item.version || "—"}</span>
             </div>
           </div>
-          <div className="queue-card-flags" style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+          <div className="queue-card-flags" style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
             <span className={`status-badge module-status-pill ${heartbeatVariant(item)}`} style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem" }}>
               <span className={`status-led ${heartbeatVariant(item)}`} />
               {t(heartbeatLabelKey(item))}
@@ -479,79 +524,73 @@ export function ModulesPage({ session }: { session?: Session }) {
           </div>
         </div>
 
-        <div className="module-ops-grid">
-          <div className="module-ops-chip">
-            <span>Онлайн {runtime?.activity_window_seconds ? `${Math.round(runtime.activity_window_seconds / 60)}м` : ""}</span>
-            <strong>{activeUsers}</strong>
-          </div>
+        <div className="module-toggle-row" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "var(--surface-soft)", padding: "0.6rem 0.85rem", borderRadius: "8px", border: "1px solid var(--line)" }}>
+          <span style={{ fontSize: "0.85rem", fontWeight: 500, color: "var(--muted)" }}>Статус модуля:</span>
+          <label className="switch-new">
+            <input
+              type="checkbox"
+              checked={isModuleEnabled}
+              disabled={!canManageModules}
+              onChange={() => toggleModule(item)}
+            />
+            <span className="slider-new" />
+          </label>
+        </div>
+
+        <div className="module-ops-grid" style={{ gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
           <div className="module-ops-chip">
             <span>События {runtime?.activity_window_seconds ? `${Math.round(runtime.activity_window_seconds / 60)}м` : ""}</span>
             <strong>{recentEvents}</strong>
           </div>
           <div className="module-ops-chip">
-            <span>Spool</span>
+            <span>Spool Depth</span>
             <strong>{item.spool_depth}</strong>
           </div>
-          <div className="module-ops-chip">
-            <span>MobGuard RSS</span>
-            <strong>{formatBytes(runtime?.processes?.rss_bytes)}</strong>
+        </div>
+
+        {system ? (
+          <div className="module-meters" style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+            {renderMetricMeter("CPU модуля", system.cpu_percent)}
+            {renderMetricMeter("RAM модуля", system.memory_percent)}
+            {renderMetricMeter("Диск модуля", system.disk_percent, "%", 80, 92)}
           </div>
-        </div>
+        ) : (
+          <div style={{ padding: "0.75rem", background: "var(--surface-soft)", borderRadius: "8px", textAlign: "center", fontSize: "0.85rem", color: "var(--muted)" }}>
+            Метрики системы временно недоступны (ожидание heartbeat)
+          </div>
+        )}
 
-        <div className="module-meters">
-          {renderMetricMeter("CPU", system?.cpu_percent)}
-          {renderMetricMeter("RAM", system?.memory_percent)}
-          {renderMetricMeter("Диск", system?.disk_percent, "%", 80, 92)}
-        </div>
-
-        <div className="record-grid">
+        <div className="record-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem", fontSize: "0.85rem" }}>
           <div className="record-kv">
             <strong>{t("modules.lastSeen")}</strong>
-            <span>
-              {formatDisplayDateTime(
-                item.last_seen_at,
-                t("common.notAvailable"),
-                language,
-              )}
-            </span>
+            <span>{formatDisplayDateTime(item.last_seen_at, t("common.notAvailable"), language)}</span>
           </div>
           <div className="record-kv">
-            <strong>{t("modules.lastHeartbeatAge")}</strong>
+            <strong>Heartbeat лаг</strong>
             <span>{formatAge(item.seconds_since_last_seen)}</span>
           </div>
           <div className="record-kv">
-            <strong>Load avg</strong>
-            <span>
-              {system?.load_avg_1m !== null && system?.load_avg_1m !== undefined
-                ? `${system.load_avg_1m?.toFixed(2)} / ${system.load_avg_5m?.toFixed(2) ?? "0.00"} / ${system.load_avg_15m?.toFixed(2) ?? "0.00"}`
-                : "—"}
-            </span>
+            <strong>INBOUND теги</strong>
+            <span>{item.inbound_tags.length ? item.inbound_tags.join(", ") : "—"}</span>
           </div>
           <div className="record-kv">
-            <strong>{t("modules.inboundTags")}</strong>
-            <span>
-              {item.inbound_tags.length
-                ? item.inbound_tags.join(", ")
-                : t("common.notAvailable")}
-            </span>
+            <strong>Лог-файл активен</strong>
+            <span>{item.access_log_exists ? "Да" : "Нет"}</span>
           </div>
         </div>
 
-        <div className="record-meta">
-          <span>RAM {formatBytes(system?.memory_used_bytes)} / {formatBytes(system?.memory_total_bytes)}</span>
-          <span>Disk {formatBytes(system?.disk_used_bytes)} / {formatBytes(system?.disk_total_bytes)}</span>
-          <span>I/O {formatRate(system?.disk_read_bps)} ↓ / {formatRate(system?.disk_write_bps)} ↑</span>
-          <span>{t("modules.accessLogExists")}: {item.access_log_exists ? t("common.yes") : t("common.no")}</span>
-        </div>
+        {item.error_text ? <div className="error-box" style={{ padding: "0.5rem 0.75rem" }}>{item.error_text}</div> : null}
 
-        {item.error_text ? <div className="error-box">{item.error_text}</div> : null}
-
-        <div className="action-row">
-          <button className="ghost" onClick={() => openModule(item.module_id)}>
-            {t("modules.open")}
+        <div className="action-row" style={{ display: "flex", gap: "0.5rem", marginTop: "auto" }}>
+          <button className="ghost" style={{ flex: 1, padding: "0.5rem" }} onClick={() => openModule(item.module_id)}>
+            Настройки
+          </button>
+          <button className="ghost" style={{ flex: 1, padding: "0.5rem" }} onClick={() => viewLogs(item.module_id)}>
+            Лог
           </button>
           <button
             className="ghost"
+            style={{ flex: 1, padding: "0.5rem" }}
             disabled={
               !canManageModules ||
               item.install_state === "pending_install" ||
@@ -559,9 +598,7 @@ export function ModulesPage({ session }: { session?: Session }) {
             }
             onClick={() => restartModule(item)}
           >
-            {restartingModuleId === item.module_id
-              ? t("common.loading")
-              : t("modules.restart")}
+            {restartingModuleId === item.module_id ? "..." : "Рестарт"}
           </button>
         </div>
       </article>
@@ -609,17 +646,6 @@ export function ModulesPage({ session }: { session?: Session }) {
         <div className="stat-card">
           <span>{t("modules.cards.stale")}</span>
           <strong>{data ? staleCount : "—"}</strong>
-        </div>
-        <div className="stat-card">
-          <span>Онлайн модулей</span>
-          <strong>
-            {summary
-              ? Math.max(
-                  Number(summary.active_users_total ?? 0),
-                  modulesOnlineFromItems,
-                )
-              : "—"}
-          </strong>
         </div>
         <div className="stat-card">
           <span>События за окно</span>
@@ -826,10 +852,6 @@ export function ModulesPage({ session }: { session?: Session }) {
                   </div>
                   <div className="stats-grid">
                     <div className="stat-card">
-                      <span>Онлайн</span>
-                      <strong>{activeModule.runtime_metrics?.active_users ?? "—"}</strong>
-                    </div>
-                    <div className="stat-card">
                       <span>События</span>
                       <strong>{activeModule.runtime_metrics?.recent_events ?? "—"}</strong>
                     </div>
@@ -1007,6 +1029,36 @@ export function ModulesPage({ session }: { session?: Session }) {
               </div>
             </>
           ) : null}
+        </div>
+      </ModalShell>
+
+      <ModalShell
+        open={logsModuleId !== null}
+        onClose={() => setLogsModuleId(null)}
+        title={`Системный лог модуля: ${logsModuleId}`}
+        description="Последние 100 событий и отчетов от модуля аналитики"
+        closeLabel="Закрыть"
+      >
+        <div className="log-viewer-modal-content" style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+          {loadingLogs ? (
+            <div className="provider-empty">Загрузка логов...</div>
+          ) : moduleLogs.length ? (
+            <pre className="log-box code-editor-box" style={{ maxHeight: "450px", overflowY: "auto", fontSize: "0.8rem", padding: "1rem", background: "#0f172a", color: "#e2e8f0", border: "1px solid #334155", borderRadius: "8px" }}>
+              {moduleLogs.map((entry: any) => {
+                const date = formatDisplayDateTime(entry.timestamp, "—", language);
+                const levelColor = entry.level === "error" ? "#f43f5e" : entry.level === "warn" ? "#fbbf24" : "#10b981";
+                return (
+                  <div key={entry.id} style={{ marginBottom: "0.4rem", display: "flex", gap: "0.5rem", fontFamily: "var(--font-mono)", lineHeight: "1.4" }}>
+                    <span style={{ color: "#64748b", flexShrink: 0 }}>[{date}]</span>
+                    <span style={{ color: levelColor, fontWeight: "bold", flexShrink: 0, textTransform: "uppercase" }}>[{entry.level}]</span>
+                    <span style={{ wordBreak: "break-all", whiteSpace: "pre-wrap" }}>{entry.message}</span>
+                  </div>
+                );
+              })}
+            </pre>
+          ) : (
+            <div className="provider-empty">Логи для этого модуля отсутствуют или модуль еще не передавал события.</div>
+          )}
         </div>
       </ModalShell>
     </section>

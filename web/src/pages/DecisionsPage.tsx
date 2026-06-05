@@ -207,14 +207,14 @@ export function DecisionsPage({ session: _session }: { session?: Session }) {
           <h1>{t("decisions.title")}</h1>
           <p className="page-lede">{t("decisions.description")}</p>
         </div>
-        <div className="dashboard-meta">
+        <div className="dashboard-meta" style={{ display: "flex", alignItems: "center", gap: "1rem", flexWrap: "wrap" }}>
           <div className="chip">
             {t("decisions.countSummary", {
               count: data.count,
               page: data.page,
             })}
           </div>
-          <span className="muted">
+          <span className="muted" style={{ fontSize: "0.85rem" }}>
             {t("decisions.lastUpdated", {
               value: formatDisplayDateTime(
                 lastUpdatedAt,
@@ -296,7 +296,7 @@ export function DecisionsPage({ session: _session }: { session?: Session }) {
       {error ? <div className="error-box">{error}</div> : null}
 
       <div className="panel">
-        <div className="panel-heading panel-heading-row">
+        <div className="panel-heading panel-heading-row" style={{ borderBottom: "1px solid var(--line)", paddingBottom: "1rem", marginBottom: "1.5rem" }}>
           <div>
             <h2>{t("decisions.listTitle")}</h2>
             <p className="muted">{t("decisions.listDescription")}</p>
@@ -308,138 +308,138 @@ export function DecisionsPage({ session: _session }: { session?: Session }) {
             })}
           </span>
         </div>
-        <div className="record-list">
-          {loading ? (
-            <div className="provider-empty">
-              <span>{t("common.loading")}</span>
-            </div>
-          ) : null}
-          {!loading && data.items.length === 0 ? (
-            <div className="provider-empty">
-              <span>{t("decisions.empty")}</span>
-            </div>
-          ) : null}
-          {!loading
-            ? visibleItems.map((item) => {
-                const scopeContext = describeScopeContext(
-                  t,
-                  item.target_scope_type,
-                  Boolean(item.shared_account_suspected),
-                );
-                const contextDisplay =
-                  scopeContext.scopeType === "ip_device"
-                    ? item.device_display || t("common.notAvailable")
-                    : scopeContext.contextValue;
-                const identifier = userIdentifier(item);
-                const highlights = decisionHighlights(item);
-                const targetTo = identifier
-                  ? `/data/users?identifier=${encodeURIComponent(identifier)}`
-                  : "";
-                const isVerdictHome = item.verdict === "HOME";
-                const isVerdictMobile = item.verdict === "MOBILE";
-                const verdictClass = isVerdictHome ? "status-resolved" : isVerdictMobile ? "severity-medium" : "severity-low";
-                const cardBody = (
-                  <>
-                    <div className="record-main">
-                      <span className="record-title">
-                        {item.target_ip || item.ip} · {contextDisplay}
-                      </span>
-                      <span className={`tag ${verdictClass}`}>
-                        {item.verdict} / {item.confidence_band}
-                      </span>
-                    </div>
-                    <div className="record-meta">
-                      <span>
-                        {t("decisions.meta.module", {
-                          value: String(
-                            item.module_name || item.module_id || "—",
-                          ),
-                        })}
-                      </span>
-                      <span>
-                        {t("decisions.meta.inbound", {
-                          value: String(item.inbound_tag || item.tag || "—"),
-                        })}
-                      </span>
-                      <span>
-                        {t("decisions.meta.provider", {
-                          value: String(item.isp || "—"),
-                        })}
-                      </span>
-                      <span>
-                        {t("decisions.meta.source", {
-                          value: t(
-                            `decisions.sources.${String(item.decision_source || "rule_engine")}`,
-                          ),
-                        })}
-                      </span>
-                      <span>
-                        {formatDisplayDateTime(
-                          item.created_at,
-                          t("common.notAvailable"),
-                          language,
-                        )}
-                      </span>
-                    </div>
-                    <div className="record-meta">
-                      <span>
-                        {t("decisions.meta.scope", {
-                          value: scopeContext.scopeMeta,
-                        })}
-                      </span>
-                      <span>
-                        {t("decisions.meta.enforcement", {
-                          value: formatEnforcement(item),
-                        })}
-                      </span>
-                    </div>
-                    <div className="record-meta">
-                      <span>
-                        Пользователь {identifier || t("common.notAvailable")}
-                      </span>
-                      <span>
-                        Балл {item.score}
-                      </span>
-                      <span>
-                        HWID {item.hwid_device_count_exact ?? "—"} / {item.hwid_device_limit ?? "—"}
-                      </span>
-                    </div>
-                    {highlights.length > 0 ? (
-                      <div className="provider-evidence">
-                        {highlights.map((highlight) => (
-                          <span key={highlight}>{highlight}</span>
-                        ))}
+
+        {loading ? (
+          <div className="provider-empty">
+            <span>{t("common.loading")}</span>
+          </div>
+        ) : null}
+
+        {!loading && data.items.length === 0 ? (
+          <div className="provider-empty">
+            <span>{t("decisions.empty")}</span>
+          </div>
+        ) : null}
+
+        {!loading && data.items.length > 0 ? (
+          <div className="queue-grid review-queue-grid" style={{ marginBottom: "1.5rem" }}>
+            {visibleItems.map((item) => {
+              const scopeContext = describeScopeContext(
+                t,
+                item.target_scope_type,
+                Boolean(item.shared_account_suspected),
+              );
+              const contextDisplay =
+                scopeContext.scopeType === "ip_device"
+                  ? item.device_display || t("common.notAvailable")
+                  : scopeContext.contextValue;
+              const identifier = userIdentifier(item);
+              const highlights = decisionHighlights(item);
+              const targetTo = identifier
+                ? `/data/users?identifier=${encodeURIComponent(identifier)}`
+                : "";
+              const isVerdictHome = item.verdict === "HOME";
+              const isVerdictMobile = item.verdict === "MOBILE";
+              const verdictClass = isVerdictHome ? "status-resolved" : isVerdictMobile ? "severity-medium" : "severity-low";
+
+              return (
+                <article
+                  key={String(item.id)}
+                  className="queue-card"
+                  style={{ display: "flex", flexDirection: "column", gap: "0.85rem", padding: "1.25rem", borderRadius: "14px", border: "1px solid var(--line)" }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "1rem" }}>
+                    <div>
+                      <strong style={{ fontSize: "1.1rem", color: "var(--ink)", fontFamily: "var(--font-display)", wordBreak: "break-all" }}>
+                        {item.target_ip || item.ip}
+                      </strong>
+                      <div style={{ fontSize: "0.75rem", color: "var(--muted)", marginTop: "0.2rem" }}>
+                        {scopeContext.queueScopeLabel || scopeContext.scopeMeta} · {contextDisplay}
                       </div>
-                    ) : null}
-                    {item.last_error ? (
-                      <div className="error-box">{item.last_error}</div>
-                    ) : null}
-                  </>
-                );
-                return (
-                  targetTo ? (
-                    <Link
-                      className="record-item inline-link"
-                      key={String(item.id)}
-                      to={targetTo}
-                    >
-                      {cardBody}
-                    </Link>
-                  ) : (
-                    <div className="record-item" key={String(item.id)}>
-                      {cardBody}
                     </div>
-                  )
-                );
-              })
-            : null}
-          {!loading && visibleItems.length < data.items.length ? (
-            <div className="provider-empty muted" ref={loadMoreRef}>
-              <span>{t("common.loading")}</span>
-            </div>
-          ) : null}
-        </div>
-        <div className="record-actions">
+                    <span className={`status-badge ${verdictClass}`} style={{ fontWeight: 700, padding: "0.2rem 0.6rem", fontSize: "0.75rem", borderRadius: "6px", whiteSpace: "nowrap" }}>
+                      {item.verdict}
+                    </span>
+                  </div>
+
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.6rem", fontSize: "0.8rem" }}>
+                    <div>
+                      <span style={{ color: "var(--muted)", display: "block", fontSize: "0.7rem", textTransform: "uppercase", fontWeight: 600 }}>Пользователь</span>
+                      {targetTo ? (
+                        <Link to={targetTo} style={{ color: "var(--accent)", textDecoration: "underline", fontWeight: 600 }}>
+                          {identifier || "—"}
+                        </Link>
+                      ) : (
+                        <strong style={{ color: "var(--ink)" }}>{identifier || "—"}</strong>
+                      )}
+                    </div>
+                    <div>
+                      <span style={{ color: "var(--muted)", display: "block", fontSize: "0.7rem", textTransform: "uppercase", fontWeight: 600 }}>Модуль / Вход</span>
+                      <strong style={{ color: "var(--ink)" }}>
+                        {item.module_name || item.module_id || "—"}
+                        <span style={{ color: "var(--muted)", fontWeight: "normal" }}>
+                          {item.inbound_tag || item.tag ? ` (${item.inbound_tag || item.tag})` : ""}
+                        </span>
+                      </strong>
+                    </div>
+                    <div>
+                      <span style={{ color: "var(--muted)", display: "block", fontSize: "0.7rem", textTransform: "uppercase", fontWeight: 600 }}>Источник вердикта</span>
+                      <span style={{ color: "var(--ink)", fontWeight: 500 }}>
+                        {t(`decisions.sources.${String(item.decision_source || "rule_engine")}`)}
+                      </span>
+                    </div>
+                    <div>
+                      <span style={{ color: "var(--muted)", display: "block", fontSize: "0.7rem", textTransform: "uppercase", fontWeight: 600 }}>Показатели</span>
+                      <span style={{ color: "var(--ink)", fontWeight: 500 }}>
+                        Балл: {item.score} | HWID: {item.hwid_device_count_exact ?? "—"}/{item.hwid_device_limit ?? "—"}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div style={{ background: "rgba(255, 255, 255, 0.02)", border: "1px solid var(--line)", borderRadius: "8px", padding: "0.5rem 0.75rem", fontSize: "0.8rem", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <span style={{ color: "var(--muted)", fontSize: "0.75rem" }}>Провайдер:</span>
+                    <strong style={{ color: "var(--ink)", maxWidth: "70%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: "0.8rem" }} title={item.isp || ""}>
+                      {item.isp || "—"}
+                    </strong>
+                  </div>
+
+                  <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem", fontSize: "0.75rem", borderTop: "1px solid var(--line)", paddingTop: "0.6rem", marginTop: "auto" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between" }}>
+                      <span style={{ color: "var(--muted)" }}>Статус исполнения:</span>
+                      <strong style={{ color: item.enforcement_status === "failed" ? "var(--danger)" : item.enforcement_status === "applied" ? "var(--success)" : "var(--ink)" }}>
+                        {formatEnforcement(item)}
+                      </strong>
+                    </div>
+                    <div style={{ display: "flex", justifyContent: "space-between", color: "var(--muted)", fontSize: "0.7rem" }}>
+                      <span>Создано:</span>
+                      <span>{formatDisplayDateTime(item.created_at, "—", language)}</span>
+                    </div>
+                  </div>
+
+                  {highlights.length > 0 ? (
+                    <div className="provider-evidence" style={{ display: "flex", gap: "0.3rem", flexWrap: "wrap", marginTop: "0.25rem" }}>
+                      {highlights.map((highlight) => (
+                        <span key={highlight} className="tag" style={{ fontSize: "0.7rem", padding: "2px 6px" }}>{highlight}</span>
+                      ))}
+                    </div>
+                  ) : null}
+
+                  {item.last_error ? (
+                    <div className="error-box" style={{ padding: "0.4rem 0.6rem", fontSize: "0.75rem", margin: 0 }}>{item.last_error}</div>
+                  ) : null}
+                </article>
+              );
+            })}
+          </div>
+        ) : null}
+
+        {!loading && visibleItems.length < data.items.length ? (
+          <div className="provider-empty muted" ref={loadMoreRef}>
+            <span>{t("common.loading")}</span>
+          </div>
+        ) : null}
+
+        <div className="record-actions" style={{ display: "flex", justifyContent: "space-between", marginTop: "1rem" }}>
           <button
             className="ghost"
             disabled={filters.page <= 1}
