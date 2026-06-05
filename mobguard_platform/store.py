@@ -1003,10 +1003,14 @@ class PlatformStore:
                 )
                 """
             )
-            try:
-                conn.execute("ALTER TABLE modules ADD COLUMN enabled INTEGER NOT NULL DEFAULT 1")
-            except sqlite3.OperationalError:
-                pass
+            module_columns = {
+                row["name"] for row in conn.execute("PRAGMA table_info(modules)").fetchall()
+            }
+            if "enabled" not in module_columns:
+                try:
+                    conn.execute("ALTER TABLE modules ADD COLUMN enabled INTEGER NOT NULL DEFAULT 1")
+                except sqlite3.OperationalError:
+                    pass
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS module_heartbeats (
