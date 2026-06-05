@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 from typing import Any, Optional
 
 from .storage.postgres import PostgresStorage
+from .storage.sqlite import SQLiteStorage
 
 
 def utcnow() -> datetime:
@@ -18,9 +19,9 @@ def utcnow_iso() -> str:
 
 
 class AnalysisStore:
-    def __init__(self, db_path: str, *, storage: PostgresStorage):
+    def __init__(self, db_path: str, *, storage: Optional[PostgresStorage | SQLiteStorage] = None):
         self.db_path = db_path
-        self.storage = storage
+        self.storage = storage or SQLiteStorage(db_path)
 
     def _connect(self):
         return self.storage.connect()

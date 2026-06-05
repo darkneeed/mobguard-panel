@@ -1432,6 +1432,8 @@ def register_module(container: APIContainer, payload: dict[str, Any], token: str
             config_revision_applied=int(payload.get("config_revision_applied") or 0),
             auto_create=False,
         )
+    except ValueError:
+        raise
     except Exception as exc:
         raise ModuleStorageBusyError(MODULE_INGEST_BUSY_DETAIL) from exc
     stale_after_seconds = _module_stale_after_seconds(container)
@@ -1454,6 +1456,8 @@ def record_module_heartbeat(container: APIContainer, payload: dict[str, Any], to
             config_revision_applied=int(payload.get("config_revision_applied") or 0),
             details=dict(payload.get("details") or {}),
         )
+    except ValueError:
+        raise
     except Exception as exc:
         raise ModuleStorageBusyError(MODULE_INGEST_BUSY_DETAIL) from exc
     stale_after_seconds = _module_stale_after_seconds(container)
@@ -1488,6 +1492,8 @@ async def ingest_module_events(container: APIContainer, payload: dict[str, Any],
     protocol_version = _require_protocol_version(str(payload.get("protocol_version", PROTOCOL_VERSION)))
     try:
         module = container.store.authenticate_module(str(payload.get("module_id") or ""), token)
+    except ValueError:
+        raise
     except Exception as exc:
         raise ModuleStorageBusyError(MODULE_INGEST_BUSY_DETAIL) from exc
     try:
@@ -1502,6 +1508,8 @@ async def ingest_module_events(container: APIContainer, payload: dict[str, Any],
             module["module_name"],
             items,
         )
+    except ValueError:
+        raise
     except Exception as exc:
         raise ModuleStorageBusyError(MODULE_INGEST_BUSY_DETAIL) from exc
 

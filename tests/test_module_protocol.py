@@ -291,8 +291,8 @@ class ModuleProtocolTests(unittest.TestCase):
     def test_attach_runtime_metrics_uses_highest_online_signal_for_healthy_module(self):
         modules = [
             {
-                "module_id": "module-vk",
-                "module_name": "VK",
+                "module_id": "module-vk-unmapped",
+                "module_name": "VK-Unmapped",
                 "healthy": True,
                 "health_status": "ok",
                 "install_state": "online",
@@ -305,7 +305,7 @@ class ModuleProtocolTests(unittest.TestCase):
                 module_service,
                 "_heartbeat_detail_map",
                 return_value={
-                    "module-vk": {
+                    "module-vk-unmapped": {
                         "activity": {
                             "active_users": 18,
                             "recent_events": 9,
@@ -330,7 +330,7 @@ class ModuleProtocolTests(unittest.TestCase):
                 return_value={
                     "window_seconds": 3600,
                     "modules": {
-                        "module-vk": {
+                        "module-vk-unmapped": {
                             "active_users": 40,
                             "recent_events": 50,
                         }

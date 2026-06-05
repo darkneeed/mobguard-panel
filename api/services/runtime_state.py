@@ -649,10 +649,11 @@ def build_user_card(store: Any, identity: dict[str, Any]) -> dict[str, Any]:
             """,
             lookup_params,
         ).fetchall()
-        active_ban_count = conn.execute(
+        row = conn.execute(
             "SELECT COUNT(*) AS cnt FROM violations WHERE uuid = ? AND unban_time > datetime('now')",
             (identity.get("uuid"),),
-        ).fetchone()["cnt"] if identity.get("uuid") and has_violations else 0
+        ).fetchone() if identity.get("uuid") and has_violations else None
+        active_ban_count = row["cnt"] if row else 0
 
     exempt_system_ids = set(coerce_int_list(rules_state["rules"].get("exempt_ids", [])))
     exempt_tg_ids = set(coerce_int_list(rules_state["rules"].get("exempt_tg_ids", [])))

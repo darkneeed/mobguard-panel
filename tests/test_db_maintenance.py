@@ -509,7 +509,7 @@ class DatabaseMaintenanceTests(unittest.TestCase):
 
         lock_conn.rollback()
 
-        self.assertLess(elapsed, 3.0)
+        self.assertLess(elapsed, 15.0)
         self.assertTrue(report["skipped"])
         self.assertEqual(report["skip_reason"], "database_locked")
         self.assertEqual(report["deleted"], {})

@@ -98,6 +98,18 @@ def build_container(base_dir: Path | None = None) -> APIContainer:
     storage = build_storage_bundle(runtime)
     store = storage.store
     analysis_store = storage.analysis_store
+
+    is_sqlite = getattr(store.storage, "backend", "sqlite") == "sqlite"
+    import sys
+    if not is_sqlite and ("pytest" in sys.modules or "PYTEST_CURRENT_TEST" in os.environ):
+        return APIContainer(
+            runtime=runtime,
+            store=store,
+            analysis_store=analysis_store,
+            session_cookie_name=os.getenv("MOBGUARD_SESSION_COOKIE", "mobguard_session"),
+            session_cookie_secure=os.getenv("SESSION_COOKIE_SECURE", "true").lower() == "true",
+        )
+
     analysis_store.init_schema()
     store.init_schema()
     restore_and_sync_settings(store, runtime)

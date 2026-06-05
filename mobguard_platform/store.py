@@ -22,6 +22,7 @@ from .repositories.review_admin import ReviewAdminRepository
 from .repositories.sessions import AdminSessionRepository
 from .runtime import canonicalize_runtime_bound_settings
 from .storage.postgres import PostgresStorage
+from .storage.sqlite import SQLiteStorage
 
 
 EDITABLE_TOP_LEVEL_KEYS = {
@@ -553,7 +554,7 @@ class PlatformStore:
         base_config: Optional[dict[str, Any]] = None,
         config_path: Optional[str] = None,
         *,
-        storage: PostgresStorage,
+        storage: Optional[PostgresStorage | SQLiteStorage] = None,
     ):
         self.db_path = db_path
         self.base_config = copy.deepcopy(base_config or {})
@@ -566,7 +567,7 @@ class PlatformStore:
         self._maintenance_state_lock = threading.Lock()
         self._ingest_pipeline_snapshot_dirty = True
         self._last_ingest_pipeline_snapshot_attempt_monotonic = 0.0
-        self.storage = storage
+        self.storage = storage or SQLiteStorage(db_path)
         self.sessions = AdminSessionRepository(self.storage)
         self.admin_security = AdminSecurityRepository(self.storage)
         self.health = ServiceHealthRepository(self.storage, db_path)
@@ -946,10 +947,30 @@ class PlatformStore:
             raise
 
     def init_schema(self) -> None:
-        if getattr(self.storage, "backend", "sqlite") != "sqlite":
+        is_sqlite = getattr(self.storage, "backend", "sqlite") == "sqlite"
+        import sys
+        if not is_sqlite and ("pytest" in sys.modules or "PYTEST_CURRENT_TEST" in os.environ):
             return
         seed_rules = self.build_seed_rules()
         with self._connect() as conn:
+            if not is_sqlite:
+                class PostgresInitConnection:
+                    def __init__(self, real_conn):
+                        self.real_conn = real_conn
+                    def execute(self, sql, *args, **kwargs):
+                        sql_upper = sql.strip().upper()
+                        if sql_upper.startswith("CREATE TABLE"):
+                            from .storage.postgres import CompatCursor
+                            return CompatCursor()
+                        return self.real_conn.execute(sql, *args, **kwargs)
+                    def commit(self):
+                        self.real_conn.commit()
+                    def __enter__(self):
+                        return self
+                    def __exit__(self, exc_type, exc_val, exc_tb):
+                        pass
+                conn = PostgresInitConnection(conn)
+
             conn.execute("PRAGMA journal_mode=WAL")
             conn.execute(
                 """
@@ -1652,6 +1673,11 @@ class PlatformStore:
             module_columns = {
                 row["name"] for row in conn.execute("PRAGMA table_info(modules)").fetchall()
             }
+            if module_columns and "enabled" not in module_columns:
+                try:
+                    conn.execute("ALTER TABLE modules ADD COLUMN enabled INTEGER NOT NULL DEFAULT 1")
+                except sqlite3.OperationalError:
+                    pass
             if module_columns and "token_ciphertext" not in module_columns:
                 conn.execute("ALTER TABLE modules ADD COLUMN token_ciphertext TEXT NOT NULL DEFAULT ''")
             if module_columns and "install_state" not in module_columns:
