@@ -876,23 +876,31 @@ def _attach_runtime_metrics(
     try:
         client = _remnawave_client(container)
         if client.enabled:
-            rows = client.get_nodes_online_usage()
-            seen_uuids = set()
-            total = 0
-            for row in rows:
-                if not isinstance(row, dict):
-                    continue
-                uuid = str(row.get("uuid") or "").strip().lower()
-                if uuid:
-                    if uuid in seen_uuids:
+            stats = client.get_system_stats()
+            if stats:
+                response = stats.get("response", stats)
+                if isinstance(response, dict):
+                    online_now = response.get("onlineStats", {}).get("onlineNow")
+                    if online_now is not None:
+                        remnawave_total_online = int(online_now)
+            if remnawave_total_online is None:
+                rows = client.get_nodes_online_usage()
+                seen_uuids = set()
+                total = 0
+                for row in rows:
+                    if not isinstance(row, dict):
                         continue
-                    seen_uuids.add(uuid)
-                try:
-                    users_online = max(int(row.get("users_online") or 0), 0)
-                except (TypeError, ValueError):
-                    users_online = 0
-                total += users_online
-            remnawave_total_online = total
+                    uuid = str(row.get("uuid") or "").strip().lower()
+                    if uuid:
+                        if uuid in seen_uuids:
+                            continue
+                        seen_uuids.add(uuid)
+                    try:
+                        users_online = max(int(row.get("users_online") or 0), 0)
+                    except (TypeError, ValueError):
+                        users_online = 0
+                    total += users_online
+                remnawave_total_online = total
     except Exception:
         pass
 

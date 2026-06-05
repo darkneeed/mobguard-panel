@@ -365,6 +365,13 @@ class RemnawaveClient:
         )
         return result
 
+    def get_system_stats(self) -> Optional[dict[str, Any]]:
+        if not self.enabled:
+            self.last_error = "Panel client is disabled"
+            return None
+        self.last_error = None
+        return self._request("GET", "/api/system/stats")
+
     def get_nodes_online_usage(self) -> list[dict[str, Any]]:
         if not self.enabled:
             self.last_error = "Panel client is disabled"
