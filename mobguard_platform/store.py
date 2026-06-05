@@ -960,8 +960,14 @@ class PlatformStore:
                     def execute(self, sql, *args, **kwargs):
                         sql_upper = sql.strip().upper()
                         if sql_upper.startswith("CREATE TABLE"):
-                            from .storage.postgres import CompatCursor
-                            return CompatCursor()
+                            import re
+                            translated = re.sub(
+                                r"\bINTEGER\s+PRIMARY\s+KEY\s+AUTOINCREMENT\b",
+                                "SERIAL PRIMARY KEY",
+                                sql,
+                                flags=re.IGNORECASE
+                            )
+                            return self.real_conn.execute(translated, *args, **kwargs)
                         return self.real_conn.execute(sql, *args, **kwargs)
                     def commit(self):
                         self.real_conn.commit()
