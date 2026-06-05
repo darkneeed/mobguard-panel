@@ -7,7 +7,7 @@ sys.path.append("/app")
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from api.context import build_container
-from api.services.modules import get_modules
+from api.services.modules import list_modules
 
 c = build_container()
-print(json.dumps(get_modules(c), indent=2))
+print(json.dumps(list_modules(c), indent=2))
