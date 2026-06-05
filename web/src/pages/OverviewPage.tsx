@@ -1,4 +1,17 @@
 import { Link } from "react-router-dom";
+import { PieChart, Pie, Cell, ResponsiveContainer } from "recharts";
+import {
+  Cpu,
+  Layers,
+  HardDrive,
+  Clock,
+  Terminal,
+  Users,
+  ShieldAlert,
+  Shield,
+  Activity,
+  ListOrdered
+} from "lucide-react";
 
 import {
   api,
@@ -66,6 +79,7 @@ function percent(used?: number | null, total?: number | null): number | null {
   return (used / total) * 100;
 }
 
+// Map metric status classes to theme values
 function metricVariant(value?: number | null, warn = 75, error = 90): string {
   if (value === null || value === undefined || Number.isNaN(value)) return "severity-low";
   if (value >= error) return "severity-critical";
@@ -242,43 +256,73 @@ export function OverviewPage({ session: _session }: { session?: Session }) {
 
       <div className="stats-grid overview-top-stats">
         <div className="stat-card stat-card-emphasis">
-          <span>CPU сервера</span>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%" }}>
+            <span>CPU сервера</span>
+            <Cpu size={16} style={{ color: "var(--accent)" }} />
+          </div>
           <strong>{formatPercent(panelServer?.cpu_percent)}</strong>
         </div>
         <div className="stat-card stat-card-emphasis">
-          <span>RAM сервера</span>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%" }}>
+            <span>RAM сервера</span>
+            <Layers size={16} style={{ color: "var(--accent)" }} />
+          </div>
           <strong>{formatPercent(panelServer?.memory_percent)}</strong>
         </div>
         <div className="stat-card stat-card-emphasis">
-          <span>Диск сервера</span>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%" }}>
+            <span>Диск сервера</span>
+            <HardDrive size={16} style={{ color: "var(--accent)" }} />
+          </div>
           <strong>{formatPercent(panelServer?.disk_percent)}</strong>
         </div>
         <div className="stat-card">
-          <span>Uptime панели</span>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%" }}>
+            <span>Uptime панели</span>
+            <Clock size={16} style={{ color: "var(--muted)" }} />
+          </div>
           <strong>{formatDuration(panelServer?.uptime_seconds)}</strong>
         </div>
         <div className="stat-card">
-          <span>RSS API</span>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%" }}>
+            <span>RSS API</span>
+            <Terminal size={16} style={{ color: "var(--muted)" }} />
+          </div>
           <strong>{formatBytes(panelServer?.api_process_rss_bytes)}</strong>
         </div>
         <div className="stat-card">
-          <span>Онлайн на модулях</span>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%" }}>
+            <span>Онлайн на модулях</span>
+            <Users size={16} style={{ color: "var(--muted)" }} />
+          </div>
           <strong>{modulesOnline}</strong>
         </div>
         <div className="stat-card">
-          <span>С ограничениями</span>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%" }}>
+            <span>С ограничениями</span>
+            <ShieldAlert size={16} style={{ color: "var(--danger)" }} />
+          </div>
           <strong>{violatingNow}</strong>
         </div>
         <div className="stat-card">
-          <span>В норме</span>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%" }}>
+            <span>В норме</span>
+            <Shield size={16} style={{ color: "var(--success)" }} />
+          </div>
           <strong>{compliantNow}</strong>
         </div>
         <div className="stat-card">
-          <span>События за окно</span>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%" }}>
+            <span>События за окно</span>
+            <Activity size={16} style={{ color: "var(--muted)" }} />
+          </div>
           <strong>{summary?.recent_events_total ?? "—"}</strong>
         </div>
         <div className="stat-card">
-          <span>Очередь</span>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%" }}>
+            <span>Очередь</span>
+            <ListOrdered size={16} style={{ color: "var(--muted)" }} />
+          </div>
           <strong>{pipeline?.queue_depth ?? "—"}</strong>
         </div>
       </div>
@@ -335,31 +379,75 @@ export function OverviewPage({ session: _session }: { session?: Session }) {
           </div>
         </div>
 
-        <div className="panel">
-          <div className="panel-heading">
-            <h2>Поток обработки</h2>
-            <p className="muted">
-              Очередь, лаг и активные ограничения без тяжёлых вспомогательных карточек.
-            </p>
+        <div className="panel" style={{ display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
+          <div>
+            <div className="panel-heading">
+              <h2>Поток обработки</h2>
+              <p className="muted">
+                Очередь, лаг и активные ограничения.
+              </p>
+            </div>
+            <div className="stats-grid overview-flow-grid" style={{ marginTop: "1rem" }}>
+              <div className="stat-card">
+                <span>Открытая очередь</span>
+                <strong>{queue?.count ?? "—"}</strong>
+              </div>
+              <div className="stat-card">
+                <span>Глубина очереди</span>
+                <strong>{pipeline?.queue_depth ?? "—"}</strong>
+              </div>
+              <div className="stat-card">
+                <span>Лаг</span>
+                <strong>{formatAge(pipeline?.current_lag_seconds)}</strong>
+              </div>
+              <div className="stat-card">
+                <span>Pending remote</span>
+                <strong>{pipeline?.enforcement_pending_count ?? "—"}</strong>
+              </div>
+            </div>
           </div>
-          <div className="stats-grid overview-flow-grid">
-            <div className="stat-card">
-              <span>Открытая очередь</span>
-              <strong>{queue?.count ?? "—"}</strong>
+
+          {(compliantNow > 0 || violatingNow > 0) && (
+            <div style={{ marginTop: "1.25rem", borderTop: "1px solid var(--line)", paddingTop: "1rem" }}>
+              <span style={{ fontSize: "0.75rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--muted)" }}>
+                Соотношение трафика
+              </span>
+              <div style={{ display: "flex", alignItems: "center", gap: "1rem", marginTop: "0.5rem" }}>
+                <div style={{ width: "80px", height: "80px", flexShrink: 0 }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={[
+                          { name: "В норме", value: compliantNow },
+                          { name: "С ограничениями", value: violatingNow }
+                        ]}
+                        dataKey="value"
+                        innerRadius={20}
+                        outerRadius={36}
+                        stroke="none"
+                      >
+                        <Cell fill="var(--success, #10b981)" />
+                        <Cell fill="var(--danger, #ef4444)" />
+                      </Pie>
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: "0.3rem", fontSize: "0.8rem" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
+                    <span style={{ display: "inline-block", width: "8px", height: "8px", borderRadius: "50%", background: "var(--success, #10b981)" }} />
+                    <span style={{ color: "var(--muted)" }}>В норме:</span>
+                    <strong>{compliantNow} ({Math.round(compliantNow / (compliantNow + violatingNow || 1) * 100)}%)</strong>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
+                    <span style={{ display: "inline-block", width: "8px", height: "8px", borderRadius: "50%", background: "var(--danger, #ef4444)" }} />
+                    <span style={{ color: "var(--muted)" }}>Ограничены:</span>
+                    <strong>{violatingNow} ({Math.round(violatingNow / (compliantNow + violatingNow || 1) * 100)}%)</strong>
+                  </div>
+                </div>
+              </div>
             </div>
-            <div className="stat-card">
-              <span>Глубина очереди</span>
-              <strong>{pipeline?.queue_depth ?? "—"}</strong>
-            </div>
-            <div className="stat-card">
-              <span>Лаг</span>
-              <strong>{formatAge(pipeline?.current_lag_seconds)}</strong>
-            </div>
-            <div className="stat-card">
-              <span>Pending remote</span>
-              <strong>{pipeline?.enforcement_pending_count ?? "—"}</strong>
-            </div>
-          </div>
+          )}
+
           <div className="record-meta overview-flow-meta">
             <span>{pipeline?.queued_count ?? 0} в очереди</span>
             <span>{pipeline?.processing_count ?? 0} обрабатывается</span>
@@ -368,6 +456,7 @@ export function OverviewPage({ session: _session }: { session?: Session }) {
           </div>
         </div>
       </div>
+
 
       {loading ? (
         <div className="dashboard-grid">

@@ -465,12 +465,14 @@ export function ModulesPage({ session }: { session?: Session }) {
               <span>{t("modules.protocol", { value: item.protocol_version || "v1" })}</span>
             </div>
           </div>
-          <div className="queue-card-flags">
-            <span className={`status-badge module-status-pill ${heartbeatVariant(item)}`}>
+          <div className="queue-card-flags" style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+            <span className={`status-badge module-status-pill ${heartbeatVariant(item)}`} style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem" }}>
+              <span className={`status-led ${heartbeatVariant(item)}`} />
               {t(heartbeatLabelKey(item))}
             </span>
             {item.install_state !== "pending_install" ? (
-              <span className={`tag module-status-pill ${validationVariant(item)}`}>
+              <span className={`tag module-status-pill ${validationVariant(item)}`} style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem" }}>
+                <span className={`status-led ${validationVariant(item)}`} />
                 {t(`modules.health.${item.health_status}`)}
               </span>
             ) : null}

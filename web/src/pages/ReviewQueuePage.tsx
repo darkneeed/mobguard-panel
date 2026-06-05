@@ -6,11 +6,22 @@ import {
   useState,
 } from "react";
 import { Link, useSearchParams } from "react-router-dom";
+import {
+  Copy,
+  Check,
+  ExternalLink,
+  ShieldAlert,
+  Home,
+  Smartphone,
+  AlertTriangle,
+  X
+} from "lucide-react";
 
 import { hasPermission } from "../app/permissions";
 import { prefetchRouteModule } from "../app/routeModules";
 import { api, ReviewItem, ReviewListResponse, Session } from "../api/client";
 import { useToast } from "../components/ToastProvider";
+
 import {
   describeHardFlag,
 } from "../features/reviews/lib/signalBadges";
@@ -1017,7 +1028,7 @@ export function ReviewQueuePage({ session }: { session?: Session }) {
       {!loading ? (
         <div className="queue-grid review-queue-grid">
           {visibleQueueItems.map((item, index) => (
-            <article key={item.id} className="queue-card">
+            <article key={item.id} className="queue-card" style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
               {(() => {
                 const ipInventory =
                   Array.isArray(item.ip_inventory) &&
@@ -1052,119 +1063,119 @@ export function ReviewQueuePage({ session }: { session?: Session }) {
                 const hardFlagBadges = buildQueueHardFlagBadges(item.hard_flags);
                 return (
                   <>
-                    <div className="queue-card-top">
-                      <label className="inline-check queue-check">
-                        <input
-                          type="checkbox"
-                          checked={selectedIds.includes(item.id)}
-                          onChange={(event) =>
-                            setSelectedIds((prev) =>
-                              event.target.checked
-                                ? [...prev, item.id]
-                                : prev.filter((value) => value !== item.id),
-                            )
-                          }
-                        />
-                      </label>
-                      <div>
-                        <strong>{primaryIp}</strong>
-                        <div className="muted">
-                          {scopeContext.queueScopeLabel}
+                    {/* Header: IP + Checkbox */}
+                    <div className="queue-card-top" style={{ alignItems: "center", borderBottom: "1px solid var(--line)", paddingBottom: "0.75rem", gap: "0.5rem" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+                        <label className="inline-check queue-check" style={{ display: "flex", margin: 0 }}>
+                          <input
+                            type="checkbox"
+                            checked={selectedIds.includes(item.id)}
+                            onChange={(event) =>
+                              setSelectedIds((prev) =>
+                                event.target.checked
+                                  ? [...prev, item.id]
+                                  : prev.filter((value) => value !== item.id),
+                              )
+                            }
+                          />
+                        </label>
+                        <div style={{ display: "flex", flexDirection: "column" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: "0.35rem" }}>
+                            <strong style={{ fontSize: "1.1rem", color: "var(--ink)", fontFamily: "var(--font-display)" }}>{primaryIp}</strong>
+                            <button
+                              className="info-button"
+                              style={{ width: "1.25rem", height: "1.25rem", minWidth: "1.25rem", border: 0, background: "none", color: "var(--muted)", cursor: "pointer", padding: 0 }}
+                              onClick={() => {
+                                navigator.clipboard.writeText(primaryIp);
+                                pushToast("success", "IP скопирован");
+                              }}
+                              title="Копировать IP"
+                            >
+                              <Copy size={12} />
+                            </button>
+                          </div>
+                          <span style={{ fontSize: "0.75rem", color: "var(--muted)" }}>
+                            {scopeContext.queueScopeLabel}
+                          </span>
                         </div>
                       </div>
                       {item.status !== "OPEN" ? (
-                        <span
-                          className={`status-badge status-${item.status.toLowerCase()}`}
-                        >
+                        <span className={`status-badge status-${item.status.toLowerCase()}`}>
                           {item.status}
                         </span>
                       ) : null}
                     </div>
-                    <div className="queue-card-identifiers">
-                      <strong>
-                        {item.username ||
-                          formatIdentifier(
-                            t("reviewQueue.identifiers.user"),
-                            item.system_id,
-                          )}
-                      </strong>
-                      <span>
-                        {formatIdentifier(
-                          t("reviewQueue.identifiers.module"),
-                          item.module_name || item.module_id,
-                        )}
-                      </span>
-                      {scopeContext.scopeType === "ip_device" ? (
-                        <span>
-                          {formatIdentifier(
-                            t("reviewQueue.identifiers.device"),
-                            deviceDisplay,
-                          )}
-                        </span>
-                      ) : null}
-                      {item.system_id !== null &&
-                      item.system_id !== undefined ? (
-                        <span>
-                          {formatIdentifier(
-                            t("reviewQueue.identifiers.system"),
-                            item.system_id,
-                          )}
-                        </span>
-                      ) : null}
+
+                    {/* Metadata Grid */}
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.6rem", fontSize: "0.8rem" }}>
+                      <div>
+                        <span style={{ color: "var(--muted)", display: "block", fontSize: "0.72rem", textTransform: "uppercase", fontWeight: 600 }}>Пользователь</span>
+                        <strong style={{ color: "var(--ink)" }}>{item.username || item.system_id || "—"}</strong>
+                      </div>
+                      <div>
+                        <span style={{ color: "var(--muted)", display: "block", fontSize: "0.72rem", textTransform: "uppercase", fontWeight: 600 }}>Модуль</span>
+                        <strong style={{ color: "var(--ink)" }}>{item.module_name || item.module_id}</strong>
+                      </div>
+                      {scopeContext.scopeType === "ip_device" && (
+                        <div style={{ gridColumn: "span 2" }}>
+                          <span style={{ color: "var(--muted)", display: "block", fontSize: "0.72rem", textTransform: "uppercase", fontWeight: 600 }}>Устройство</span>
+                          <strong style={{ color: "var(--ink)" }}>{deviceDisplay}</strong>
+                        </div>
+                      )}
                       {item.telegram_id ? (
-                        <span>
-                          {formatIdentifier(
-                            t("reviewQueue.identifiers.telegram"),
-                            item.telegram_id,
-                          )}
-                        </span>
+                        <div style={{ gridColumn: "span 2" }}>
+                          <span style={{ color: "var(--muted)", display: "block", fontSize: "0.72rem", textTransform: "uppercase", fontWeight: 600 }}>Telegram ID</span>
+                          <code style={{ color: "var(--accent)", fontFamily: "var(--font-mono)", fontSize: "0.78rem" }}>{item.telegram_id}</code>
+                        </div>
                       ) : null}
                     </div>
-                    <div className="queue-card-stack">
-                      <div className="queue-card-meta">
-                        <span>{t("reviewQueue.card.decision")}</span>
-                        <strong>
-                          {item.verdict} / {item.confidence_band}
-                        </strong>
-                      </div>
-                      <div className="queue-card-meta">
-                        <span>{t("reviewQueue.card.providerName")}</span>
-                        <strong>{providerDisplay}</strong>
-                      </div>
-                      <div className="queue-card-meta">
-                        <span>{t("reviewQueue.card.asn")}</span>
-                        <strong>
-                          {t("reviewQueue.card.asnValue", {
-                            value: item.asn ?? "?",
-                          })}
-                        </strong>
-                      </div>
+
+                    {/* Verdict & Score */}
+                    <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap", background: "var(--surface-soft)", padding: "0.6rem 0.85rem", borderRadius: "10px" }}>
+                      <span style={{ fontSize: "0.75rem", color: "var(--muted)", fontWeight: 600, textTransform: "uppercase" }}>Решение:</span>
+                      <span className={`status-badge ${item.verdict?.toLowerCase() === "home" ? "status-resolved" : "punitive"}`} style={{ fontWeight: 700, padding: "2px 8px", borderRadius: "6px" }}>
+                        {item.verdict}
+                      </span>
+                      <span className="tag" style={{ padding: "2px 8px", borderRadius: "6px" }}>{item.confidence_band}</span>
                     </div>
-                    <div className="queue-card-flags">
-                      <span className="tag">
-                        {t("reviewQueue.card.repeat", {
-                          count: item.repeat_count,
-                        })}
+
+                    {/* Provider & ASN Box */}
+                    <div style={{ background: "rgba(255, 255, 255, 0.03)", border: "1px solid var(--line)", borderRadius: "12px", padding: "0.75rem 1rem", display: "flex", flexDirection: "column", gap: "0.2rem" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.72rem", color: "var(--muted)", textTransform: "uppercase", fontWeight: 600 }}>
+                        <span>Провайдер</span>
+                        <span>ASN {item.asn ?? "?"}</span>
+                      </div>
+                      <strong style={{ fontSize: "0.85rem", color: "var(--ink)", wordBreak: "break-all" }}>{providerDisplay}</strong>
+                    </div>
+
+                    {/* Flags */}
+                    <div className="queue-card-flags" style={{ gap: "0.4rem" }}>
+                      <span className="tag" style={{ color: "var(--accent)" }}>
+                        Повторов: {item.repeat_count}
                       </span>
                       {hardFlagBadges.map((badge) => (
                         <span
                           key={badge.code}
-                          className="tag"
+                          className="tag punitive"
                           title={badge.description}
+                          style={{ padding: "4px 8px" }}
                         >
                           {badge.label}
                         </span>
                       ))}
                     </div>
-                    <div className="queue-card-inventory">
-                      <span className="queue-card-section-label">
+
+                    {/* Inventory History List */}
+                    <div className="queue-card-inventory" style={{ gap: "0.4rem" }}>
+                      <span className="queue-card-section-label" style={{ fontSize: "0.75rem", textTransform: "uppercase", fontWeight: 600 }}>
                         {scopeContext.historyLabel}
                       </span>
-                      <div className="queue-card-chip-list">
-                        {sameDeviceHistory.map((entry) => (
+                      <div className="queue-card-chip-list" style={{ gap: "0.35rem" }}>
+                        {sameDeviceHistory.slice(0, 3).map((entry) => (
                           <span
                             key={`${entry.ip}-${entry.last_seen_at}`}
                             className="tag queue-inventory-tag"
+                            style={{ fontSize: "0.75rem", padding: "4px 8px" }}
                             title={[
                               t("reviewQueue.card.ipSeen", {
                                 first: formatInventoryDate(entry.first_seen_at),
@@ -1191,9 +1202,16 @@ export function ReviewQueuePage({ session }: { session?: Session }) {
                             )}
                           </span>
                         ))}
+                        {sameDeviceHistory.length > 3 && (
+                          <span className="tag" style={{ fontSize: "0.75rem", background: "none", borderStyle: "dashed" }}>
+                            +{sameDeviceHistory.length - 3} ещё
+                          </span>
+                        )}
                       </div>
                     </div>
-                    <div className="action-row queue-card-actions">
+
+                    {/* Quick Resolve & Details Actions */}
+                    <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", marginTop: "auto", paddingTop: "0.5rem" }}>
                       <Link
                         to={`/reviews/${item.id}`}
                         state={{
@@ -1202,6 +1220,7 @@ export function ReviewQueuePage({ session }: { session?: Session }) {
                           reviewQueueCurrentIndex: index,
                         }}
                         className="button-link ghost small-button"
+                        style={{ width: "100%", padding: "0.5rem" }}
                         onMouseEnter={() =>
                           prefetchRouteModule(`/reviews/${item.id}`)
                         }
@@ -1209,54 +1228,55 @@ export function ReviewQueuePage({ session }: { session?: Session }) {
                           prefetchRouteModule(`/reviews/${item.id}`)
                         }
                       >
-                        {t("reviewQueue.actions.openCase")}
+                        Открыть кейс <ExternalLink size={12} style={{ marginLeft: "4px" }} />
                       </Link>
+
+                      {item.status === "OPEN" && canResolve && (
+                        <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1.2fr 1fr", gap: "0.35rem" }}>
+                          <button
+                            className="small-button"
+                            style={{ background: "var(--accent-soft)", color: "var(--accent)", border: "1px solid var(--accent)", padding: "0.5rem" }}
+                            disabled={resolvingId === item.id}
+                            onClick={(event) =>
+                              quickResolve(event, item, "MOBILE")
+                            }
+                          >
+                            <Smartphone size={12} /> {t("reviewQueue.actions.mobile")}
+                          </button>
+                          <button
+                            className="small-button"
+                            style={{ background: "rgba(16, 185, 129, 0.08)", color: "var(--success)", border: "1px solid var(--success)", padding: "0.5rem" }}
+                            disabled={resolvingId === item.id}
+                            onClick={(event) => quickResolve(event, item, "HOME")}
+                          >
+                            <Home size={12} /> {t("reviewQueue.actions.home")}
+                          </button>
+                          <button
+                            className="small-button ghost"
+                            style={{ padding: "0.5rem" }}
+                            disabled={resolvingId === item.id}
+                            onClick={(event) => quickResolve(event, item, "SKIP")}
+                          >
+                            {t("reviewQueue.actions.skip")}
+                          </button>
+                        </div>
+                      )}
                     </div>
-                    {item.status === "OPEN" && canResolve ? (
-                      <div className="action-row">
-                        <button
-                          className="small-button"
-                          disabled={resolvingId === item.id}
-                          onClick={(event) =>
-                            quickResolve(event, item, "MOBILE")
-                          }
-                        >
-                          {resolvingId === item.id
-                            ? t("reviewQueue.actions.processing")
-                            : t("reviewQueue.actions.mobile")}
-                        </button>
-                        <button
-                          className="small-button"
-                          disabled={resolvingId === item.id}
-                          onClick={(event) => quickResolve(event, item, "HOME")}
-                        >
-                          {t("reviewQueue.actions.home")}
-                        </button>
-                        <button
-                          className="small-button ghost"
-                          disabled={resolvingId === item.id}
-                          onClick={(event) => quickResolve(event, item, "SKIP")}
-                        >
-                          {t("reviewQueue.actions.skip")}
-                        </button>
-                      </div>
-                    ) : null}
-                    <div className="queue-card-bottom">
+
+                    <div className="queue-card-bottom" style={{ borderTop: "1px solid var(--line)", paddingTop: "0.6rem", marginTop: "0.25rem", fontSize: "0.72rem" }}>
                       <span>
-                        {t("reviewQueue.card.opened", {
-                          value: formatDisplayDateTime(
-                            item.opened_at,
-                            t("common.notAvailable"),
-                            language,
-                          ),
-                        })}
+                        Открыт: {formatDisplayDateTime(
+                          item.opened_at,
+                          t("common.notAvailable"),
+                          language,
+                        ).split(" ").slice(0, 2).join(" ")}
                       </span>
                       <span>
-                        {formatDisplayDateTime(
+                        Активность: {formatDisplayDateTime(
                           item.updated_at,
                           t("common.notAvailable"),
                           language,
-                        )}
+                        ).split(" ").slice(0, 2).join(" ")}
                       </span>
                     </div>
                   </>
@@ -1264,6 +1284,7 @@ export function ReviewQueuePage({ session }: { session?: Session }) {
               })()}
             </article>
           ))}
+
           {hasMoreQueueItems ? (
             <div className="provider-empty muted" ref={loadMoreQueueItemsRef}>
               <span>{t("common.loading")}</span>
@@ -1322,6 +1343,48 @@ export function ReviewQueuePage({ session }: { session?: Session }) {
           {t("reviewQueue.footer.next")}
         </button>
       </div>
+
+      {/* Floating bulk actions bar */}
+      {selectedIds.length > 0 && (
+        <div className="floating-bulk-bar">
+          <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+            <AlertTriangle size={18} style={{ color: "var(--accent)" }} />
+            <span>Выбрано кейсов: <strong>{selectedIds.length}</strong></span>
+          </div>
+          <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+            <button
+              onClick={() => resolveSelected("MOBILE")}
+              style={{ background: "var(--accent)", color: "var(--button-fg)", border: 0, padding: "0.5rem 1rem", fontSize: "0.82rem", fontWeight: 600 }}
+              disabled={resolvingId !== null}
+            >
+              <Smartphone size={14} /> Мобильный
+            </button>
+            <button
+              onClick={() => resolveSelected("HOME")}
+              style={{ background: "var(--success, #10b981)", color: "#fff", border: 0, padding: "0.5rem 1rem", fontSize: "0.82rem", fontWeight: 600 }}
+              disabled={resolvingId !== null}
+            >
+              <Home size={14} /> Домашний
+            </button>
+            <button
+              className="ghost"
+              onClick={() => resolveSelected("SKIP")}
+              style={{ padding: "0.5rem 1rem", fontSize: "0.82rem", fontWeight: 600, border: "1px solid var(--line)" }}
+              disabled={resolvingId !== null}
+            >
+              Пропустить
+            </button>
+            <button
+              className="ghost"
+              onClick={() => setSelectedIds([])}
+              style={{ padding: "0.5rem", borderRadius: "50%", width: "32px", height: "32px", display: "grid", placeItems: "center" }}
+              title="Снять выделение"
+            >
+              <X size={14} />
+            </button>
+          </div>
+        </div>
+      )}
     </section>
   );
 }
