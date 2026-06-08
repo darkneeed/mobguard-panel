@@ -313,7 +313,7 @@ export function OverviewPage({ session: _session }: { session?: Session }) {
         </div>
         <div className="stat-card">
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%" }}>
-            <span>События за окно</span>
+            <span>Событий</span>
             <Activity size={16} style={{ color: "var(--muted)" }} />
           </div>
           <strong>{summary?.recent_events_total ?? "—"}</strong>

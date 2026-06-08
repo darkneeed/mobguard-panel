@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { Loader2 } from "lucide-react";
 
 import { api, BedolagaOverviewResponse, BedolagaUser } from "../api/client";
 import { useI18n } from "../localization";
@@ -71,18 +72,34 @@ function MetricCard({ title, icon, data }: MetricCardProps) {
     total: "Всего",
     active: "Активных",
     blocked: "Заблокировано",
-    new_today: "Новых сегодня",
+    new_today: "Сегодня новых",
     new_this_month: "За месяц",
     trial: "Пробных",
     paid: "Платных",
     expired: "Истекло",
     open: "Открытых",
     closed: "Закрытых",
-    total_rubles: "Оборот (руб.)",
-    today_rubles: "Сегодня (руб.)",
-    this_month_rubles: "За месяц (руб.)",
+    open_tickets: "Открытых тикетов",
+    closed_tickets: "Закрытых тикетов",
+    total_rubles: "Оборот (₽)",
+    today_rubles: "Сегодня (₽)",
+    this_month_rubles: "За месяц (₽)",
     successful: "Успешных",
     failed: "Неуспешных",
+    // Bedolaga-specific keys
+    balance_kopeks: "Баланс суммарно (коп.)",
+    balance_rubles: "Баланс суммарно (₽)",
+    today_kopeks: "Сегодня (коп.)",
+    today_amount: "Сегодня (₽)",
+    month_kopeks: "За месяц (коп.)",
+    month_amount: "За месяц (₽)",
+    total_kopeks: "Итого (коп.)",
+    total_amount: "Итого (₽)",
+    active_subscriptions: "Активных подписок",
+    expired_subscriptions: "Истёкших",
+    pending: "Ожидающих",
+    count: "Количество",
+    amount: "Сумма (₽)",
   };
 
   for (const [key, val] of Object.entries(data)) {
@@ -166,10 +183,13 @@ export function BedolagaPage() {
             className="ghost small-button"
             onClick={() => setRefreshAt(Date.now())}
             disabled={loading}
+            style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem" }}
           >
-            <span style={{ display: "inline-block", transform: loading ? "rotate(180deg)" : "none", transition: "transform 0.4s" }}>
-              ↻
-            </span>{" "}
+            {loading ? (
+              <Loader2 size={14} className="spinner" />
+            ) : (
+              <span>↻</span>
+            )}
             Обновить
           </button>
         </div>
@@ -195,8 +215,9 @@ export function BedolagaPage() {
 
       {/* Loading */}
       {loading && !data && (
-        <div className="panel" style={{ textAlign: "center", padding: "3rem" }}>
-          <p className="muted">{t("common.loading")}</p>
+        <div className="panel" style={{ textAlign: "center", padding: "3rem", display: "flex", flexDirection: "column", alignItems: "center", gap: "0.5rem" }}>
+          <Loader2 size={24} className="spinner" />
+          <p className="muted" style={{ margin: 0 }}>{t("common.loading")}</p>
         </div>
       )}
 
