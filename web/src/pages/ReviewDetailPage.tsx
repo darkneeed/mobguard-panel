@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
+import { Loader2 } from "lucide-react";
 
 import { hasPermission } from "../app/permissions";
 import {
@@ -79,6 +80,7 @@ export function ReviewDetailPage({ session }: { session?: Session }) {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [resolving, setResolving] = useState(false);
+  const [resolvingAction, setResolvingAction] = useState<string | null>(null);
   const queueState =
     (location.state as ReviewQueueLocationState | null) ?? null;
   const queueReturnPath = useMemo(
@@ -134,6 +136,7 @@ export function ReviewDetailPage({ session }: { session?: Session }) {
   async function resolve(resolution: string) {
     try {
       setResolving(true);
+      setResolvingAction(resolution);
       await api.resolveReview(caseId, resolution, note);
       pushToast("success", t("reviewDetail.resolution.saved"));
 
@@ -193,6 +196,7 @@ export function ReviewDetailPage({ session }: { session?: Session }) {
       pushToast("error", message);
     } finally {
       setResolving(false);
+      setResolvingAction(null);
     }
   }
 
@@ -1099,6 +1103,9 @@ export function ReviewDetailPage({ session }: { session?: Session }) {
                   disabled={resolving || !canResolve}
                   onClick={() => resolve("MOBILE")}
                 >
+                  {resolving && resolvingAction === "MOBILE" && (
+                    <Loader2 size={14} className="spinner" style={{ marginRight: "6px" }} />
+                  )}
                   {t("reviewDetail.resolution.mobile")}
                 </button>
                 <button
@@ -1106,6 +1113,9 @@ export function ReviewDetailPage({ session }: { session?: Session }) {
                   disabled={resolving || !canResolve}
                   onClick={() => resolve("HOME")}
                 >
+                  {resolving && resolvingAction === "HOME" && (
+                    <Loader2 size={14} className="spinner" style={{ marginRight: "6px" }} />
+                  )}
                   {t("reviewDetail.resolution.home")}
                 </button>
                 <button
@@ -1113,6 +1123,9 @@ export function ReviewDetailPage({ session }: { session?: Session }) {
                   disabled={resolving || !canResolve}
                   onClick={() => resolve("SKIP")}
                 >
+                  {resolving && resolvingAction === "SKIP" && (
+                    <Loader2 size={14} className="spinner" style={{ marginRight: "6px" }} />
+                  )}
                   {t("reviewDetail.resolution.skip")}
                 </button>
               </div>

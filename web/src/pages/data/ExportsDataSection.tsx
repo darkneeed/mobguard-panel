@@ -1,6 +1,7 @@
 import type { Dispatch, SetStateAction } from "react";
 import { CalibrationExportPreview, CalibrationReadinessCheck } from "../../api/client";
 import { useVisibleItems } from "../../shared/useVisibleItems";
+import { Loader2 } from "lucide-react";
 
 type TranslateFn = (key: string, params?: Record<string, string | number>) => string;
 
@@ -56,7 +57,12 @@ export function ExportsDataSection({
             <h2>{t("data.exports.title")}</h2>
             <p className="muted">{t("data.exports.description")}</p>
           </div>
-          <button onClick={generateCalibrationExport} disabled={isPending("calibrationExport")}>
+          <button
+            onClick={generateCalibrationExport}
+            disabled={isPending("calibrationExport")}
+            style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem" }}
+          >
+            {isPending("calibrationExport") && <Loader2 size={16} className="spinner" />}
             {isPending("calibrationExport") ? t("data.exports.generating") : t("data.exports.generate")}
           </button>
         </div>
@@ -99,7 +105,12 @@ export function ExportsDataSection({
           <h2>{t("data.exports.readinessTitle")}</h2>
           <p className="muted">{t("data.exports.readinessDescription")}</p>
         </div>
-        {isPending("calibrationPreview") && !lastCalibrationManifest ? <p className="muted">{t("common.loading")}</p> : null}
+        {isPending("calibrationPreview") && !lastCalibrationManifest ? (
+          <div className="provider-empty" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "0.5rem" }}>
+            <Loader2 size={24} className="spinner" />
+            <p className="muted" style={{ margin: 0 }}>{t("common.loading")}</p>
+          </div>
+        ) : null}
         {previewError ? <div className="error-box">{previewError}</div> : null}
         {!lastCalibrationManifest && !isPending("calibrationPreview") ? <p className="muted">{t("data.exports.noManifest")}</p> : null}
         {lastCalibrationManifest ? (

@@ -17,7 +17,8 @@ import {
   X,
   User,
   Clock,
-  SlidersHorizontal
+  SlidersHorizontal,
+  Loader2
 } from "lucide-react";
 
 import { hasPermission } from "../app/permissions";
@@ -173,6 +174,8 @@ export function ReviewQueuePage({ session }: { session?: Session }) {
   });
   const [error, setError] = useState("");
   const [resolvingId, setResolvingId] = useState<number | null>(null);
+  const [resolvingAction, setResolvingAction] = useState<string | null>(null);
+  const [rechecking, setRechecking] = useState(false);
   const [filters, setFilters] = useState<ReviewFilters>(() =>
     normalizeFilters(searchParams),
   );
@@ -288,6 +291,7 @@ export function ReviewQueuePage({ session }: { session?: Session }) {
     event.stopPropagation();
     try {
       setResolvingId(item.id);
+      setResolvingAction(resolution);
       await api.resolveReview(
         String(item.id),
         resolution,
@@ -305,6 +309,7 @@ export function ReviewQueuePage({ session }: { session?: Session }) {
       pushToast("error", message);
     } finally {
       setResolvingId(null);
+      setResolvingAction(null);
     }
   }
 
@@ -312,6 +317,7 @@ export function ReviewQueuePage({ session }: { session?: Session }) {
     if (selectedIds.length === 0) return;
     try {
       setResolvingId(-1);
+      setResolvingAction(resolution);
       for (const id of selectedIds) {
         await api.resolveReview(
           String(id),
@@ -335,11 +341,13 @@ export function ReviewQueuePage({ session }: { session?: Session }) {
       pushToast("error", message);
     } finally {
       setResolvingId(null);
+      setResolvingAction(null);
     }
   }
 
   async function recheckVisible() {
     try {
+      setRechecking(true);
       const payload = await api.recheckReviews({
         limit: Math.max(
           1,
@@ -362,6 +370,8 @@ export function ReviewQueuePage({ session }: { session?: Session }) {
           : t("reviewQueue.errors.resolveFailed");
       setError(message);
       pushToast("error", message);
+    } finally {
+      setRechecking(false);
     }
   }
 
@@ -615,9 +625,12 @@ export function ReviewQueuePage({ session }: { session?: Session }) {
             {canRecheck ? (
               <button
                 className="ghost small-button"
-                disabled={resolvingId !== null || visibleQueueIds.length === 0}
+                disabled={resolvingId !== null || rechecking || visibleQueueIds.length === 0}
                 onClick={recheckVisible}
               >
+                {rechecking && (
+                  <Loader2 size={12} className="spinner" style={{ marginRight: "4px" }} />
+                )}
                 {t("reviewQueue.actions.recheckVisible")}
               </button>
             ) : null}
@@ -629,6 +642,9 @@ export function ReviewQueuePage({ session }: { session?: Session }) {
               }
               onClick={() => resolveSelected("MOBILE")}
             >
+              {resolvingId === -1 && resolvingAction === "MOBILE" && (
+                <Loader2 size={12} className="spinner" style={{ marginRight: "4px" }} />
+              )}
               {t("reviewQueue.actions.bulkMobile")}
             </button>
             <button
@@ -639,6 +655,9 @@ export function ReviewQueuePage({ session }: { session?: Session }) {
               }
               onClick={() => resolveSelected("HOME")}
             >
+              {resolvingId === -1 && resolvingAction === "HOME" && (
+                <Loader2 size={12} className="spinner" style={{ marginRight: "4px" }} />
+              )}
               {t("reviewQueue.actions.bulkHome")}
             </button>
             <button
@@ -648,6 +667,9 @@ export function ReviewQueuePage({ session }: { session?: Session }) {
               }
               onClick={() => resolveSelected("SKIP")}
             >
+              {resolvingId === -1 && resolvingAction === "SKIP" && (
+                <Loader2 size={12} className="spinner" style={{ marginRight: "4px" }} />
+              )}
               {t("reviewQueue.actions.bulkSkip")}
             </button>
           </div>
@@ -1280,7 +1302,12 @@ export function ReviewQueuePage({ session }: { session?: Session }) {
                               quickResolve(event, item, "MOBILE")
                             }
                           >
-                            <Smartphone size={12} /> {t("reviewQueue.actions.mobile")}
+                            {resolvingId === item.id && resolvingAction === "MOBILE" ? (
+                              <Loader2 size={12} className="spinner" />
+                            ) : (
+                              <Smartphone size={12} />
+                            )}{" "}
+                            {t("reviewQueue.actions.mobile")}
                           </button>
                           <button
                             className="small-button"
@@ -1288,7 +1315,12 @@ export function ReviewQueuePage({ session }: { session?: Session }) {
                             disabled={resolvingId === item.id}
                             onClick={(event) => quickResolve(event, item, "HOME")}
                           >
-                            <Home size={12} /> {t("reviewQueue.actions.home")}
+                            {resolvingId === item.id && resolvingAction === "HOME" ? (
+                              <Loader2 size={12} className="spinner" />
+                            ) : (
+                              <Home size={12} />
+                            )}{" "}
+                            {t("reviewQueue.actions.home")}
                           </button>
                           <button
                             className="small-button ghost"
@@ -1296,6 +1328,9 @@ export function ReviewQueuePage({ session }: { session?: Session }) {
                             disabled={resolvingId === item.id}
                             onClick={(event) => quickResolve(event, item, "SKIP")}
                           >
+                            {resolvingId === item.id && resolvingAction === "SKIP" && (
+                              <Loader2 size={12} className="spinner" style={{ marginRight: "4px" }} />
+                            )}
                             {t("reviewQueue.actions.skip")}
                           </button>
                         </div>

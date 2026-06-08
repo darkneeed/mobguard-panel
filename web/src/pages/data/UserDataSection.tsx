@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
+import { Loader2 } from "lucide-react";
 
 import { api, UserCardExportResponse, UserCardResponse, UserSearchResponse } from "../../api/client";
 import type { Language } from "../../localization/types";
@@ -30,7 +31,7 @@ type Props = {
   canWriteData?: boolean;
   searchUsers: () => Promise<void>;
   loadUser: (identifier: string) => Promise<void>;
-  runUserAction: (action: () => Promise<UserCardResponse>, successMessage: string) => Promise<void>;
+  runUserAction: (actionName: string, action: () => Promise<UserCardResponse>, successMessage: string) => Promise<void>;
   buildUserExport: (identifier: string) => Promise<void>;
   downloadUserExport: () => void;
   isPending: (...keys: PendingKey[]) => boolean;
@@ -38,6 +39,7 @@ type Props = {
   formatPanelSquads: (value: unknown) => string;
   formatTrafficBytes: (value: unknown) => string;
   renderProviderEvidence: (providerEvidence: Record<string, unknown> | undefined) => ReactNode;
+  activeUserAction: string;
 };
 
 export function UserDataSection({
@@ -67,6 +69,7 @@ export function UserDataSection({
   formatPanelSquads,
   formatTrafficBytes,
   renderProviderEvidence,
+  activeUserAction,
 }: Props) {
   const items = userSearch?.items || [];
   const panelMatch = userSearch?.panel_match || undefined;
@@ -123,7 +126,13 @@ export function UserDataSection({
               })}
             </p>
           </div>
-          <button className="ghost" onClick={downloadUserExport} disabled={isPending("userExport")}>
+          <button
+            className="ghost"
+            onClick={downloadUserExport}
+            disabled={isPending("userExport")}
+            style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem" }}
+          >
+            {isPending("userExport") && <Loader2 size={14} className="spinner" />}
             {t("data.users.downloadExport")}
           </button>
         </div>
@@ -154,7 +163,12 @@ export function UserDataSection({
             value={userQuery}
             onChange={(event) => setUserQuery(event.target.value)}
           />
-          <button onClick={searchUsers} disabled={isPending("userSearch") || !userQuery.trim()}>
+          <button
+            onClick={searchUsers}
+            disabled={isPending("userSearch") || !userQuery.trim()}
+            style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem" }}
+          >
+            {isPending("userSearch") && <Loader2 size={16} className="spinner" />}
             {isPending("userSearch") ? t("data.users.searching") : t("data.users.search")}
           </button>
         </div>
@@ -199,7 +213,12 @@ export function UserDataSection({
                 <h2>{t("data.users.cardTitle")}</h2>
                 <p className="muted">{t("data.users.exportHint")}</p>
               </div>
-              <button onClick={() => buildUserExport(identifier)} disabled={isPending("userExport") || !identifier}>
+              <button
+                onClick={() => buildUserExport(identifier)}
+                disabled={isPending("userExport") || !identifier}
+                style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem" }}
+              >
+                {isPending("userExport") && <Loader2 size={16} className="spinner" />}
                 {isPending("userExport") ? t("data.users.generatingExport") : t("data.users.buildExport")}
               </button>
             </div>
@@ -308,43 +327,141 @@ export function UserDataSection({
               <div className="rule-field">
                 <strong>{t("data.users.actions.banMinutes")}</strong>
                 <input value={banMinutes} onChange={(event) => setBanMinutes(event.target.value)} />
-                <button disabled={!canWriteData || isPending("userAction")} onClick={() => runUserAction(() => api.banUser(identifier, Number(banMinutes)), t("data.saved.userUpdated"))}>{t("data.users.actions.startBan")}</button>
-                <button className="ghost" disabled={!canWriteData || isPending("userAction")} onClick={() => runUserAction(() => api.unbanUser(identifier), t("data.saved.userUpdated"))}>{t("data.users.actions.unban")}</button>
+                <button
+                  disabled={!canWriteData || isPending("userAction")}
+                  onClick={() => runUserAction("ban", () => api.banUser(identifier, Number(banMinutes)), t("data.saved.userUpdated"))}
+                  style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem" }}
+                >
+                  {activeUserAction === "ban" && <Loader2 size={14} className="spinner" />}
+                  {t("data.users.actions.startBan")}
+                </button>
+                <button
+                  className="ghost"
+                  disabled={!canWriteData || isPending("userAction")}
+                  onClick={() => runUserAction("unban", () => api.unbanUser(identifier), t("data.saved.userUpdated"))}
+                  style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem" }}
+                >
+                  {activeUserAction === "unban" && <Loader2 size={14} className="spinner" />}
+                  {t("data.users.actions.unban")}
+                </button>
               </div>
               <div className="rule-field">
                 <strong>{t("data.users.actions.trafficCapGigabytes")}</strong>
                 <input value={trafficCapGigabytes} onChange={(event) => setTrafficCapGigabytes(event.target.value)} />
                 <div className="action-row">
-                  <button disabled={!canWriteData || isPending("userAction")} onClick={() => runUserAction(() => api.applyUserTrafficCap(identifier, Number(trafficCapGigabytes)), t("data.saved.userUpdated"))}>{t("data.users.actions.applyTrafficCap")}</button>
-                  <button className="ghost" disabled={!canWriteData || isPending("userAction")} onClick={() => runUserAction(() => api.restoreUserTrafficCap(identifier), t("data.saved.userUpdated"))}>{t("data.users.actions.restoreTrafficCap")}</button>
+                  <button
+                    disabled={!canWriteData || isPending("userAction")}
+                    onClick={() => runUserAction("applyTraffic", () => api.applyUserTrafficCap(identifier, Number(trafficCapGigabytes)), t("data.saved.userUpdated"))}
+                    style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem" }}
+                  >
+                    {activeUserAction === "applyTraffic" && <Loader2 size={14} className="spinner" />}
+                    {t("data.users.actions.applyTrafficCap")}
+                  </button>
+                  <button
+                    className="ghost"
+                    disabled={!canWriteData || isPending("userAction")}
+                    onClick={() => runUserAction("restoreTraffic", () => api.restoreUserTrafficCap(identifier), t("data.saved.userUpdated"))}
+                    style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem" }}
+                  >
+                    {activeUserAction === "restoreTraffic" && <Loader2 size={14} className="spinner" />}
+                    {t("data.users.actions.restoreTrafficCap")}
+                  </button>
                 </div>
               </div>
               <div className="rule-field">
                 <strong>{t("data.users.actions.strikes")}</strong>
                 <input value={strikeCount} onChange={(event) => setStrikeCount(event.target.value)} />
                 <div className="action-row">
-                  <button className="ghost" disabled={!canWriteData || isPending("userAction")} onClick={() => runUserAction(() => api.updateUserStrikes(identifier, "add", Number(strikeCount)), t("data.saved.userUpdated"))}>{t("data.users.actions.add")}</button>
-                  <button className="ghost" disabled={!canWriteData || isPending("userAction")} onClick={() => runUserAction(() => api.updateUserStrikes(identifier, "remove", Number(strikeCount)), t("data.saved.userUpdated"))}>{t("data.users.actions.remove")}</button>
-                  <button disabled={!canWriteData || isPending("userAction")} onClick={() => runUserAction(() => api.updateUserStrikes(identifier, "set", Number(strikeCount)), t("data.saved.userUpdated"))}>{t("data.users.actions.set")}</button>
+                  <button
+                    className="ghost"
+                    disabled={!canWriteData || isPending("userAction")}
+                    onClick={() => runUserAction("addStrikes", () => api.updateUserStrikes(identifier, "add", Number(strikeCount)), t("data.saved.userUpdated"))}
+                    style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem" }}
+                  >
+                    {activeUserAction === "addStrikes" && <Loader2 size={14} className="spinner" />}
+                    {t("data.users.actions.add")}
+                  </button>
+                  <button
+                    className="ghost"
+                    disabled={!canWriteData || isPending("userAction")}
+                    onClick={() => runUserAction("removeStrikes", () => api.updateUserStrikes(identifier, "remove", Number(strikeCount)), t("data.saved.userUpdated"))}
+                    style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem" }}
+                  >
+                    {activeUserAction === "removeStrikes" && <Loader2 size={14} className="spinner" />}
+                    {t("data.users.actions.remove")}
+                  </button>
+                  <button
+                    disabled={!canWriteData || isPending("userAction")}
+                    onClick={() => runUserAction("setStrikes", () => api.updateUserStrikes(identifier, "set", Number(strikeCount)), t("data.saved.userUpdated"))}
+                    style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem" }}
+                  >
+                    {activeUserAction === "setStrikes" && <Loader2 size={14} className="spinner" />}
+                    {t("data.users.actions.set")}
+                  </button>
                 </div>
               </div>
               <div className="rule-field">
                 <strong>{t("data.users.actions.warnings")}</strong>
                 <input value={warningCount} onChange={(event) => setWarningCount(event.target.value)} />
                 <div className="action-row">
-                  <button disabled={!canWriteData || isPending("userAction")} onClick={() => runUserAction(() => api.updateUserWarnings(identifier, "set", Number(warningCount)), t("data.saved.userUpdated"))}>{t("data.users.actions.setWarning")}</button>
-                  <button className="ghost" disabled={!canWriteData || isPending("userAction")} onClick={() => runUserAction(() => api.updateUserWarnings(identifier, "clear", 0), t("data.saved.userUpdated"))}>{t("data.users.actions.clearWarning")}</button>
+                  <button
+                    disabled={!canWriteData || isPending("userAction")}
+                    onClick={() => runUserAction("setWarning", () => api.updateUserWarnings(identifier, "set", Number(warningCount)), t("data.saved.userUpdated"))}
+                    style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem" }}
+                  >
+                    {activeUserAction === "setWarning" && <Loader2 size={14} className="spinner" />}
+                    {t("data.users.actions.setWarning")}
+                  </button>
+                  <button
+                    className="ghost"
+                    disabled={!canWriteData || isPending("userAction")}
+                    onClick={() => runUserAction("clearWarning", () => api.updateUserWarnings(identifier, "clear", 0), t("data.saved.userUpdated"))}
+                    style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem" }}
+                  >
+                    {activeUserAction === "clearWarning" && <Loader2 size={14} className="spinner" />}
+                    {t("data.users.actions.clearWarning")}
+                  </button>
                 </div>
               </div>
               <div className="rule-field">
                 <strong>{t("data.users.actions.exemptions")}</strong>
                 <div className="action-row">
-                  <button disabled={!canWriteData || isPending("userAction")} onClick={() => runUserAction(() => api.updateUserExempt(identifier, "system", true), t("data.saved.userUpdated"))}>{t("data.users.actions.exemptSystem")}</button>
-                  <button className="ghost" disabled={!canWriteData || isPending("userAction")} onClick={() => runUserAction(() => api.updateUserExempt(identifier, "system", false), t("data.saved.userUpdated"))}>{t("data.users.actions.unexemptSystem")}</button>
+                  <button
+                    disabled={!canWriteData || isPending("userAction")}
+                    onClick={() => runUserAction("exemptSystem", () => api.updateUserExempt(identifier, "system", true), t("data.saved.userUpdated"))}
+                    style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem" }}
+                  >
+                    {activeUserAction === "exemptSystem" && <Loader2 size={14} className="spinner" />}
+                    {t("data.users.actions.exemptSystem")}
+                  </button>
+                  <button
+                    className="ghost"
+                    disabled={!canWriteData || isPending("userAction")}
+                    onClick={() => runUserAction("unexemptSystem", () => api.updateUserExempt(identifier, "system", false), t("data.saved.userUpdated"))}
+                    style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem" }}
+                  >
+                    {activeUserAction === "unexemptSystem" && <Loader2 size={14} className="spinner" />}
+                    {t("data.users.actions.unexemptSystem")}
+                  </button>
                 </div>
                 <div className="action-row">
-                  <button disabled={!canWriteData || isPending("userAction")} onClick={() => runUserAction(() => api.updateUserExempt(identifier, "telegram", true), t("data.saved.userUpdated"))}>{t("data.users.actions.exemptTelegram")}</button>
-                  <button className="ghost" disabled={!canWriteData || isPending("userAction")} onClick={() => runUserAction(() => api.updateUserExempt(identifier, "telegram", false), t("data.saved.userUpdated"))}>{t("data.users.actions.unexemptTelegram")}</button>
+                  <button
+                    disabled={!canWriteData || isPending("userAction")}
+                    onClick={() => runUserAction("exemptTelegram", () => api.updateUserExempt(identifier, "telegram", true), t("data.saved.userUpdated"))}
+                    style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem" }}
+                  >
+                    {activeUserAction === "exemptTelegram" && <Loader2 size={14} className="spinner" />}
+                    {t("data.users.actions.exemptTelegram")}
+                  </button>
+                  <button
+                    className="ghost"
+                    disabled={!canWriteData || isPending("userAction")}
+                    onClick={() => runUserAction("unexemptTelegram", () => api.updateUserExempt(identifier, "telegram", false), t("data.saved.userUpdated"))}
+                    style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem" }}
+                  >
+                    {activeUserAction === "unexemptTelegram" && <Loader2 size={14} className="spinner" />}
+                    {t("data.users.actions.unexemptTelegram")}
+                  </button>
                 </div>
               </div>
             </div>

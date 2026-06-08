@@ -1,5 +1,6 @@
 import type { Dispatch, SetStateAction } from "react";
 import { api, CacheAdminResponse, OverridesResponse, ViolationsResponse } from "../../api/client";
+import { Loader2 } from "lucide-react";
 import type { Language } from "../../localization/types";
 import { useVisibleItems } from "../../shared/useVisibleItems";
 import { formatDisplayDateTime } from "../../utils/datetime";
@@ -267,7 +268,14 @@ export function OperationsDataSection({
               <option value="MOBILE">{t("data.decisions.mobile")}</option>
               <option value="SKIP">{t("data.decisions.skip")}</option>
             </select>
-            <button disabled={!canWriteData || isPending("exactOverride")} onClick={saveExactOverride}>{t("data.overrides.save")}</button>
+            <button
+              disabled={!canWriteData || isPending("exactOverride")}
+              onClick={saveExactOverride}
+              style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem" }}
+            >
+              {isPending("exactOverride") && <Loader2 size={16} className="spinner" />}
+              {t("data.overrides.save")}
+            </button>
           </div>
           <div className="record-list">
             {visibleExactIp.map((item) => (
@@ -308,7 +316,14 @@ export function OperationsDataSection({
               <option value="MOBILE">{t("data.decisions.mobile")}</option>
               <option value="SKIP">{t("data.decisions.skip")}</option>
             </select>
-            <button disabled={!canWriteData || isPending("unsureOverride")} onClick={saveUnsureOverride}>{t("data.overrides.save")}</button>
+            <button
+              disabled={!canWriteData || isPending("unsureOverride")}
+              onClick={saveUnsureOverride}
+              style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem" }}
+            >
+              {isPending("unsureOverride") && <Loader2 size={16} className="spinner" />}
+              {t("data.overrides.save")}
+            </button>
           </div>
           <div className="record-list">
             {visibleUnsure.map((item) => (
@@ -415,7 +430,14 @@ export function OperationsDataSection({
             <input placeholder={t("data.cache.asn")} value={cacheDraft.asn || ""} onChange={(event) => setCacheDraft((prev) => ({ ...prev, asn: event.target.value }))} />
           </div>
         </div>
-        <button onClick={saveCachePatch} disabled={!canWriteData || !selectedCacheIp || isPending("cacheSave")}>{t("data.cache.save")}</button>
+        <button
+          onClick={saveCachePatch}
+          disabled={!canWriteData || !selectedCacheIp || isPending("cacheSave")}
+          style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem" }}
+        >
+          {isPending("cacheSave") && <Loader2 size={16} className="spinner" />}
+          {t("data.cache.save")}
+        </button>
       </div>
     </div>
   );

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { Loader2 } from "lucide-react";
 
 import {
   api,
@@ -194,6 +195,10 @@ export function RulesPage() {
   const [automationSaved, setAutomationSaved] = useState("");
   const [policyError, setPolicyError] = useState("");
   const [policySaved, setPolicySaved] = useState("");
+  const [rulesSaving, setRulesSaving] = useState(false);
+  const [generalSaving, setGeneralSaving] = useState(false);
+  const [automationSaving, setAutomationSaving] = useState(false);
+  const [policySaving, setPolicySaving] = useState(false);
   const [serverAutomationStatus, setServerAutomationStatus] =
     useState<AutomationStatus | null>(null);
 
@@ -460,6 +465,7 @@ export function RulesPage() {
   async function saveRules() {
     if (!draft || !state) return;
     try {
+      setRulesSaving(true);
       const payload: Record<string, unknown> = { settings: {} };
       for (const field of RULE_LIST_FIELDS) {
         payload[field.key] = serializeListField(field, draft[field.key]);
@@ -490,12 +496,15 @@ export function RulesPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : t("rules.saveFailed"));
       setSaved("");
+    } finally {
+      setRulesSaving(false);
     }
   }
 
   async function saveGeneralSettings() {
     if (!generalDraft) return;
     try {
+      setGeneralSaving(true);
       const response = (await api.updateEnforcementSettings({
         settings: serializeGeneralSettings(generalDraft, GENERAL_RUNTIME_FIELDS),
       })) as EnforcementSettingsResponse;
@@ -513,6 +522,8 @@ export function RulesPage() {
         err instanceof Error ? err.message : t("rules.saveFailed"),
       );
       setGeneralSaved("");
+    } finally {
+      setGeneralSaving(false);
     }
   }
 
@@ -623,7 +634,10 @@ export function RulesPage() {
           <span className={dirty ? "tag review-only" : "tag severity-low"}>
             {dirty ? t("common.unsavedChanges") : t("common.saved")}
           </span>
-          <button disabled={!dirty} onClick={saveRules}>
+          <button disabled={!dirty || rulesSaving} onClick={saveRules}>
+            {rulesSaving && (
+              <Loader2 size={14} className="spinner" style={{ marginRight: "6px" }} />
+            )}
             {t("rules.saveRules")}
           </button>
         </div>
@@ -644,7 +658,10 @@ export function RulesPage() {
           >
             {generalDirty ? t("common.unsavedChanges") : t("common.saved")}
           </span>
-          <button disabled={!generalDirty} onClick={saveGeneralSettings}>
+          <button disabled={!generalDirty || generalSaving} onClick={saveGeneralSettings}>
+            {generalSaving && (
+              <Loader2 size={14} className="spinner" style={{ marginRight: "6px" }} />
+            )}
             {t("rules.general.save")}
           </button>
         </div>
@@ -655,6 +672,7 @@ export function RulesPage() {
   async function saveAutomationControls() {
     if (!generalDraft || !state) return;
     try {
+      setAutomationSaving(true);
       let nextAutomationStatus = serverAutomationStatus;
       if (automationGeneralDirty) {
         const enforcementResponse = (await api.updateEnforcementSettings({
@@ -696,12 +714,15 @@ export function RulesPage() {
         err instanceof Error ? err.message : t("rules.saveFailed"),
       );
       setAutomationSaved("");
+    } finally {
+      setAutomationSaving(false);
     }
   }
 
   async function savePolicySettings() {
     if (!draft || !state) return;
     try {
+      setPolicySaving(true);
       const detectionResponse = (await api.updateDetectionSettings({
         rules: {
           settings: Object.fromEntries(
@@ -724,6 +745,8 @@ export function RulesPage() {
     } catch (err) {
       setPolicyError(err instanceof Error ? err.message : t("rules.saveFailed"));
       setPolicySaved("");
+    } finally {
+      setPolicySaving(false);
     }
   }
 
@@ -742,7 +765,10 @@ export function RulesPage() {
             >
               {automationDirty ? t("common.unsavedChanges") : t("common.saved")}
             </span>
-            <button disabled={!automationDirty} onClick={saveAutomationControls}>
+            <button disabled={!automationDirty || automationSaving} onClick={saveAutomationControls}>
+              {automationSaving && (
+                <Loader2 size={14} className="spinner" style={{ marginRight: "6px" }} />
+              )}
               {t("rules.automationControls.save")}
             </button>
           </div>
@@ -960,7 +986,10 @@ export function RulesPage() {
             <span className={policyDirty ? "tag review-only" : "tag severity-low"}>
               {policyDirty ? t("common.unsavedChanges") : t("common.saved")}
             </span>
-            <button disabled={!policyDirty} onClick={savePolicySettings}>
+            <button disabled={!policyDirty || policySaving} onClick={savePolicySettings}>
+              {policySaving && (
+                <Loader2 size={14} className="spinner" style={{ marginRight: "6px" }} />
+              )}
               {t("rules.saveRules")}
             </button>
           </div>

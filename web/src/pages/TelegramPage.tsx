@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { api, EnvFieldState } from "../api/client";
+import { Loader2 } from "lucide-react";
 import { FieldLabel } from "../components/FieldLabel";
 import { InfoTooltip } from "../components/InfoTooltip";
 import {
@@ -201,6 +202,9 @@ export function TelegramPage() {
   const [saved, setSaved] = useState("");
   const [envError, setEnvError] = useState("");
   const [envSaved, setEnvSaved] = useState("");
+  const [runtimeSaving, setRuntimeSaving] = useState(false);
+  const [envSaving, setEnvSaving] = useState(false);
+  const [templatesSaving, setTemplatesSaving] = useState(false);
 
   const [templates, setTemplates] = useState<Record<string, string>>({});
   const [savedTemplates, setSavedTemplates] = useState<Record<string, string>>(
@@ -277,6 +281,7 @@ export function TelegramPage() {
   async function saveRuntime() {
     if (!data) return;
     try {
+      setRuntimeSaving(true);
       const changedFields = TELEGRAM_FIELDS.filter(
         (field) => settings[field.key] !== savedSettings[field.key],
       );
@@ -314,6 +319,8 @@ export function TelegramPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : t("telegram.saveFailed"));
       setSaved("");
+    } finally {
+      setRuntimeSaving(false);
     }
   }
 
@@ -322,6 +329,7 @@ export function TelegramPage() {
     const envUpdates = buildEnvUpdates(data.env, envDraft);
     if (Object.keys(envUpdates).length === 0) return;
     try {
+      setEnvSaving(true);
       const response = (await api.updateTelegramSettings({
         env: envUpdates,
       })) as TelegramPayload;
@@ -338,11 +346,14 @@ export function TelegramPage() {
         err instanceof Error ? err.message : t("telegram.saveFailed"),
       );
       setEnvSaved("");
+    } finally {
+      setEnvSaving(false);
     }
   }
 
   async function saveTemplates() {
     try {
+      setTemplatesSaving(true);
       const response = (await api.updateEnforcementSettings({
         settings: Object.fromEntries(
           TEMPLATE_FIELDS.map((field) => [
@@ -361,6 +372,8 @@ export function TelegramPage() {
         err instanceof Error ? err.message : t("telegram.saveFailed"),
       );
       setTemplatesSaved("");
+    } finally {
+      setTemplatesSaving(false);
     }
   }
 
@@ -474,7 +487,10 @@ export function TelegramPage() {
           >
             {runtimeDirty ? t("common.unsavedChanges") : t("common.saved")}
           </span>
-          <button onClick={saveRuntime} disabled={!data || !runtimeDirty}>
+          <button onClick={saveRuntime} disabled={!data || !runtimeDirty || runtimeSaving}>
+            {runtimeSaving && (
+              <Loader2 size={14} className="spinner" style={{ marginRight: "6px" }} />
+            )}
             {t("telegram.saveSettings")}
           </button>
         </div>
@@ -571,9 +587,12 @@ export function TelegramPage() {
                   {envDirty ? t("common.unsavedChanges") : t("common.saved")}
                 </span>
                 <button
-                  disabled={!envDirty || !data.env_file_writable}
+                  disabled={!envDirty || !data.env_file_writable || envSaving}
                   onClick={saveEnv}
                 >
+                  {envSaving && (
+                    <Loader2 size={14} className="spinner" style={{ marginRight: "6px" }} />
+                  )}
                   {t("telegram.saveEnv")}
                 </button>
               </div>
@@ -610,7 +629,10 @@ export function TelegramPage() {
                     ? t("common.unsavedChanges")
                     : t("common.saved")}
                 </span>
-                <button disabled={!templatesDirty} onClick={saveTemplates}>
+                <button disabled={!templatesDirty || templatesSaving} onClick={saveTemplates}>
+                  {templatesSaving && (
+                    <Loader2 size={14} className="spinner" style={{ marginRight: "6px" }} />
+                  )}
                   {t("telegram.saveTemplates")}
                 </button>
               </div>

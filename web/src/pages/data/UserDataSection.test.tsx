@@ -59,6 +59,7 @@ describe("UserDataSection", () => {
           formatPanelSquads={() => "FULL"}
           formatTrafficBytes={() => "1.00 GB"}
           renderProviderEvidence={() => null}
+          activeUserAction=""
         />
       </MemoryRouter>
     );

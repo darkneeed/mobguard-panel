@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
+import { Loader2 } from "lucide-react";
 
 import {
   api,
@@ -76,6 +77,10 @@ export function AccessPage({
   const [securityError, setSecurityError] = useState("");
   const [securitySaved, setSecuritySaved] = useState("");
   const [securitySubmitting, setSecuritySubmitting] = useState(false);
+  const [listsSaving, setListsSaving] = useState(false);
+  const [brandingSaving, setBrandingSaving] = useState(false);
+  const [integrationSaving, setIntegrationSaving] = useState(false);
+  const [envSaving, setEnvSaving] = useState(false);
 
   useEffect(() => {
     api
@@ -172,6 +177,7 @@ export function AccessPage({
   async function save() {
     if (!data) return;
     try {
+      setListsSaving(true);
       const payload = {
         revision: data.revision,
         updated_at: data.updated_at,
@@ -200,12 +206,15 @@ export function AccessPage({
     } catch (err) {
       setError(err instanceof Error ? err.message : t("access.saveFailed"));
       setSaved("");
+    } finally {
+      setListsSaving(false);
     }
   }
 
   async function saveBranding() {
     if (!data) return;
     try {
+      setBrandingSaving(true);
       const response = await api.updateAccessSettings({
         settings: {
           panel_name: brandingDraft.panel_name.trim(),
@@ -224,12 +233,15 @@ export function AccessPage({
     } catch (err) {
       setError(err instanceof Error ? err.message : t("access.saveFailed"));
       setBrandingSaved("");
+    } finally {
+      setBrandingSaving(false);
     }
   }
 
   async function saveIntegrations() {
     if (!data) return;
     try {
+      setIntegrationSaving(true);
       const response = await api.updateAccessSettings({
         settings: {
           remnawave_api_url: remnawaveApiUrlDraft.trim(),
@@ -255,6 +267,8 @@ export function AccessPage({
     } catch (err) {
       setError(err instanceof Error ? err.message : t("access.saveFailed"));
       setIntegrationSaved("");
+    } finally {
+      setIntegrationSaving(false);
     }
   }
 
@@ -263,6 +277,7 @@ export function AccessPage({
     const envUpdates = buildEnvUpdates(data.env, envDraft);
     if (Object.keys(envUpdates).length === 0) return;
     try {
+      setEnvSaving(true);
       const response = await api.updateAccessSettings({
         env: envUpdates,
       });
@@ -273,6 +288,8 @@ export function AccessPage({
     } catch (err) {
       setEnvError(err instanceof Error ? err.message : t("access.saveFailed"));
       setEnvSaved("");
+    } finally {
+      setEnvSaving(false);
     }
   }
 
@@ -397,8 +414,11 @@ export function AccessPage({
                   </span>
                   <button
                     onClick={saveBranding}
-                    disabled={!brandingDirty || !brandingDraft.panel_name.trim()}
+                    disabled={!brandingDirty || !brandingDraft.panel_name.trim() || brandingSaving}
                   >
+                    {brandingSaving && (
+                      <Loader2 size={14} className="spinner" style={{ marginRight: "6px" }} />
+                    )}
                     {t("access.saveBranding")}
                   </button>
                 </div>
@@ -549,7 +569,10 @@ export function AccessPage({
                           ? t("common.unsavedChanges")
                           : t("common.saved")}
                       </span>
-                      <button onClick={saveIntegrations} disabled={!integrationDirty}>
+                      <button onClick={saveIntegrations} disabled={!integrationDirty || integrationSaving}>
+                        {integrationSaving && (
+                          <Loader2 size={14} className="spinner" style={{ marginRight: "6px" }} />
+                        )}
                         {t("access.saveIntegration")}
                       </button>
                     </div>
@@ -622,7 +645,10 @@ export function AccessPage({
                       >
                         {listDirty ? t("common.unsavedChanges") : t("common.saved")}
                       </span>
-                      <button onClick={save} disabled={!listDirty}>
+                      <button onClick={save} disabled={!listDirty || listsSaving}>
+                        {listsSaving && (
+                          <Loader2 size={14} className="spinner" style={{ marginRight: "6px" }} />
+                        )}
                         {t("access.save")}
                       </button>
                     </div>
@@ -676,6 +702,9 @@ export function AccessPage({
                           securitySubmitting || !data.owner_security.enabled_owner_count
                         }
                       >
+                        {securitySubmitting && (
+                          <Loader2 size={14} className="spinner" style={{ marginRight: "6px" }} />
+                        )}
                         {securitySubmitting
                           ? t("access.ownerSecurity.disabling")
                           : t("access.ownerSecurity.disableAction")}
@@ -726,8 +755,11 @@ export function AccessPage({
                       </span>
                       <button
                         onClick={saveEnv}
-                        disabled={!envDirty || !data.env_file_writable}
+                        disabled={!envDirty || !data.env_file_writable || envSaving}
                       >
+                        {envSaving && (
+                          <Loader2 size={14} className="spinner" style={{ marginRight: "6px" }} />
+                        )}
                         {t("access.saveEnv")}
                       </button>
                     </div>

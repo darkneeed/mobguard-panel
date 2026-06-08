@@ -1,5 +1,6 @@
 import type { FormEvent } from "react";
 import { useEffect, useState } from "react";
+import { Loader2 } from "lucide-react";
 
 import {
   api,
@@ -204,7 +205,11 @@ export function LoginPage({
               onChange={(event) => setTotpCode(event.target.value)}
             />
             <div className="action-row">
-              <button disabled={totpSubmitting || totpCode.trim().length < 6}>
+              <button
+                disabled={totpSubmitting || totpCode.trim().length < 6}
+                style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem" }}
+              >
+                {totpSubmitting && <Loader2 size={16} className="spinner" />}
                 {totpSubmitting
                   ? t("login.totp.processing")
                   : totpSetupRequired
@@ -251,7 +256,9 @@ export function LoginPage({
               disabled={
                 !auth?.local_enabled || submitting || Boolean(challengeToken)
               }
+              style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: "0.5rem" }}
             >
+              {submitting && <Loader2 size={16} className="spinner" />}
               {submitting ? t("login.signingIn") : t("login.signIn")}
             </button>
             {auth && !auth.local_enabled ? (

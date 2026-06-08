@@ -97,6 +97,7 @@ export function DataPage({ session }: { session?: Session }) {
   const [pending, setPending] = useState<Partial<Record<PendingKey, boolean>>>(
     {},
   );
+  const [activeUserAction, setActiveUserAction] = useState("");
 
   const [userQuery, setUserQuery] = useState("");
   const [userSearch, setUserSearch] = useState<UserSearchResponse | null>(null);
@@ -295,9 +296,11 @@ export function DataPage({ session }: { session?: Session }) {
   }
 
   async function runUserAction(
+    actionName: string,
     action: () => Promise<UserCardResponse>,
     successMessage: string,
   ) {
+    setActiveUserAction(actionName);
     try {
       const payload = await withPending("userAction", action);
       setUserCard(payload);
@@ -307,6 +310,8 @@ export function DataPage({ session }: { session?: Session }) {
         "error",
         err instanceof Error ? err.message : t("data.errors.userActionFailed"),
       );
+    } finally {
+      setActiveUserAction("");
     }
   }
 
@@ -428,6 +433,7 @@ export function DataPage({ session }: { session?: Session }) {
           formatPanelSquads={formatPanelSquads}
           formatTrafficBytes={formatTrafficBytes}
           renderProviderEvidence={renderProviderEvidence}
+          activeUserAction={activeUserAction}
         />
       ) : null}
       {dataView === "events" ? (

@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { Loader2 } from "lucide-react";
 
 import { hasPermission } from "../app/permissions";
 import {
@@ -177,6 +178,8 @@ export function ModulesPage({ session }: { session?: Session }) {
   const [logsModuleId, setLogsModuleId] = useState<string | null>(null);
   const [moduleLogs, setModuleLogs] = useState<any[]>([]);
   const [loadingLogs, setLoadingLogs] = useState(false);
+  const [togglingModuleId, setTogglingModuleId] = useState("");
+  const [revealingToken, setRevealingToken] = useState(false);
 
   const activeModule = modalMode === "detail" ? (detail?.module ?? null) : null;
   const draftDirty = useMemo(
@@ -362,6 +365,7 @@ export function ModulesPage({ session }: { session?: Session }) {
 
   async function revealToken() {
     if (!selectedId) return;
+    setRevealingToken(true);
     try {
       const response = (await api.revealModuleToken(selectedId)) as {
         module_token: string;
@@ -373,12 +377,15 @@ export function ModulesPage({ session }: { session?: Session }) {
         "error",
         err instanceof Error ? err.message : t("modules.tokenRevealFailed"),
       );
+    } finally {
+      setRevealingToken(false);
     }
   }
 
   async function toggleModule(item: ModuleRecord) {
     if (!canManageModules) return;
     const nextEnabled = !item.enabled;
+    setTogglingModuleId(item.module_id);
     try {
       const response = (await api.toggleModuleEnabled(item.module_id, nextEnabled)) as ModuleDetailResponse;
       const updatedModule = response?.module;
@@ -400,6 +407,8 @@ export function ModulesPage({ session }: { session?: Session }) {
         "error",
         err instanceof Error ? err.message : "Не удалось изменить статус модуля",
       );
+    } finally {
+      setTogglingModuleId("");
     }
   }
 
@@ -526,15 +535,19 @@ export function ModulesPage({ session }: { session?: Session }) {
 
         <div className="module-toggle-row" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "var(--surface-soft)", padding: "0.6rem 0.85rem", borderRadius: "8px", border: "1px solid var(--line)" }}>
           <span style={{ fontSize: "0.85rem", fontWeight: 500, color: "var(--muted)" }}>Статус модуля:</span>
-          <label className="switch-new">
-            <input
-              type="checkbox"
-              checked={isModuleEnabled}
-              disabled={!canManageModules}
-              onChange={() => toggleModule(item)}
-            />
-            <span className="slider-new" />
-          </label>
+          {togglingModuleId === item.module_id ? (
+            <Loader2 size={16} className="spinner" />
+          ) : (
+            <label className="switch-new">
+              <input
+                type="checkbox"
+                checked={isModuleEnabled}
+                disabled={!canManageModules}
+                onChange={() => toggleModule(item)}
+              />
+              <span className="slider-new" />
+            </label>
+          )}
         </div>
 
         <div className="module-ops-grid" style={{ gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
@@ -590,7 +603,7 @@ export function ModulesPage({ session }: { session?: Session }) {
           </button>
           <button
             className="ghost"
-            style={{ flex: 1, padding: "0.5rem" }}
+            style={{ flex: 1, padding: "0.5rem", display: "inline-flex", alignItems: "center", justifyContent: "center" }}
             disabled={
               !canManageModules ||
               item.install_state === "pending_install" ||
@@ -598,7 +611,11 @@ export function ModulesPage({ session }: { session?: Session }) {
             }
             onClick={() => restartModule(item)}
           >
-            {restartingModuleId === item.module_id ? "..." : "Рестарт"}
+            {restartingModuleId === item.module_id ? (
+              <Loader2 size={14} className="spinner" />
+            ) : (
+              "Рестарт"
+            )}
           </button>
         </div>
       </article>
@@ -720,7 +737,9 @@ export function ModulesPage({ session }: { session?: Session }) {
             <button
               onClick={saveModule}
               disabled={!canManageModules || submitting || !canSubmit}
+              style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem" }}
             >
+              {submitting && <Loader2 size={14} className="spinner" />}
               {modalMode === "create" ? t("modules.create") : t("modules.save")}
             </button>
           </div>
@@ -973,11 +992,14 @@ export function ModulesPage({ session }: { session?: Session }) {
                       className="ghost"
                       disabled={
                         loadingDetail ||
+                        revealingToken ||
                         !activeModule?.token_reveal_available ||
                         !canRevealModuleToken
                       }
                       onClick={revealToken}
+                      style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem" }}
                     >
+                      {revealingToken && <Loader2 size={14} className="spinner" />}
                       {t("modules.revealToken")}
                     </button>
                   </div>
@@ -1041,7 +1063,10 @@ export function ModulesPage({ session }: { session?: Session }) {
       >
         <div className="log-viewer-modal-content" style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
           {loadingLogs ? (
-            <div className="provider-empty">Загрузка логов...</div>
+            <div className="provider-empty" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "0.5rem" }}>
+              <Loader2 size={24} className="spinner" />
+              <span>Загрузка логов...</span>
+            </div>
           ) : moduleLogs.length ? (
             <pre className="log-box code-editor-box" style={{ maxHeight: "450px", overflowY: "auto", fontSize: "0.8rem", padding: "1rem", background: "#0f172a", color: "#e2e8f0", border: "1px solid #334155", borderRadius: "8px" }}>
               {moduleLogs.map((entry: any) => {
