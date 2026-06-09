@@ -204,6 +204,7 @@ export function ModulesPage({ session }: { session?: Session }) {
   const [inboundsError, setInboundsError] = useState("");
   const [availableInbounds, setAvailableInbounds] = useState<any[]>([]);
   const [manualTag, setManualTag] = useState("");
+  const [instructionsOpen, setInstructionsOpen] = useState(false);
 
   const activeModule = modalMode === "detail" ? (detail?.module ?? null) : null;
   const draftDirty = useMemo(
@@ -298,6 +299,7 @@ export function ModulesPage({ session }: { session?: Session }) {
     setPanelError("");
     setSaved("");
     setRevealedToken("");
+    setInstructionsOpen(false);
     if (detail?.module.module_id === moduleId) {
       return;
     }
@@ -331,6 +333,7 @@ export function ModulesPage({ session }: { session?: Session }) {
     setSaved("");
     setInboundsError("");
     setManualTag("");
+    setInstructionsOpen(false);
   }
 
   function closeModal() {
@@ -340,6 +343,7 @@ export function ModulesPage({ session }: { session?: Session }) {
     setRevealedToken("");
     setInboundsError("");
     setManualTag("");
+    setInstructionsOpen(false);
   }
 
   // Automatically fetch Remnawave inbounds when module modal opens or module_name changes
@@ -921,12 +925,12 @@ export function ModulesPage({ session }: { session?: Session }) {
                     <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
                       {uniqueInboundTags.length > 0 ? (
                         <div style={{
-                          display: "grid",
-                          gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))",
-                          gap: "0.5rem",
-                          maxHeight: "240px",
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: "0.35rem",
+                          maxHeight: "220px",
                           overflowY: "auto",
-                          padding: "0.25rem",
+                          padding: "0.35rem",
                           background: "var(--surface-soft)",
                           borderRadius: "8px",
                           border: "1px solid var(--line)"
@@ -938,9 +942,9 @@ export function ModulesPage({ session }: { session?: Session }) {
                                 key={tag}
                                 style={{
                                   display: "flex",
-                                  alignItems: "center",
-                                  gap: "0.5rem",
-                                  padding: "0.4rem 0.6rem",
+                                  alignItems: "flex-start",
+                                  gap: "0.6rem",
+                                  padding: "0.45rem 0.75rem",
                                   borderRadius: "6px",
                                   background: isSelected ? "rgba(16,185,129,0.06)" : "transparent",
                                   border: isSelected ? "1px solid var(--success)" : "1px solid transparent",
@@ -963,9 +967,14 @@ export function ModulesPage({ session }: { session?: Session }) {
                                       inbound_tags: nextTags.join("\n")
                                     }));
                                   }}
-                                  style={{ margin: 0, accentColor: "var(--success)" }}
+                                  style={{ marginTop: "0.2rem", flexShrink: 0, accentColor: "var(--success)" }}
                                 />
-                                <span style={{ fontWeight: isSelected ? 600 : 400, color: isSelected ? "var(--success)" : "var(--ink)" }}>
+                                <span style={{
+                                  fontWeight: isSelected ? 600 : 400,
+                                  color: isSelected ? "var(--success)" : "var(--ink)",
+                                  wordBreak: "break-all",
+                                  lineHeight: "1.4"
+                                }}>
                                   {tag}
                                 </span>
                               </label>
@@ -1411,12 +1420,12 @@ export function ModulesPage({ session }: { session?: Session }) {
                                 <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
                                   {uniqueInboundTags.length > 0 ? (
                                     <div style={{
-                                      display: "grid",
-                                      gridTemplateColumns: "1fr 1fr",
-                                      gap: "0.4rem",
-                                      maxHeight: "130px",
+                                      display: "flex",
+                                      flexDirection: "column",
+                                      gap: "0.35rem",
+                                      maxHeight: "150px",
                                       overflowY: "auto",
-                                      padding: "0.25rem",
+                                      padding: "0.35rem",
                                       background: "rgba(0,0,0,0.15)",
                                       borderRadius: "8px",
                                       border: "1px solid var(--line)"
@@ -1428,14 +1437,14 @@ export function ModulesPage({ session }: { session?: Session }) {
                                             key={tag}
                                             style={{
                                               display: "flex",
-                                              alignItems: "center",
-                                              gap: "0.4rem",
-                                              padding: "0.3rem 0.5rem",
+                                              alignItems: "flex-start",
+                                              gap: "0.5rem",
+                                              padding: "0.40rem 0.65rem",
                                               borderRadius: "6px",
                                               background: isSelected ? "rgba(52,211,153,0.05)" : "transparent",
                                               border: isSelected ? "1px solid rgba(52,211,153,0.3)" : "1px solid transparent",
                                               cursor: "pointer",
-                                              fontSize: "0.78rem",
+                                              fontSize: "0.80rem",
                                               userSelect: "none",
                                               transition: "all 0.15s ease",
                                             }}
@@ -1452,9 +1461,15 @@ export function ModulesPage({ session }: { session?: Session }) {
                                                   inbound_tags: nextTags.join("\n")
                                                 }));
                                               }}
-                                              style={{ margin: 0, accentColor: "var(--success)" }}
+                                              style={{ marginTop: "0.18rem", flexShrink: 0, accentColor: "var(--success)" }}
                                             />
-                                            <span style={{ fontWeight: isSelected ? 600 : 400, color: isSelected ? "var(--success)" : "var(--ink)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                            <span style={{
+                                              fontWeight: isSelected ? 600 : 400,
+                                              color: isSelected ? "var(--success)" : "var(--ink)",
+                                              wordBreak: "break-all",
+                                              lineHeight: "1.4"
+                                              }}
+                                            >
                                               {tag}
                                             </span>
                                           </label>
@@ -1671,15 +1686,29 @@ export function ModulesPage({ session }: { session?: Session }) {
                       </div>
 
                       {/* Collapsed Deployment / Installation options for active module */}
-                      <details className="export-section" style={{
-                        background: "var(--surface-soft)",
-                        border: "1px solid var(--line)",
-                        borderRadius: "10px",
-                        padding: "1rem",
-                        marginTop: "1.25rem"
-                      }}>
-                        <summary style={{ fontWeight: 600, cursor: "pointer" }}>Инструкция по установке & Docker Compose YAML</summary>
-                        <div style={{ marginTop: "1rem", display: "flex", flexDirection: "column", gap: "1rem" }}>
+                      <details
+                        className="panel"
+                        open={instructionsOpen}
+                        onToggle={(e) => setInstructionsOpen((e.target as HTMLDetailsElement).open)}
+                        style={{
+                          marginTop: "1.25rem",
+                          padding: "1.25rem",
+                          background: "var(--bg-panel)",
+                          borderRadius: "var(--radius-lg)",
+                          border: "1px solid var(--line)",
+                          boxShadow: "var(--shadow)"
+                        }}
+                      >
+                        <summary style={{
+                          fontWeight: 600,
+                          cursor: "pointer",
+                          marginBottom: instructionsOpen ? "1rem" : 0,
+                          outline: "none",
+                          userSelect: "none"
+                        }}>
+                          Инструкция по установке & Docker Compose YAML
+                        </summary>
+                        <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
                           <div className="action-row" style={{ justifyContent: "flex-end" }}>
                             <button
                               className="ghost"
