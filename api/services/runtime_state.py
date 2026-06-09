@@ -734,9 +734,10 @@ def list_analysis_events(store: Any, filters: dict[str, Any]) -> dict[str, Any]:
     if filters.get("q"):
         search = f"%{str(filters['q']).strip()}%"
         clauses.append(
-            "(ae.ip LIKE ? OR ae.isp LIKE ? OR ae.tag LIKE ? OR ae.module_name LIKE ? OR ae.client_device_id LIKE ? OR ae.client_device_label LIKE ?)"
+            "(ae.ip LIKE ? OR ae.isp LIKE ? OR ae.tag LIKE ? OR ae.module_name LIKE ? OR ae.client_device_id LIKE ? OR ae.client_device_label LIKE ? "
+            "OR ae.uuid LIKE ? OR ae.username LIKE ? OR CAST(ae.telegram_id AS TEXT) LIKE ? OR CAST(ae.system_id AS TEXT) LIKE ?)"
         )
-        params.extend([search] * 6)
+        params.extend([search] * 10)
     if filters.get("has_review_case") is not None:
         has_case = str(filters["has_review_case"]).lower() in {"1", "true", "yes"}
         clauses.append(
@@ -845,9 +846,10 @@ def list_auto_decisions(store: Any, filters: dict[str, Any]) -> dict[str, Any]:
     if filters.get("q"):
         search = f"%{str(filters['q']).strip()}%"
         clauses.append(
-            "(ae.ip LIKE ? OR ae.isp LIKE ? OR ae.tag LIKE ? OR ae.module_name LIKE ? OR ae.client_device_id LIKE ? OR ae.client_device_label LIKE ?)"
+            "(ae.ip LIKE ? OR ae.isp LIKE ? OR ae.tag LIKE ? OR ae.module_name LIKE ? OR ae.client_device_id LIKE ? OR ae.client_device_label LIKE ? "
+            "OR ae.uuid LIKE ? OR ae.username LIKE ? OR CAST(ae.telegram_id AS TEXT) LIKE ? OR CAST(ae.system_id AS TEXT) LIKE ?)"
         )
-        params.extend([search] * 6)
+        params.extend([search] * 10)
 
     enforcement_status = str(filters.get("enforcement_status") or "").strip().lower()
     if enforcement_status:

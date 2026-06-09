@@ -1358,3 +1358,68 @@ input:checked + .slider-new:before {
   display: inline-block;
   vertical-align: middle;
 }
+
+/* Premium Module Card Actions */
+.btn-enable {
+  background: rgba(52, 211, 153, 0.12) !important;
+  color: var(--success) !important;
+  border: 1px solid rgba(52, 211, 153, 0.25) !important;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.btn-enable:hover:not(:disabled) {
+  background: rgba(52, 211, 153, 0.22) !important;
+  border-color: rgba(52, 211, 153, 0.45) !important;
+}
+
+.btn-disable {
+  background: rgba(248, 113, 113, 0.12) !important;
+  color: var(--danger) !important;
+  border: 1px solid rgba(248, 113, 113, 0.25) !important;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.btn-disable:hover:not(:disabled) {
+  background: rgba(248, 113, 113, 0.22) !important;
+  border-color: rgba(248, 113, 113, 0.45) !important;
+}
+
+.btn-details {
+  background: var(--accent-soft) !important;
+  color: var(--accent) !important;
+  border: 1px solid rgba(59, 130, 246, 0.25) !important;
+  font-weight: 600 !important;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.btn-details:hover {
+  background: rgba(59, 130, 246, 0.2) !important;
+  border-color: rgba(59, 130, 246, 0.45) !important;
+}
+
+.btn-log {
+  border: 1px solid var(--line) !important;
+  background: transparent !important;
+  color: var(--ink) !important;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.btn-log:hover {
+  background: var(--surface-soft) !important;
+  border-color: var(--muted) !important;
+}
+
+.btn-restart {
+  border: 1px solid var(--line) !important;
+  background: transparent !important;
+  color: var(--ink) !important;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.btn-restart:hover:not(:disabled) {
+  background: var(--warning-soft) !important;
+  color: var(--warning) !important;
+  border-color: rgba(251, 191, 36, 0.45) !important;
+}

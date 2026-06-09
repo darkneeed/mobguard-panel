@@ -440,7 +440,7 @@ export const enDictionary: TranslationDictionary = {
     listDescription: "Recent non-review decisions with their remote enforcement status.",
     empty: "No automatic decisions for the current filters",
     filters: {
-      search: "Search by IP / provider / inbound / device",
+      search: "Search by IP / provider / inbound / device / ID / username",
       moduleId: "Module ID",
       provider: "Provider",
       anyVerdict: "Any verdict",

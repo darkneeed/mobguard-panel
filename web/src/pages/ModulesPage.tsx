@@ -513,6 +513,11 @@ export function ModulesPage({ session }: { session?: Session }) {
               <span className={`status-badge ${isModuleEnabled ? "status-resolved" : "severity-low"}`} style={{ fontSize: "0.7rem", padding: "0.15rem 0.4rem" }}>
                 {isModuleEnabled ? "Активен" : "Отключен"}
               </span>
+              {isModuleEnabled && (
+                <span className="status-badge review-only" style={{ fontSize: "0.7rem", padding: "0.15rem 0.4rem" }}>
+                  Онлайн: {runtime?.active_users ?? 0}
+                </span>
+              )}
             </div>
             <div className="queue-card-identifiers" style={{ marginTop: "0.25rem", display: "flex", flexDirection: "column", gap: "0.15rem" }}>
               <span>ID: {item.module_id}</span>
@@ -538,15 +543,24 @@ export function ModulesPage({ session }: { session?: Session }) {
           {togglingModuleId === item.module_id ? (
             <Loader2 size={16} className="spinner" />
           ) : (
-            <label className="switch-new">
-              <input
-                type="checkbox"
-                checked={isModuleEnabled}
-                disabled={!canManageModules}
-                onChange={() => toggleModule(item)}
-              />
-              <span className="slider-new" />
-            </label>
+            <button
+              className={isModuleEnabled ? "btn-disable" : "btn-enable"}
+              style={{
+                padding: "0.35rem 0.85rem",
+                fontSize: "0.8rem",
+                borderRadius: "6px",
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "0.35rem",
+                minWidth: "100px"
+              }}
+              disabled={!canManageModules}
+              onClick={() => toggleModule(item)}
+            >
+              <span style={{ display: "inline-block", width: "6px", height: "6px", borderRadius: "50%", background: isModuleEnabled ? "var(--danger)" : "var(--success)" }} />
+              {isModuleEnabled ? "Отключить" : "Включить"}
+            </button>
           )}
         </div>
 
@@ -573,36 +587,52 @@ export function ModulesPage({ session }: { session?: Session }) {
           </div>
         )}
 
-        <div className="record-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem", fontSize: "0.85rem" }}>
-          <div className="record-kv">
-            <strong>{t("modules.lastSeen")}</strong>
-            <span>{formatDisplayDateTime(item.last_seen_at, t("common.notAvailable"), language)}</span>
+        <div className="module-info-panel" style={{ background: "var(--surface-soft)", border: "1px solid var(--line)", padding: "0.85rem", borderRadius: "10px", display: "flex", flexDirection: "column", gap: "0.6rem", fontSize: "0.85rem" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <span className="muted">{t("modules.lastSeen")}:</span>
+            <span style={{ fontWeight: 500 }}>{formatDisplayDateTime(item.last_seen_at, t("common.notAvailable"), language)}</span>
           </div>
-          <div className="record-kv">
-            <strong>Heartbeat лаг</strong>
-            <span>{formatAge(item.seconds_since_last_seen)}</span>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <span className="muted">Heartbeat лаг:</span>
+            <span style={{ color: item.healthy ? "var(--success)" : "var(--danger)", fontWeight: 600 }}>
+              {formatAge(item.seconds_since_last_seen)}
+            </span>
           </div>
-          <div className="record-kv">
-            <strong>INBOUND теги</strong>
-            <span>{item.inbound_tags.length ? item.inbound_tags.join(", ") : "—"}</span>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <span className="muted">Лог-файл активен:</span>
+            {item.access_log_exists ? (
+              <span className="status-badge status-resolved" style={{ fontSize: "0.7rem", padding: "0.15rem 0.4rem" }}>Да</span>
+            ) : (
+              <span className="status-badge severity-low" style={{ fontSize: "0.7rem", padding: "0.15rem 0.4rem" }}>Нет</span>
+            )}
           </div>
-          <div className="record-kv">
-            <strong>Лог-файл активен</strong>
-            <span>{item.access_log_exists ? "Да" : "Нет"}</span>
+          <div style={{ display: "flex", flexDirection: "column", gap: "0.35rem", borderTop: "1px solid var(--line)", paddingTop: "0.6rem" }}>
+            <span className="muted">INBOUND теги:</span>
+            {item.inbound_tags.length ? (
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "0.3rem", marginTop: "0.15rem" }}>
+                {item.inbound_tags.map(tag => (
+                  <span key={tag} className="tag" style={{ fontSize: "0.7rem", padding: "0.15rem 0.4rem", borderRadius: "4px", background: "var(--surface-strong)", border: "1px solid var(--line)", color: "var(--ink)" }}>
+                    {tag}
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <span className="muted">—</span>
+            )}
           </div>
         </div>
 
         {item.error_text ? <div className="error-box" style={{ padding: "0.5rem 0.75rem" }}>{item.error_text}</div> : null}
 
-        <div className="action-row" style={{ display: "flex", gap: "0.5rem", marginTop: "auto" }}>
-          <button className="ghost" style={{ flex: 1, padding: "0.5rem" }} onClick={() => openModule(item.module_id)}>
+        <div className="action-row" style={{ display: "flex", gap: "0.5rem", marginTop: "auto", borderTop: "1px solid var(--line)", paddingTop: "1rem" }}>
+          <button className="btn-details" style={{ flex: 1.2, padding: "0.5rem" }} onClick={() => openModule(item.module_id)}>
             {t("modules.open")}
           </button>
-          <button className="ghost" style={{ flex: 1, padding: "0.5rem" }} onClick={() => viewLogs(item.module_id)}>
+          <button className="btn-log" style={{ flex: 1, padding: "0.5rem" }} onClick={() => viewLogs(item.module_id)}>
             Лог
           </button>
           <button
-            className="ghost"
+            className="btn-restart"
             style={{ flex: 1, padding: "0.5rem", display: "inline-flex", alignItems: "center", justifyContent: "center" }}
             disabled={
               !canManageModules ||

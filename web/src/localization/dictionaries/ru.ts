@@ -460,7 +460,7 @@ export const ruDictionary: TranslationDictionary = {
     listDescription: "Последние решения",
     empty: "Для текущих фильтров автоматических решений нет",
     filters: {
-      search: "Поиск по IP / провайдеру / инбаунду / устройству",
+      search: "Поиск по IP / провайдеру / инбаунду / устройству / ID / логину",
       moduleId: "ID модуля",
       provider: "Провайдер",
       anyVerdict: "Любой вердикт",
