@@ -316,7 +316,7 @@ export function ModulesPage({ session }: { session?: Session }) {
     setLoadingInbounds(true);
     setInboundsError("");
     try {
-      const response = await settingsApi.getRemnawaveInbounds();
+      const response = await settingsApi.getRemnawaveInbounds(draft.module_name);
       if (response.available) {
         setAvailableInbounds(response.inbounds || []);
         setShowInboundPicker(true);

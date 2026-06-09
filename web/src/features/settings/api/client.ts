@@ -39,7 +39,12 @@ export const settingsApi = {
       method: "POST",
       body: JSON.stringify({ ip, force: force ?? false })
     }),
-  getRemnawaveInbounds: () =>
-    request<{ inbounds: Array<Record<string, any>>; available: boolean }>("/admin/tools/remnawave-inbounds")
+  getRemnawaveInbounds: (moduleName?: string) =>
+    request<{ inbounds: Array<Record<string, any>>; available: boolean }>(
+      moduleName
+        ? `/admin/tools/remnawave-inbounds?module_name=${encodeURIComponent(moduleName)}`
+        : "/admin/tools/remnawave-inbounds"
+    )
+
 };
 

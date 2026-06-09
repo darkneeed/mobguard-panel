@@ -102,3 +102,46 @@ def test_remnawave_inbounds_endpoint(client_and_container):
         assert data["available"] is True
         assert len(data["inbounds"]) == 1
         assert data["inbounds"][0]["tag"] == "vless-mobile"
+
+def test_remnawave_inbounds_endpoint_filtering(client_and_container):
+    client, container = client_and_container
+    
+    with patch("api.services.runtime_state.panel_client") as mock_panel_client_getter:
+        mock_client = MagicMock()
+        mock_client.get_inbounds.return_value = [
+            {"uuid": "111", "profileUuid": "aeza-fi-uuid", "tag": "vless-fi", "type": "vless"},
+            {"uuid": "222", "profileUuid": "aeza-swe-uuid", "tag": "vless-swe", "type": "vless"}
+        ]
+        # Mock generic _request for /api/config-profiles
+        mock_client._request.return_value = {
+            "response": {
+                "configProfiles": [
+                    {
+                        "uuid": "aeza-fi-uuid",
+                        "name": "FI-AEZA",
+                        "nodes": [{"name": "aeza-fi"}]
+                    },
+                    {
+                        "uuid": "aeza-swe-uuid",
+                        "name": "SWE-AEZA",
+                        "nodes": [{"name": "aeza-swe"}]
+                    }
+                ]
+            }
+        }
+        mock_panel_client_getter.return_value = mock_client
+        
+        # Match by node name
+        response = client.get("/admin/tools/remnawave-inbounds?module_name=aeza-fi")
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["inbounds"]) == 1
+        assert data["inbounds"][0]["tag"] == "vless-fi"
+        
+        # Match by profile name
+        response = client.get("/admin/tools/remnawave-inbounds?module_name=FI-AEZA")
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["inbounds"]) == 1
+        assert data["inbounds"][0]["tag"] == "vless-fi"
+
