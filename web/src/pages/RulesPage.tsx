@@ -9,6 +9,9 @@ import {
 } from "../api/client";
 import type { AutomationStatus } from "../api/client";
 import { FieldLabel } from "../components/FieldLabel";
+import { AsnLookupTool } from "../components/AsnLookupTool";
+import { EnforcementPresets } from "../components/EnforcementPresets";
+import { RuleListKey } from "../rulesMeta";
 import {
   getSettingInputValue,
   listValuesToText,
@@ -536,6 +539,20 @@ export function RulesPage() {
     setSaved("");
   }
 
+  function handleAddAsn(listKey: string, asn: number) {
+    setDraft((prev) => {
+      if (!prev) return null;
+      const currentList = prev[listKey as RuleListKey] || [];
+      const parsedAsn = Number(asn);
+      if (currentList.map(Number).includes(parsedAsn)) return prev;
+      return {
+        ...prev,
+        [listKey]: [...currentList, parsedAsn]
+      };
+    });
+    setSaved("");
+  }
+
   function updateSettingField(meta: RuleSettingFieldMeta, value: string) {
     setDraft((prev) => ({
       ...(prev || {}),
@@ -582,6 +599,15 @@ export function RulesPage() {
     }));
     setGeneralSaved("");
     setAutomationSaved("");
+  }
+
+  function applyPreset(values: Record<string, string>) {
+    Object.entries(values).forEach(([key, val]) => {
+      updateGeneralField(key, val);
+    });
+    const isSoft = values.warning_only_mode === "true";
+    updateWorkMode(isSoft ? "observe" : "react");
+    updateReactionMode(isSoft ? "warning_only" : "enforce");
   }
 
   function updateProviderProfile(
@@ -846,6 +872,8 @@ export function RulesPage() {
               </div>
             </div>
           </div>
+
+          <EnforcementPresets onApply={applyPreset} />
 
           {/* REACTION MODE SECTOR */}
           <div style={{ opacity: workMode === "react" ? 1 : 0.45, transition: "opacity 0.2s ease" }}>
@@ -1225,6 +1253,9 @@ export function RulesPage() {
           <h2>{t(`rulesMeta.sections.${section}`)}</h2>
           <p className="muted">{t("rules.listSectionDescription")}</p>
         </div>
+        {section === "asnLists" && (
+          <AsnLookupTool draft={draft} onAddAsn={handleAddAsn} />
+        )}
         <div className="detail-grid">
           {RULE_LIST_FIELDS.filter((field) => field.sectionKey === section).map(
             (field) => {

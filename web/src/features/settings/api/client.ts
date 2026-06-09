@@ -3,7 +3,9 @@ import {
   AccessSettingsResponse,
   DetectionSettingsResponse,
   EnforcementSettingsResponse,
-  SettingsSectionUpdatePayload
+  SettingsSectionUpdatePayload,
+  ConfigHealthResponse,
+  AsnLookupResponse
 } from "../../../shared/api/types";
 
 export const settingsApi = {
@@ -30,5 +32,14 @@ export const settingsApi = {
     request<EnforcementSettingsResponse>("/admin/settings/enforcement", {
       method: "PUT",
       body: JSON.stringify(payload)
-    })
+    }),
+  getConfigHealth: () => request<ConfigHealthResponse>("/admin/settings/config-health"),
+  asnLookup: (ip: string, force?: boolean) =>
+    request<AsnLookupResponse>("/admin/tools/asn-lookup", {
+      method: "POST",
+      body: JSON.stringify({ ip, force: force ?? false })
+    }),
+  getRemnawaveInbounds: () =>
+    request<{ inbounds: Array<Record<string, any>>; available: boolean }>("/admin/tools/remnawave-inbounds")
 };
+

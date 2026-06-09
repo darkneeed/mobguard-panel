@@ -19,9 +19,19 @@ from ..schemas.reviews import RulesUpdateRequest
 from ..schemas.settings import SettingsSectionUpdateRequest
 from ..services.admin_audit import record_admin_action
 from ..services import settings as settings_service
+from ..services import config_health as config_health_service
 
 
 router = APIRouter(prefix="/admin/settings", tags=["settings"])
+
+
+@router.get("/config-health")
+def get_config_health_endpoint(
+    _: dict[str, Any] = Depends(require_permission(PERMISSION_RULES_READ)),
+    container=Depends(get_container),
+) -> dict[str, Any]:
+    return config_health_service.get_config_health(container)
+
 
 
 @router.get("/detection")

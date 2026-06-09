@@ -365,6 +365,23 @@ class RemnawaveClient:
         )
         return result
 
+    def get_inbounds(self) -> list[dict[str, Any]]:
+        if not self.enabled:
+            self.last_error = "Panel client is disabled"
+            return []
+        self.last_error = None
+        payload = self._request("GET", "/api/config-profiles/inbounds")
+        if not payload:
+            return []
+        response = payload.get("response", payload)
+        if isinstance(response, dict):
+            inbounds = response.get("inbounds", [])
+            if isinstance(inbounds, list):
+                return [item for item in inbounds if isinstance(item, dict)]
+        elif isinstance(response, list):
+            return [item for item in response if isinstance(item, dict)]
+        return []
+
     def get_system_stats(self) -> Optional[dict[str, Any]]:
         if not self.enabled:
             self.last_error = "Panel client is disabled"

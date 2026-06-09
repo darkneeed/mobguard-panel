@@ -21,6 +21,7 @@ import {
   Session,
 } from "../api/client";
 import { prefetchRouteModule } from "../app/routeModules";
+import { ConfigHealthWidget } from "../components/ConfigHealthWidget";
 import { useI18n } from "../localization";
 import {
   automationGuardrailLabels,
@@ -399,6 +400,8 @@ export function OverviewPage({ session: _session }: { session?: Session }) {
           </div>
         </div>
       ) : null}
+
+      {!loading ? <ConfigHealthWidget /> : null}
 
       <div className="dashboard-grid dashboard-grid-hero overview-split-grid">
         <div className="panel panel-hero">

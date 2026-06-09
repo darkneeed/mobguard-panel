@@ -17,7 +17,9 @@ from .routers.metrics import router as metrics_router
 from .routers.modules import router as modules_router
 from .routers.reviews import router as reviews_router
 from .routers.settings import router as settings_router
+from .routers.tools import router as tools_router
 from .services.db_maintenance import db_maintenance_loop
+
 from .services.ingest_pipeline import enforcement_dispatcher_loop, ingest_worker_loop
 from .services.reviews import run_startup_auto_recheck
 from .services.telegram_notifier import TelegramNotifier
@@ -70,6 +72,7 @@ def create_app() -> FastAPI:
     app.include_router(auth_router)
     app.include_router(reviews_router)
     app.include_router(settings_router)
+    app.include_router(tools_router)
     app.include_router(data_admin_router)
     app.include_router(decisions_router)
     app.include_router(metrics_router)

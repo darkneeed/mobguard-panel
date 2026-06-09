@@ -62,7 +62,10 @@ export type {
   UserCardResponse,
   UserSearchResponse,
   UsageProfile,
-  ViolationsResponse
+  ViolationsResponse,
+  ConfigHealthCheck,
+  ConfigHealthResponse,
+  AsnLookupResponse
 } from "../shared/api/types";
 
 export const api = {

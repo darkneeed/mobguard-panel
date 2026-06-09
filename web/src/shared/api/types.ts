@@ -771,3 +771,29 @@ export type HealthSnapshot = {
     asn_missing_ratio: number;
   };
 };
+
+export type ConfigHealthCheck = {
+  key: string;
+  status: "ok" | "warn" | "error";
+  label: string;
+  detail: string;
+  link: string;
+};
+
+export type ConfigHealthResponse = {
+  checks: ConfigHealthCheck[];
+};
+
+export type AsnLookupResponse = {
+  ip: string;
+  asn: number | null;
+  isp: string | null;
+  country: string | null;
+  is_mobile: boolean | null;
+  network_type: "mobile" | "home" | "datacenter" | "unknown";
+  sources_count: number;
+  in_lists: Record<string, boolean>;
+  cached: boolean;
+  cached_at: string | null;
+};
+

@@ -11,6 +11,7 @@ import {
   ModuleRecord,
   Session,
 } from "../api/client";
+import { settingsApi } from "../features/settings/api/client";
 import { ModalShell } from "../components/ModalShell";
 import { useToast } from "../components/ToastProvider";
 import { useI18n } from "../localization";
@@ -180,6 +181,12 @@ export function ModulesPage({ session }: { session?: Session }) {
   const [loadingLogs, setLoadingLogs] = useState(false);
   const [togglingModuleId, setTogglingModuleId] = useState("");
   const [revealingToken, setRevealingToken] = useState(false);
+  
+  const [loadingInbounds, setLoadingInbounds] = useState(false);
+  const [inboundsError, setInboundsError] = useState("");
+  const [availableInbounds, setAvailableInbounds] = useState<any[]>([]);
+  const [showInboundPicker, setShowInboundPicker] = useState(false);
+  const [selectedInboundTags, setSelectedInboundTags] = useState<string[]>([]);
 
   const activeModule = modalMode === "detail" ? (detail?.module ?? null) : null;
   const draftDirty = useMemo(
@@ -292,6 +299,8 @@ export function ModulesPage({ session }: { session?: Session }) {
     setRevealedToken("");
     setPanelError("");
     setSaved("");
+    setShowInboundPicker(false);
+    setInboundsError("");
   }
 
   function closeModal() {
@@ -299,7 +308,58 @@ export function ModulesPage({ session }: { session?: Session }) {
     setPanelError("");
     setSaved("");
     setRevealedToken("");
+    setShowInboundPicker(false);
+    setInboundsError("");
   }
+
+  async function loadRemnawaveInbounds() {
+    setLoadingInbounds(true);
+    setInboundsError("");
+    try {
+      const response = await settingsApi.getRemnawaveInbounds();
+      if (response.available) {
+        setAvailableInbounds(response.inbounds || []);
+        setShowInboundPicker(true);
+        const currentTags = draft.inbound_tags
+          .split(/\r?\n|,/)
+          .map((item) => item.trim())
+          .filter(Boolean);
+        setSelectedInboundTags(currentTags);
+      } else {
+        setInboundsError("Remnawave не настроен или нет доступных инбаундов");
+      }
+    } catch (err) {
+      setInboundsError(err instanceof Error ? err.message : "Не удалось загрузить инбаунды");
+    } finally {
+      setLoadingInbounds(false);
+    }
+  }
+
+  function handleToggleInboundTag(tag: string) {
+    setSelectedInboundTags((prev) =>
+      prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
+    );
+  }
+
+  function applySelectedInbounds() {
+    setDraft((prev) => {
+      const currentTags = prev.inbound_tags
+        .split(/\r?\n|,/)
+        .map((item) => item.trim())
+        .filter(Boolean);
+      const nextTags = Array.from(new Set([...currentTags, ...selectedInboundTags]));
+      return {
+        ...prev,
+        inbound_tags: nextTags.join("\n"),
+      };
+    });
+    setShowInboundPicker(false);
+  }
+
+  const uniqueInboundTags = useMemo(() => {
+    const tags = availableInbounds.map((item) => item.tag).filter(Boolean);
+    return Array.from(new Set(tags));
+  }, [availableInbounds]);
 
   async function saveModule() {
     setSubmitting(true);
@@ -831,6 +891,86 @@ export function ModulesPage({ session }: { session?: Session }) {
                     }))
                   }
                 />
+                
+                <div style={{ marginTop: "0.5rem" }}>
+                  <button
+                    type="button"
+                    className="button secondary"
+                    onClick={loadRemnawaveInbounds}
+                    disabled={loadingInbounds}
+                    style={{ fontSize: "0.85rem", padding: "0.4rem 0.8rem", display: "inline-flex", alignItems: "center", gap: "0.3rem" }}
+                  >
+                    {loadingInbounds ? <Loader2 size={14} className="spinner" /> : "📥 Выбрать из Remnawave"}
+                  </button>
+                  
+                  {inboundsError && (
+                    <div className="error-box" style={{ marginTop: "0.5rem", padding: "0.5rem 0.75rem", fontSize: "0.85rem" }}>
+                      {inboundsError}
+                    </div>
+                  )}
+
+                  {showInboundPicker && uniqueInboundTags.length > 0 && (
+                    <div style={{
+                      marginTop: "0.75rem",
+                      padding: "0.75rem",
+                      border: "1px solid var(--line)",
+                      borderRadius: "6px",
+                      background: "var(--surface-soft, rgba(255,255,255,0.02))"
+                    }}>
+                      <span style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--muted)", display: "block", marginBottom: "0.5rem" }}>
+                        Доступные инбаунды Remnawave:
+                      </span>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem", marginBottom: "0.75rem" }}>
+                        {uniqueInboundTags.map((tag) => {
+                          const isSelected = selectedInboundTags.includes(tag);
+                          return (
+                            <label
+                              key={tag}
+                              style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: "0.35rem",
+                                padding: "0.25rem 0.6rem",
+                                borderRadius: "4px",
+                                background: isSelected ? "var(--accent-soft, rgba(59,130,246,0.1))" : "var(--surface-strong, rgba(0,0,0,0.1))",
+                                border: isSelected ? "1px solid var(--accent)" : "1px solid var(--line)",
+                                cursor: "pointer",
+                                fontSize: "0.8rem",
+                                userSelect: "none"
+                              }}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={() => handleToggleInboundTag(tag)}
+                                style={{ margin: 0 }}
+                              />
+                              <span>{tag}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                      <div style={{ display: "flex", gap: "0.5rem" }}>
+                        <button
+                          type="button"
+                          className="button primary"
+                          onClick={applySelectedInbounds}
+                          style={{ fontSize: "0.8rem", padding: "0.35rem 0.75rem" }}
+                        >
+                          Добавить выбранные
+                        </button>
+                        <button
+                          type="button"
+                          className="button ghost"
+                          onClick={() => setShowInboundPicker(false)}
+                          style={{ fontSize: "0.8rem", padding: "0.35rem 0.75rem" }}
+                        >
+                          Отмена
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </div>
