@@ -25,34 +25,102 @@ def get_remnawave_inbounds(
         return {"inbounds": [], "available": False}
         
     if module_name:
-        module_name_clean = module_name.strip().lower()
-        if module_name_clean:
-            try:
+        try:
+            def normalize_str(s) -> str:
+                if not s:
+                    return ""
+                if isinstance(s, dict):
+                    s = s.get("tag") or s.get("name") or s.get("uuid") or ""
+                s = str(s).strip().lower()
+                homoglyphs = {
+                    'а': 'a', 'в': 'v', 'е': 'e', 'ё': 'e', 'ж': 'zh', 'з': 'z', 'и': 'i', 'й': 'i',
+                    'к': 'k', 'л': 'l', 'м': 'm', 'н': 'n', 'о': 'o', 'п': 'p', 'р': 'r', 'с': 's',
+                    'т': 't', 'у': 'u', 'ф': 'f', 'х': 'x', 'ц': 'c', 'ч': 'ch', 'ш': 'sh', 'щ': 'shch',
+                    'ы': 'y', 'э': 'e', 'ю': 'yu', 'я': 'ya', 'ь': '', 'ъ': ''
+                }
+                res = []
+                for char in s:
+                    res.append(homoglyphs.get(char, char))
+                return "".join(res)
+
+            def get_tokens(s: str) -> set[str]:
+                import re
+                norm = normalize_str(s)
+                return set(re.findall(r'[a-z0-9]+', norm))
+
+            module_name_clean = normalize_str(module_name)
+            module_tokens = get_tokens(module_name)
+            
+            if module_name_clean:
                 profiles_payload = client._request("GET", "/api/config-profiles")
                 if profiles_payload:
                     response_part = profiles_payload.get("response", profiles_payload)
                     profiles = response_part.get("configProfiles", response_part) if isinstance(response_part, dict) else []
                     
-                    matching_uuid = None
+                    profile_scores = []
                     for p in profiles:
-                        p_name = str(p.get("name") or "").strip().lower()
-                        if module_name_clean == p_name or p_name in module_name_clean or module_name_clean in p_name:
-                            matching_uuid = p.get("uuid")
-                            break
-                        for n in p.get("nodes", []):
-                            n_name = str(n.get("name") or "").strip().lower()
-                            if module_name_clean == n_name or n_name in module_name_clean or module_name_clean in n_name:
-                                matching_uuid = p.get("uuid")
-                                break
-                        if matching_uuid:
-                            break
+                        p_uuid = p.get("uuid")
+                        if not p_uuid:
+                            continue
+                        p_name = p.get("name") or ""
+                        p_name_norm = normalize_str(p_name)
+                        p_tokens = get_tokens(p_name)
+                        
+                        score = 0
+                        
+                        # Profile name matching
+                        if p_name_norm == module_name_clean:
+                            score += 100
+                        elif p_name_norm in module_name_clean:
+                            score += 50
+                        elif module_name_clean in p_name_norm:
+                            score += 50
                             
-                    if matching_uuid:
+                        p_overlap = p_tokens.intersection(module_tokens)
+                        score += 10 * len(p_overlap)
+                        
+                        # Nodes matching
+                        for n in p.get("nodes", []):
+                            n_name = n.get("name") or ""
+                            n_name_norm = normalize_str(n_name)
+                            n_tokens = get_tokens(n_name)
+                            
+                            if n_name_norm == module_name_clean:
+                                score += 80
+                            elif n_name_norm in module_name_clean:
+                                score += 40
+                            elif module_name_clean in n_name_norm:
+                                score += 40
+                                
+                            n_overlap = n_tokens.intersection(module_tokens)
+                            score += 8 * len(n_overlap)
+                            
+                        # Inbound tags matching
+                        for tag in p.get("inbounds", []):
+                            tag_norm = normalize_str(tag)
+                            tag_tokens = get_tokens(tag)
+                            
+                            if tag_norm == module_name_clean:
+                                score += 60
+                            elif tag_norm in module_name_clean:
+                                score += 30
+                            elif module_name_clean in tag_norm:
+                                score += 30
+                                
+                            tag_overlap = tag_tokens.intersection(module_tokens)
+                            score += 5 * len(tag_overlap)
+                            
+                        if score > 0:
+                            profile_scores.append((score, p_uuid))
+                            
+                    if profile_scores:
+                        profile_scores.sort(key=lambda x: x[0], reverse=True)
+                        matching_uuid = profile_scores[0][1]
                         filtered = [item for item in inbounds if item.get("profileUuid") == matching_uuid]
                         if filtered:
                             inbounds = filtered
-            except Exception:
-                pass
+        except Exception:
+            pass
                 
     return {"inbounds": inbounds, "available": bool(inbounds)}
 
