@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from mobguard_platform import PlatformStore, load_runtime_context
+from mobguard_platform import load_runtime_context
 
 def _utcnow() -> str:
     return datetime.utcnow().replace(microsecond=0).isoformat()
@@ -36,9 +36,12 @@ def send_telegram_alert(token: str, chat_id: str, text: str) -> None:
         print(f"Failed to send Telegram notification: {e}")
 
 def run_ai_audit() -> None:
+    from mobguard_platform.storage.factory import build_storage_bundle
+
     root_dir = Path(__file__).resolve().parents[1]
     runtime = load_runtime_context(root_dir, os.getenv("BAN_SYSTEM_DIR"))
-    store = PlatformStore(runtime.db_path, runtime.config, str(runtime.config_path))
+    storage_bundle = build_storage_bundle(runtime)
+    store = storage_bundle.store
     
     # 1. Load Gemini configurations
     settings = runtime.config.get("settings", {})
