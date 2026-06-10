@@ -44,7 +44,22 @@ export const settingsApi = {
       moduleName
         ? `/admin/tools/remnawave-inbounds?module_name=${encodeURIComponent(moduleName)}`
         : "/admin/tools/remnawave-inbounds"
-    )
+    ),
+  aiOptimize: () =>
+    request<{
+      configured: boolean;
+      error?: string;
+      suggestions: Array<{
+        field_key: string;
+        current_value: number;
+        proposed_value: number;
+        reasoning_ru: string;
+        estimated_impact_percent: number;
+      }>;
+      overall_summary: string;
+    }>("/admin/settings/ai-optimize", {
+      method: "POST"
+    })
 
 };
 

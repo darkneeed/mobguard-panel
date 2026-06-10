@@ -44,6 +44,8 @@ export type BrandingConfig = {
   bedolaga_api_url?: string;
   bedolaga_api_token?: string;
   bedolaga_timeout_seconds?: number;
+  gemini_api_key?: string;
+  gemini_model_name?: string;
 };
 
 export type OwnerSecurityStatus = {
@@ -311,6 +313,7 @@ export type RulesState = {
   revision: number;
   updated_at: string;
   updated_by: string;
+  gemini_configured?: boolean;
 };
 
 export type ReviewListParams = Record<string, string | number | boolean | undefined>;

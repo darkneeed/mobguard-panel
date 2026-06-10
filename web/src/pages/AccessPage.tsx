@@ -67,6 +67,10 @@ export function AccessPage({
   const [savedBedolagaApiToken, setSavedBedolagaApiToken] = useState("");
   const [bedolagaTimeoutDraft, setBedolagaTimeoutDraft] = useState(12);
   const [savedBedolagaTimeout, setSavedBedolagaTimeout] = useState(12);
+  const [geminiApiKeyDraft, setGeminiApiKeyDraft] = useState("");
+  const [savedGeminiApiKey, setSavedGeminiApiKey] = useState("");
+  const [geminiModelNameDraft, setGeminiModelNameDraft] = useState("gemini-1.5-flash");
+  const [savedGeminiModelName, setSavedGeminiModelName] = useState("gemini-1.5-flash");
   const [envDraft, setEnvDraft] = useState<Record<string, string>>({});
   const [error, setError] = useState("");
   const [saved, setSaved] = useState("");
@@ -113,6 +117,10 @@ export function AccessPage({
         setSavedBedolagaApiToken(payload.settings.bedolaga_api_token || "");
         setBedolagaTimeoutDraft(payload.settings.bedolaga_timeout_seconds ?? 12);
         setSavedBedolagaTimeout(payload.settings.bedolaga_timeout_seconds ?? 12);
+        setGeminiApiKeyDraft(payload.settings.gemini_api_key || "");
+        setSavedGeminiApiKey(payload.settings.gemini_api_key || "");
+        setGeminiModelNameDraft(payload.settings.gemini_model_name || "gemini-1.5-flash");
+        setSavedGeminiModelName(payload.settings.gemini_model_name || "gemini-1.5-flash");
         setEnvDraft(buildInitialEnvDraft(payload.env));
       })
       .catch((err: Error) => setError(err.message || t("access.loadFailed")));
@@ -135,7 +143,13 @@ export function AccessPage({
       || bedolagaTimeoutDraft !== savedBedolagaTimeout,
     [bedolagaApiUrlDraft, savedBedolagaApiUrl, bedolagaApiTokenDraft, savedBedolagaApiToken, bedolagaTimeoutDraft, savedBedolagaTimeout],
   );
-  const integrationDirty = remnawaveDirty || bedolagaDirty;
+  const geminiDirty = useMemo(
+    () =>
+      geminiApiKeyDraft !== savedGeminiApiKey
+      || geminiModelNameDraft !== savedGeminiModelName,
+    [geminiApiKeyDraft, savedGeminiApiKey, geminiModelNameDraft, savedGeminiModelName],
+  );
+  const integrationDirty = remnawaveDirty || bedolagaDirty || geminiDirty;
   const listDirty = useMemo(
     () => JSON.stringify(lists) !== JSON.stringify(savedLists),
     [lists, savedLists],
@@ -248,6 +262,8 @@ export function AccessPage({
           bedolaga_api_url: bedolagaApiUrlDraft.trim(),
           bedolaga_api_token: bedolagaApiTokenDraft.trim(),
           bedolaga_timeout_seconds: Number(bedolagaTimeoutDraft),
+          gemini_api_key: geminiApiKeyDraft.trim(),
+          gemini_model_name: geminiModelNameDraft.trim(),
         },
       });
       setData(response);
@@ -261,6 +277,10 @@ export function AccessPage({
       setSavedBedolagaApiToken(response.settings.bedolaga_api_token || "");
       setBedolagaTimeoutDraft(response.settings.bedolaga_timeout_seconds ?? 12);
       setSavedBedolagaTimeout(response.settings.bedolaga_timeout_seconds ?? 12);
+      setGeminiApiKeyDraft(response.settings.gemini_api_key || "");
+      setSavedGeminiApiKey(response.settings.gemini_api_key || "");
+      setGeminiModelNameDraft(response.settings.gemini_model_name || "gemini-1.5-flash");
+      setSavedGeminiModelName(response.settings.gemini_model_name || "gemini-1.5-flash");
       onBrandingChange(response.settings);
       setIntegrationSaved(t("access.integrationSaved"));
       setError("");
@@ -626,6 +646,32 @@ export function AccessPage({
                         aria-label={t("access.integrationFields.bedolagaTimeout")}
                         value={bedolagaTimeoutDraft}
                         onChange={(event) => setBedolagaTimeoutDraft(Number(event.target.value))}
+                      />
+                    </div>
+                    <div className="rule-field">
+                      <FieldLabel
+                        label={t("access.integrationFields.geminiApiKey")}
+                        description={t("access.integrationFields.geminiApiKeyDescription")}
+                      />
+                      <input
+                        type="password"
+                        aria-label={t("access.integrationFields.geminiApiKey")}
+                        placeholder={t("common.leaveBlankToKeep")}
+                        value={geminiApiKeyDraft}
+                        onChange={(event) => setGeminiApiKeyDraft(event.target.value)}
+                      />
+                    </div>
+                    <div className="rule-field">
+                      <FieldLabel
+                        label={t("access.integrationFields.geminiModelName")}
+                        description={t("access.integrationFields.geminiModelNameDescription")}
+                      />
+                      <input
+                        type="text"
+                        aria-label={t("access.integrationFields.geminiModelName")}
+                        placeholder="gemini-1.5-flash"
+                        value={geminiModelNameDraft}
+                        onChange={(event) => setGeminiModelNameDraft(event.target.value)}
                       />
                     </div>
                   </div>

@@ -38,6 +38,8 @@ ACCESS_RUNTIME_SETTINGS_DEFAULTS = {
     "bedolaga_api_url": "",
     "bedolaga_api_token": "",
     "bedolaga_timeout_seconds": 12,
+    "gemini_api_key": "",
+    "gemini_model_name": "gemini-1.5-flash",
 }
 
 TELEGRAM_TOPIC_SETTINGS_TO_EVENT = {
@@ -124,11 +126,15 @@ def _notify_applied_runtime_change_if_embedded(
 
 def get_detection_settings(container: APIContainer) -> dict[str, Any]:
     state = container.store.get_live_rules_state()
+    runtime_config = load_runtime_config(container)
+    runtime_settings = runtime_config.get("settings", {})
+    gemini_key = runtime_settings.get("gemini_api_key", "").strip()
     return {
         "revision": state["revision"],
         "updated_at": state["updated_at"],
         "updated_by": state["updated_by"],
         "rules": state["rules"],
+        "gemini_configured": bool(gemini_key),
     }
 
 

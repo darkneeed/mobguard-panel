@@ -20,6 +20,7 @@ from ..schemas.settings import SettingsSectionUpdateRequest
 from ..services.admin_audit import record_admin_action
 from ..services import settings as settings_service
 from ..services import config_health as config_health_service
+from ..services import ai_optimizer as ai_optimizer_service
 
 
 router = APIRouter(prefix="/admin/settings", tags=["settings"])
@@ -150,3 +151,11 @@ def put_enforcement_settings(
         details={"has_settings": bool(payload.settings)},
     )
     return result
+
+
+@router.post("/ai-optimize")
+def post_ai_optimize(
+    session: dict[str, Any] = Depends(require_permission(PERMISSION_RULES_READ)),
+    container=Depends(get_container),
+) -> dict[str, Any]:
+    return ai_optimizer_service.generate_gemini_recommendations(container)

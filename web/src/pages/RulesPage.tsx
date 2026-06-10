@@ -155,6 +155,7 @@ const RULES_SECTIONS = [
   "lists",
   "providers",
   "learning",
+  "ai-optimizer",
   "retention",
 ] as const;
 type RulesSection = (typeof RULES_SECTIONS)[number];
@@ -205,9 +206,23 @@ export function RulesPage() {
   const [serverAutomationStatus, setServerAutomationStatus] =
     useState<AutomationStatus | null>(null);
 
-  const [aiOptimizationEnabled, setAiOptimizationEnabled] = useState(true);
+  const [aiOptimizerLoading, setAiOptimizerLoading] = useState(false);
+  const [aiOptimizerResult, setAiOptimizerResult] = useState<{
+    configured: boolean;
+    error?: string;
+    suggestions: Array<{
+      field_key: string;
+      current_value: number;
+      proposed_value: number;
+      reasoning_ru: string;
+      estimated_impact_percent: number;
+    }>;
+    overall_summary: string;
+  } | null>(null);
+  const [aiOptimizerError, setAiOptimizerError] = useState("");
+  const [editingSuggestionKey, setEditingSuggestionKey] = useState<string | null>(null);
+  const [editingSuggestionValue, setEditingSuggestionValue] = useState<string>("");
   const [aiProposalApplied, setAiProposalApplied] = useState(false);
-  const [aiProposalDismissed, setAiProposalDismissed] = useState(false);
 
   useEffect(() => {
     if (section && RULES_SECTIONS.includes(section as RulesSection)) {
@@ -654,10 +669,11 @@ export function RulesPage() {
   }
 
   function renderRulesSaveBar() {
+    const labelKey = activeSection === "ai-optimizer" ? "layout.subnav.rules.aiOptimizer" : `layout.subnav.rules.${activeSection}`;
     return (
       <div className="panel compact-toolbar">
         <div className="compact-toolbar-main">
-          <strong>{t(`layout.subnav.rules.${activeSection}`)}</strong>
+          <strong>{t(labelKey as any)}</strong>
           <span className="muted">{t("rules.settingSectionDescription")}</span>
         </div>
         <div className="action-row">
@@ -1441,116 +1457,256 @@ export function RulesPage() {
   }
 
   function renderAiOptimizationPanel() {
-    if (aiProposalDismissed) return null;
+    const isConfigured = state?.gemini_configured ?? false;
 
-    const applyAiProposal = () => {
+    const runAiOptimize = async () => {
+      setAiOptimizerLoading(true);
+      setAiOptimizerError("");
+      setAiProposalApplied(false);
+      try {
+        const res = await api.aiOptimize();
+        setAiOptimizerResult(res);
+        if (res.error) {
+          setAiOptimizerError(res.error);
+        }
+      } catch (err) {
+        setAiOptimizerError(err instanceof Error ? err.message : String(err));
+      } finally {
+        setAiOptimizerLoading(false);
+      }
+    };
+
+    const acceptSuggestion = (fieldKey: string, value: number) => {
       setDraft((prev) => {
         if (!prev) return null;
         return {
           ...prev,
           settings: {
             ...(prev.settings || {}),
-            threshold_mobile: 65,
-            pure_asn_score: 70,
-            lifetime_stationary_hours: 72,
+            [fieldKey]: value,
           }
+        };
+      });
+      setAiOptimizerResult((prev) => {
+        if (!prev) return null;
+        return {
+          ...prev,
+          suggestions: prev.suggestions.filter((s) => s.field_key !== fieldKey),
         };
       });
       setAiProposalApplied(true);
     };
 
+    const rejectSuggestion = (fieldKey: string) => {
+      setAiOptimizerResult((prev) => {
+        if (!prev) return null;
+        return {
+          ...prev,
+          suggestions: prev.suggestions.filter((s) => s.field_key !== fieldKey),
+        };
+      });
+    };
+
+    const startEdit = (fieldKey: string, val: number) => {
+      setEditingSuggestionKey(fieldKey);
+      setEditingSuggestionValue(String(val));
+    };
+
+    const saveEdit = (fieldKey: string) => {
+      const numeric = Number(editingSuggestionValue);
+      if (isNaN(numeric)) return;
+      setAiOptimizerResult((prev) => {
+        if (!prev) return null;
+        return {
+          ...prev,
+          suggestions: prev.suggestions.map((s) => {
+            if (s.field_key === fieldKey) {
+              return { ...s, proposed_value: numeric };
+            }
+            return s;
+          }),
+        };
+      });
+      setEditingSuggestionKey(null);
+    };
+
+    if (!isConfigured) {
+      return (
+        <div className="panel" style={{ display: "flex", flexDirection: "column", gap: "1rem", border: "1px solid var(--warning-soft)", background: "var(--bg-panel)", padding: "1.5rem" }}>
+          <div style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem", padding: "0.25rem 0.6rem", borderRadius: "99px", background: "var(--warning-soft)", color: "var(--warning)", fontSize: "0.75rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", width: "fit-content" }}>
+            <span>⚠️</span> {t("rules.aiOptimizer.unconfiguredTitle")}
+          </div>
+          <h2 style={{ fontSize: "1.2rem", fontWeight: 700, margin: 0 }}>{t("rules.aiOptimizer.title")}</h2>
+          <p className="muted" style={{ margin: 0, fontSize: "0.88rem", lineHeight: "1.45" }}>
+            {t("rules.aiOptimizer.unconfiguredDesc")}
+          </p>
+          <button 
+            onClick={() => navigate("/system/access")}
+            className="small-button" 
+            style={{ width: "fit-content", background: "var(--accent)", color: "#fff", border: 0, cursor: "pointer", padding: "0.5rem 1rem", borderRadius: "var(--radius-md)", fontWeight: "600", marginTop: "0.5rem" }}
+          >
+            {t("rules.aiOptimizer.goToSettings")}
+          </button>
+        </div>
+      );
+    }
+
     return (
-      <div className="panel" style={{ display: "flex", flexDirection: "column", gap: "1rem", border: "1px solid var(--accent-soft)", background: "linear-gradient(180deg, var(--bg-panel) 0%, rgba(59, 130, 246, 0.02) 100%)" }}>
+      <div className="panel" style={{ display: "flex", flexDirection: "column", gap: "1rem", border: "1px solid var(--accent-soft)", background: "linear-gradient(180deg, var(--bg-panel) 0%, rgba(59, 130, 246, 0.02) 100%)", padding: "1.5rem" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
           <div>
             <div style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem", padding: "0.25rem 0.6rem", borderRadius: "99px", background: "var(--accent-soft)", color: "var(--accent)", fontSize: "0.75rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "0.5rem" }}>
-              <span>🤖</span> AI Оптимизация
+              <span>🤖</span> AI Optimizer
             </div>
-            <h2 style={{ fontSize: "1.2rem", fontWeight: 700, margin: 0 }}>Умная настройка порогов</h2>
-            <p className="muted" style={{ margin: "0.25rem 0 0 0", fontSize: "0.85rem" }}>Автоматический анализ трафика и адаптация лимитов под поведение пользователей.</p>
+            <h2 style={{ fontSize: "1.2rem", fontWeight: 700, margin: 0 }}>{t("rules.aiOptimizer.title")}</h2>
+            <p className="muted" style={{ margin: "0.25rem 0 0 0", fontSize: "0.85rem" }}>
+              Интеллектуальная оптимизация пороговых настроек на основе логов с помощью Gemini.
+            </p>
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-            <span style={{ fontSize: "0.82rem", color: "var(--muted)" }}>Включить автоматическую оптимизацию</span>
-            <input 
-              type="checkbox" 
-              checked={aiOptimizationEnabled} 
-              onChange={(e) => setAiOptimizationEnabled(e.target.checked)} 
-              style={{ width: "16px", height: "16px", cursor: "pointer" }}
-            />
-          </div>
+          {!aiOptimizerLoading && (
+            <button 
+              onClick={runAiOptimize}
+              className="small-button" 
+              style={{ background: "var(--accent)", color: "#fff", border: 0, cursor: "pointer", padding: "0.5rem 1rem", borderRadius: "var(--radius-md)", fontWeight: "600" }}
+            >
+              {t("rules.aiOptimizer.generateButton")}
+            </button>
+          )}
         </div>
 
-        {aiOptimizationEnabled && !aiProposalApplied && (
-          <div style={{ marginTop: "0.5rem", padding: "1rem", borderRadius: "10px", border: "1px dashed rgba(59, 130, 246, 0.3)", background: "rgba(59, 130, 246, 0.02)" }}>
-            <p style={{ margin: "0 0 0.75rem 0", fontSize: "0.88rem", lineHeight: "1.45" }}>
-              Нейросеть проанализировала <strong>142 508 событий</strong> за последние 24 часа. Для снижения ложноположительных срабатываний на <strong>14%</strong> рекомендуется изменить следующие параметры:
-            </p>
-            <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem", marginBottom: "1rem" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "0.5rem 0.75rem", background: "var(--surface-soft)", borderRadius: "6px", fontSize: "0.85rem" }}>
-                <div>
-                  <strong style={{ color: "var(--ink)" }}>Порог решения для мобильного доступа</strong>
-                  <div style={{ color: "var(--muted)", fontSize: "0.75rem", marginTop: "0.15rem" }}>Высокая концентрация пограничных сессий на мобильных операторах Tele2/MTS</div>
-                </div>
-                <div>
-                  <span style={{ textDecoration: "line-through", color: "var(--muted)" }}>60</span>
-                  <span style={{ margin: "0 0.5rem", color: "var(--accent)" }}>➔</span>
-                  <strong style={{ color: "var(--success)" }}>65</strong>
-                </div>
-              </div>
+        {aiOptimizerLoading && (
+          <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", padding: "1.5rem", background: "var(--surface-soft)", borderRadius: "8px", justifyContent: "center" }}>
+            <Loader2 className="spinner" size={20} style={{ color: "var(--accent)" }} />
+            <span style={{ fontSize: "0.88rem", color: "var(--muted)", fontWeight: 500 }}>
+              {t("rules.aiOptimizer.generating")}
+            </span>
+          </div>
+        )}
 
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "0.5rem 0.75rem", background: "var(--surface-soft)", borderRadius: "6px", fontSize: "0.85rem" }}>
-                <div>
-                  <strong style={{ color: "var(--ink)" }}>Бонус за чисто мобильный ASN</strong>
-                  <div style={{ color: "var(--muted)", fontSize: "0.75rem", marginTop: "0.15rem" }}>Улучшение определенности мобильного трафика по новым подсетям</div>
-                </div>
-                <div>
-                  <span style={{ textDecoration: "line-through", color: "var(--muted)" }}>60</span>
-                  <span style={{ margin: "0 0.5rem", color: "var(--accent)" }}>➔</span>
-                  <strong style={{ color: "var(--success)" }}>70</strong>
-                </div>
-              </div>
-
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "0.5rem 0.75rem", background: "var(--surface-soft)", borderRadius: "6px", fontSize: "0.85rem" }}>
-                <div>
-                  <strong style={{ color: "var(--ink)" }}>Порог стационарности (часы)</strong>
-                  <div style={{ color: "var(--muted)", fontSize: "0.75rem", marginTop: "0.15rem" }}>Адаптация под более быструю смену IP у домашних абонентов</div>
-                </div>
-                <div>
-                  <span style={{ textDecoration: "line-through", color: "var(--muted)" }}>96</span>
-                  <span style={{ margin: "0 0.5rem", color: "var(--accent)" }}>➔</span>
-                  <strong style={{ color: "var(--success)" }}>72</strong>
-                </div>
-              </div>
-            </div>
-
-            <div style={{ display: "flex", gap: "0.75rem" }}>
-              <button 
-                onClick={applyAiProposal}
-                className="small-button" 
-                style={{ background: "var(--accent)", color: "#fff", border: 0, cursor: "pointer", padding: "0.5rem 1rem", borderRadius: "var(--radius-md)", fontWeight: "600" }}
-              >
-                Принять рекомендации
-              </button>
-              <button 
-                onClick={() => setAiProposalDismissed(true)}
-                className="small-button ghost" 
-                style={{ border: "1px solid var(--line)", cursor: "pointer", padding: "0.5rem 1rem", borderRadius: "var(--radius-md)", fontWeight: "600" }}
-              >
-                Отклонить
-              </button>
-            </div>
+        {aiOptimizerError && (
+          <div className="error-box" style={{ margin: 0 }}>
+            {aiOptimizerError}
           </div>
         )}
 
         {aiProposalApplied && (
           <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", padding: "0.75rem 1rem", borderRadius: "8px", background: "var(--success-soft)", border: "1px solid var(--success)", fontSize: "0.88rem", color: "var(--success)" }}>
-            <span>✓</span> Рекомендации AI применены к черновику правил. Нажмите кнопку «Сохранить правила» ниже для записи настроек.
+            <span>✓</span> {t("rules.aiOptimizer.saveChangesHint")}
           </div>
         )}
 
-        {aiOptimizationEnabled && !aiProposalApplied && (
-          <div style={{ fontSize: "0.75rem", color: "var(--muted)" }}>
-            Состояние: Включена ежедневная оптимизация. Следующий автоматический анализ через 14 часов.
+        {aiOptimizerResult && !aiOptimizerLoading && (
+          <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+            <div style={{ padding: "1rem", background: "var(--surface-soft)", borderRadius: "8px", border: "1px solid var(--line)" }}>
+              <strong style={{ fontSize: "0.85rem", textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--accent)", display: "block", marginBottom: "0.4rem" }}>
+                {t("rules.aiOptimizer.overallSummary")}
+              </strong>
+              <p style={{ margin: 0, fontSize: "0.9rem", lineHeight: "1.5" }}>
+                {aiOptimizerResult.overall_summary}
+              </p>
+            </div>
+
+            {aiOptimizerResult.suggestions && aiOptimizerResult.suggestions.length > 0 ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+                <h3 style={{ fontSize: "1rem", fontWeight: 700, margin: "0.5rem 0 0 0" }}>
+                  {t("rules.aiOptimizer.recommendationsTitle")}
+                </h3>
+                {aiOptimizerResult.suggestions.map((suggestion) => {
+                  const label = t(`rulesMeta.settingFields.${suggestion.field_key}.label` as any) || suggestion.field_key;
+                  const isEditing = editingSuggestionKey === suggestion.field_key;
+                  
+                  return (
+                    <div key={suggestion.field_key} style={{ display: "flex", flexDirection: "column", gap: "0.75rem", padding: "1rem", border: "1px solid var(--line)", borderRadius: "8px", background: "var(--bg-panel)" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "0.5rem" }}>
+                        <div>
+                          <strong style={{ color: "var(--ink)", fontSize: "0.95rem" }}>{label}</strong>
+                          <code style={{ fontSize: "0.75rem", color: "var(--muted)", display: "block", marginTop: "0.15rem" }}>
+                            {suggestion.field_key}
+                          </code>
+                        </div>
+                        <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", background: "var(--surface-soft)", padding: "0.35rem 0.75rem", borderRadius: "6px" }}>
+                          <span style={{ fontSize: "0.85rem", color: "var(--muted)" }}>
+                            {t("rules.aiOptimizer.currentValue")}: <strong>{suggestion.current_value}</strong>
+                          </span>
+                          <span style={{ color: "var(--muted)", fontSize: "0.85rem" }}>➔</span>
+                          <span style={{ fontSize: "0.85rem", color: "var(--success)" }}>
+                            {t("rules.aiOptimizer.proposedValue")}:{" "}
+                            {isEditing ? (
+                              <input 
+                                type="number" 
+                                value={editingSuggestionValue}
+                                onChange={(e) => setEditingSuggestionValue(e.target.value)}
+                                style={{ width: "60px", padding: "0.1rem 0.25rem", border: "1px solid var(--line)", borderRadius: "4px", fontSize: "0.85rem", background: "var(--bg-panel)", color: "var(--ink)", textAlign: "center" }}
+                              />
+                            ) : (
+                              <strong>{suggestion.proposed_value}</strong>
+                            )}
+                          </span>
+                          {suggestion.estimated_impact_percent > 0 && (
+                            <span className="tag status-resolved" style={{ fontSize: "0.75rem", padding: "0.15rem 0.4rem" }}>
+                              -{suggestion.estimated_impact_percent}% FP
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      
+                      <p style={{ margin: 0, fontSize: "0.85rem", color: "var(--ink)", lineHeight: "1.45" }}>
+                        <strong>{t("rules.aiOptimizer.reason")}:</strong> {suggestion.reasoning_ru}
+                      </p>
+
+                      <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.25rem" }}>
+                        {isEditing ? (
+                          <>
+                            <button 
+                              onClick={() => saveEdit(suggestion.field_key)}
+                              className="small-button"
+                              style={{ background: "var(--success)", color: "#fff", border: 0, cursor: "pointer", padding: "0.35rem 0.75rem", borderRadius: "4px", fontSize: "0.8rem", fontWeight: "600" }}
+                            >
+                              Применить
+                            </button>
+                            <button 
+                              onClick={() => setEditingSuggestionKey(null)}
+                              className="small-button ghost"
+                              style={{ border: "1px solid var(--line)", cursor: "pointer", padding: "0.35rem 0.75rem", borderRadius: "4px", fontSize: "0.8rem", fontWeight: "600" }}
+                            >
+                              Отмена
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <button 
+                              onClick={() => acceptSuggestion(suggestion.field_key, suggestion.proposed_value)}
+                              className="small-button"
+                              style={{ background: "var(--accent)", color: "#fff", border: 0, cursor: "pointer", padding: "0.35rem 0.75rem", borderRadius: "4px", fontSize: "0.8rem", fontWeight: "600" }}
+                            >
+                              {t("rules.aiOptimizer.accept")}
+                            </button>
+                            <button 
+                              onClick={() => startEdit(suggestion.field_key, suggestion.proposed_value)}
+                              className="small-button ghost"
+                              style={{ border: "1px solid var(--line)", cursor: "pointer", padding: "0.35rem 0.75rem", borderRadius: "4px", fontSize: "0.8rem", fontWeight: "600" }}
+                            >
+                              {t("rules.aiOptimizer.edit")}
+                            </button>
+                            <button 
+                              onClick={() => rejectSuggestion(suggestion.field_key)}
+                              className="small-button ghost"
+                              style={{ border: "1px solid var(--line)", cursor: "pointer", padding: "0.35rem 0.75rem", borderRadius: "4px", fontSize: "0.8rem", fontWeight: "600" }}
+                            >
+                              {t("rules.aiOptimizer.reject")}
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div style={{ padding: "1rem", background: "var(--surface-soft)", borderRadius: "8px", textAlign: "center", color: "var(--muted)", fontSize: "0.88rem" }}>
+                {t("rules.aiOptimizer.noSuggestions")}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -1564,7 +1720,6 @@ export function RulesPage() {
           <>
             {renderGeneralSaveBar()}
             {renderAutomationControlsPanel()}
-            {renderAiOptimizationPanel()}
             {renderPolicyPanel()}
             {renderGeneralPanel()}
           </>
@@ -1573,6 +1728,7 @@ export function RulesPage() {
     return (
       <>
         {renderRulesSaveBar()}
+        {activeSection === "ai-optimizer" ? renderAiOptimizationPanel() : null}
         {activeSection === "lists" ? renderListsPanels() : null}
         {activeSection === "providers" ? renderProvidersPanel() : null}
         {activeSection === "thresholds"

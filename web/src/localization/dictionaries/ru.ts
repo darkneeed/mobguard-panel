@@ -91,6 +91,7 @@ export const ruDictionary: TranslationDictionary = {
         providers: "Провайдеры",
         policy: "Политика",
         learning: "Обучение",
+        aiOptimizer: "AI Оптимизатор",
         retention: "Хранение",
       },
       data: {
@@ -781,6 +782,7 @@ export const ruDictionary: TranslationDictionary = {
       thresholds: "Пороги, скоринг и поведение",
       policy: "Политика детекта",
       learning: "Контроль обучения",
+      aiOptimizer: "AI Оптимизатор порогов",
       retention: "Сроки хранения данных",
     },
     sectionDescriptions: {
@@ -795,6 +797,8 @@ export const ruDictionary: TranslationDictionary = {
       policy:
         "Живая логика детекта и настройки применения ограничений.",
       learning: "Пороги, при которых обучение начинает считаться надёжным.",
+      aiOptimizer:
+        "Интеллектуальная оптимизация пороговых настроек на основе анализа логов трафика с помощью Gemini LLM.",
       retention:
         "Периоды хранения, которые ограничивают рост SQLite, не удаляя активные кейсы ревью.",
     },
@@ -857,6 +861,27 @@ export const ruDictionary: TranslationDictionary = {
       guardrailsLabel: "Какие ограничители включены",
       noModeReasons: "Флагов, ограничивающих режим, нет",
       noGuardrails: "Дополнительные ограничители не активны",
+    },
+    aiOptimizer: {
+      title: "Генеративный AI-оптимизатор правил",
+      unconfiguredTitle: "Ключ Gemini API не настроен",
+      unconfiguredDesc: "Для использования генеративной оптимизации правил вам необходимо указать ключ Gemini API в разделе настроек системы.",
+      goToSettings: "Перейти к настройкам системы",
+      generateButton: "Сгенерировать AI-рекомендации",
+      generating: "Анализируем лог трафика и генерируем рекомендации через Gemini...",
+      overallSummary: "Общее заключение AI",
+      recommendationsTitle: "Рекомендованные изменения",
+      fieldLabel: "Настройка",
+      currentValue: "Текущее",
+      proposedValue: "Рекомендуемое",
+      impact: "Эффект",
+      reason: "Обоснование",
+      accept: "Принять",
+      reject: "Отклонить",
+      edit: "Редактировать",
+      saveChangesHint: "Рекомендации применены к черновику. Не забудьте нажать «Сохранить правила» для их окончательной записи.",
+      estimatedFpReduction: "Снижение ложноположительных срабатываний на {value}%",
+      noSuggestions: "Модель не обнаружила проблем в текущих правилах на основе суточной статистики."
     },
     invalidNumber: "{field}: некорректное число",
     invalidValue: "{field}: некорректное значение '{value}'",
@@ -984,6 +1009,10 @@ export const ruDictionary: TranslationDictionary = {
       bedolagaApiTokenDescription: "Секретный токен для авторизации запросов в Bedolaga.",
       bedolagaTimeout: "Таймаут Bedolaga (сек)",
       bedolagaTimeoutDescription: "Максимальное время ожидания ответа от Bedolaga.",
+      geminiApiKey: "Ключ Gemini API",
+      geminiApiKeyDescription: "Секретный API-ключ от Google AI Studio для работы ИИ-оптимизатора правил.",
+      geminiModelName: "Модель Gemini",
+      geminiModelNameDescription: "Идентификатор модели ИИ, используемой для генерации (например, gemini-1.5-flash).",
     },
     interfaceTitle: "Интерфейс на этом устройстве",
     interfaceDescription:

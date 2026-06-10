@@ -89,6 +89,7 @@ export const enDictionary: TranslationDictionary = {
         providers: "Providers",
         policy: "Policy",
         learning: "Learning",
+        aiOptimizer: "AI Optimizer",
         retention: "Retention",
       },
       data: {
@@ -739,6 +740,7 @@ export const enDictionary: TranslationDictionary = {
       thresholds: "Thresholds, scores, and behavior",
       policy: "Detection policy",
       learning: "Learning controls",
+      aiOptimizer: "AI Threshold Optimizer",
       retention: "Database retention"
     },
     sectionDescriptions: {
@@ -748,6 +750,7 @@ export const enDictionary: TranslationDictionary = {
       providers: "Provider aliases, markers, and carrier-specific hints used in review-first flows.",
       policy: "Live decision policy plus enforcement-side access switching controls.",
       learning: "Promotion thresholds that decide when runtime learning becomes trusted.",
+      aiOptimizer: "Generative optimization of threshold and scoring weight parameters based on daily traffic analysis using Gemini LLM.",
       retention: "Storage retention windows that cap SQLite growth without removing active review state."
     },
     providerProfiles: {
@@ -802,6 +805,27 @@ export const enDictionary: TranslationDictionary = {
       guardrailsLabel: "Guardrails in force",
       noModeReasons: "No mode-limiting flags are active",
       noGuardrails: "No extra guardrails are active"
+    },
+    aiOptimizer: {
+      title: "Generative AI Rules Optimizer",
+      unconfiguredTitle: "Gemini API key is not configured",
+      unconfiguredDesc: "To use generative rule optimization, you must configure a Gemini API key in System > Integrations first.",
+      goToSettings: "Go to System Settings",
+      generateButton: "Generate AI Suggestions",
+      generating: "Analyzing traffic statistics and generating recommendations via Gemini...",
+      overallSummary: "Overall AI Summary",
+      recommendationsTitle: "Recommended Adjustments",
+      fieldLabel: "Setting",
+      currentValue: "Current",
+      proposedValue: "Recommended",
+      impact: "Est. Impact",
+      reason: "Reasoning",
+      accept: "Accept",
+      reject: "Reject",
+      edit: "Edit",
+      saveChangesHint: "Recommendations applied to the draft rules. Do not forget to click \"Save rules\" to write changes to the server.",
+      estimatedFpReduction: "Estimated false positive reduction: {value}%",
+      noSuggestions: "No issues detected in current rules based on 24h traffic statistics."
     },
     invalidNumber: "{field}: invalid number",
     invalidValue: "{field}: invalid value '{value}'"
@@ -915,6 +939,10 @@ export const enDictionary: TranslationDictionary = {
       bedolagaApiTokenDescription: "Secret token used for Bedolaga API authorization.",
       bedolagaTimeout: "Bedolaga Timeout (sec)",
       bedolagaTimeoutDescription: "Maximum timeout for Bedolaga upstream requests.",
+      geminiApiKey: "Gemini API Key",
+      geminiApiKeyDescription: "Secret API key from Google AI Studio to power the AI Optimizer.",
+      geminiModelName: "Gemini Model Name",
+      geminiModelNameDescription: "Identifier of the Gemini model to use (e.g. gemini-1.5-flash).",
     },
     interfaceTitle: "Interface on this device",
     interfaceDescription: "Language, palette, and theme are applied immediately and stored locally in the browser.",
