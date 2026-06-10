@@ -47,9 +47,15 @@ def accept_suggestion(container: APIContainer, suggestion_id: int) -> dict[str, 
         # 2. Add/replace in learning_patterns_active
         conn.execute(
             """
-            INSERT OR REPLACE INTO learning_patterns_active (
+            INSERT INTO learning_patterns_active (
                 pattern_type, pattern_value, decision, support, precision, promoted_at, metadata_json
             ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(pattern_type, pattern_value) DO UPDATE SET
+                decision = excluded.decision,
+                support = excluded.support,
+                precision = excluded.precision,
+                promoted_at = excluded.promoted_at,
+                metadata_json = excluded.metadata_json
             """,
             (
                 row["pattern_type"],
