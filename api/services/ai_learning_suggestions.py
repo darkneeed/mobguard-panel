@@ -18,6 +18,12 @@ def get_suggestions(container: APIContainer) -> list[dict[str, Any]]:
             SELECT id, pattern_type, pattern_value, current_decision, suggested_decision,
                    confidence, reasoning_ru, operator_errors_json, suggested_provider_profile_json, status, created_at, updated_at
             FROM ai_learning_suggestions
+            WHERE NOT (
+                status = 'PENDING'
+                AND current_decision = suggested_decision
+                AND (operator_errors_json IS NULL OR operator_errors_json = '[]')
+                AND (suggested_provider_profile_json IS NULL)
+            )
             ORDER BY created_at DESC
             """
         ).fetchall()
