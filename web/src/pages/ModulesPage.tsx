@@ -952,7 +952,8 @@ export function ModulesPage({ session }: { session?: Session }) {
                                   fontSize: "0.85rem",
                                   userSelect: "none",
                                   transition: "all 0.15s ease",
-                                  outline: "none"
+                                  outline: "none",
+                                  width: "100%"
                                 }}
                               >
                                 <input
@@ -967,13 +968,24 @@ export function ModulesPage({ session }: { session?: Session }) {
                                       inbound_tags: nextTags.join("\n")
                                     }));
                                   }}
-                                  style={{ marginTop: "0.2rem", flexShrink: 0, accentColor: "var(--success)" }}
+                                  style={{
+                                    marginTop: "0.15rem",
+                                    width: "16px",
+                                    height: "16px",
+                                    padding: 0,
+                                    flexShrink: 0,
+                                    accentColor: "var(--success)",
+                                    cursor: "pointer"
+                                  }}
                                 />
                                 <span style={{
                                   fontWeight: isSelected ? 600 : 400,
                                   color: isSelected ? "var(--success)" : "var(--ink)",
-                                  wordBreak: "break-all",
-                                  lineHeight: "1.4"
+                                  whiteSpace: "normal",
+                                  overflowWrap: "break-word",
+                                  wordBreak: "break-word",
+                                  lineHeight: "1.4",
+                                  flex: 1
                                 }}>
                                   {tag}
                                 </span>
@@ -1447,6 +1459,7 @@ export function ModulesPage({ session }: { session?: Session }) {
                                               fontSize: "0.80rem",
                                               userSelect: "none",
                                               transition: "all 0.15s ease",
+                                              width: "100%"
                                             }}
                                           >
                                             <input
@@ -1461,13 +1474,24 @@ export function ModulesPage({ session }: { session?: Session }) {
                                                   inbound_tags: nextTags.join("\n")
                                                 }));
                                               }}
-                                              style={{ marginTop: "0.18rem", flexShrink: 0, accentColor: "var(--success)" }}
+                                              style={{
+                                                marginTop: "0.15rem",
+                                                width: "16px",
+                                                height: "16px",
+                                                padding: 0,
+                                                flexShrink: 0,
+                                                accentColor: "var(--success)",
+                                                cursor: "pointer"
+                                              }}
                                             />
                                             <span style={{
                                               fontWeight: isSelected ? 600 : 400,
                                               color: isSelected ? "var(--success)" : "var(--ink)",
-                                              wordBreak: "break-all",
-                                              lineHeight: "1.4"
+                                              whiteSpace: "normal",
+                                              overflowWrap: "break-word",
+                                              wordBreak: "break-word",
+                                              lineHeight: "1.4",
+                                              flex: 1
                                               }}
                                             >
                                               {tag}
