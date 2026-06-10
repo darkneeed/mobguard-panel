@@ -111,7 +111,7 @@ button.ghost:focus-visible:not(:disabled),
   outline: none;
 }
 
-input,
+input:not([type="checkbox"]):not([type="radio"]),
 select,
 textarea {
   width: 100%;
@@ -124,13 +124,13 @@ textarea {
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-input:hover,
+input:not([type="checkbox"]):not([type="radio"]):hover,
 select:hover,
 textarea:hover {
   border-color: rgba(59, 130, 246, 0.3);
 }
 
-input:focus,
+input:not([type="checkbox"]):not([type="radio"]):focus,
 select:focus,
 textarea:focus {
   outline: none;
@@ -139,17 +139,31 @@ textarea:focus {
   box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
-:root[data-theme="dark"] input,
+:root[data-theme="dark"] input:not([type="checkbox"]):not([type="radio"]),
 :root[data-theme="dark"] select,
 :root[data-theme="dark"] textarea {
   background: rgba(15, 22, 36, 0.4);
   color: var(--ink);
 }
 
-:root[data-theme="dark"] input:focus,
+:root[data-theme="dark"] input:not([type="checkbox"]):not([type="radio"]):focus,
 :root[data-theme="dark"] select:focus,
 :root[data-theme="dark"] textarea:focus {
   background: rgba(15, 22, 36, 0.8);
+}
+
+input[type="checkbox"],
+input[type="radio"] {
+  width: 1.15rem;
+  height: 1.15rem;
+  min-width: 1.15rem;
+  min-height: 1.15rem;
+  margin: 0;
+  padding: 0;
+  cursor: pointer;
+  accent-color: var(--accent);
+  vertical-align: middle;
+  border-radius: 4px;
 }
 
 option,
