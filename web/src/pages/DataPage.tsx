@@ -18,10 +18,12 @@ import { useVisiblePolling } from "../shared/useVisiblePolling";
 import { EventsDataSection } from "./data/EventsDataSection";
 import { ConsoleDataSection } from "./data/ConsoleDataSection";
 import { UserDataSection } from "./data/UserDataSection";
+import { AiLearningSuggestionsSection } from "./data/AiLearningSuggestionsSection";
 
 type DataTab =
   | "console"
   | "users"
+  | "ai-suggestions"
   | "violations"
   | "overrides"
   | "cache"
@@ -67,6 +69,7 @@ type PendingKey =
 const DATA_TABS: DataTab[] = [
   "console",
   "users",
+  "ai-suggestions",
   "violations",
   "overrides",
   "cache",
@@ -406,35 +409,43 @@ export function DataPage({ session }: { session?: Session }) {
       {pageError ? <div className="error-box">{pageError}</div> : null}
 
       {dataView === "users" ? (
-        <UserDataSection
-          t={t}
-          language={language}
-          userQuery={userQuery}
-          setUserQuery={setUserQuery}
-          userSearch={userSearch}
-          userCard={userCard}
-          userCardExport={userCardExport}
-          banMinutes={banMinutes}
-          setBanMinutes={setBanMinutes}
-          trafficCapGigabytes={trafficCapGigabytes}
-          setTrafficCapGigabytes={setTrafficCapGigabytes}
-          strikeCount={strikeCount}
-          setStrikeCount={setStrikeCount}
-          warningCount={warningCount}
-          setWarningCount={setWarningCount}
-          canWriteData={canWriteData}
-          searchUsers={searchUsers}
-          loadUser={loadUser}
-          runUserAction={runUserAction}
-          buildUserExport={buildUserExport}
-          downloadUserExport={downloadUserExport}
-          isPending={isPending}
-          displayValue={displayValue}
-          formatPanelSquads={formatPanelSquads}
-          formatTrafficBytes={formatTrafficBytes}
-          renderProviderEvidence={renderProviderEvidence}
-          activeUserAction={activeUserAction}
-        />
+        tab === "ai-suggestions" ? (
+          <AiLearningSuggestionsSection
+            t={t}
+            language={language}
+            canWriteData={canWriteData}
+          />
+        ) : (
+          <UserDataSection
+            t={t}
+            language={language}
+            userQuery={userQuery}
+            setUserQuery={setUserQuery}
+            userSearch={userSearch}
+            userCard={userCard}
+            userCardExport={userCardExport}
+            banMinutes={banMinutes}
+            setBanMinutes={setBanMinutes}
+            trafficCapGigabytes={trafficCapGigabytes}
+            setTrafficCapGigabytes={setTrafficCapGigabytes}
+            strikeCount={strikeCount}
+            setStrikeCount={setStrikeCount}
+            warningCount={warningCount}
+            setWarningCount={setWarningCount}
+            canWriteData={canWriteData}
+            searchUsers={searchUsers}
+            loadUser={loadUser}
+            runUserAction={runUserAction}
+            buildUserExport={buildUserExport}
+            downloadUserExport={downloadUserExport}
+            isPending={isPending}
+            displayValue={displayValue}
+            formatPanelSquads={formatPanelSquads}
+            formatTrafficBytes={formatTrafficBytes}
+            renderProviderEvidence={renderProviderEvidence}
+            activeUserAction={activeUserAction}
+          />
+        )
       ) : null}
       {dataView === "events" ? (
         <>

@@ -2221,6 +2221,36 @@ class ReviewAdminRepository(SQLiteRepository):
                             json.dumps({"total": total}, ensure_ascii=False),
                         ),
                     )
+            
+            # Restore manually accepted suggestions from AI auditor
+            try:
+                accepted_rows = conn.execute(
+                    """
+                    SELECT pattern_type, pattern_value, suggested_decision, reasoning_ru
+                    FROM ai_learning_suggestions
+                    WHERE status = 'ACCEPTED'
+                    """
+                ).fetchall()
+                for row in accepted_rows:
+                    conn.execute(
+                        """
+                        INSERT OR REPLACE INTO learning_patterns_active (
+                            pattern_type, pattern_value, decision, support, precision, promoted_at, metadata_json
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        (
+                            row["pattern_type"],
+                            row["pattern_value"],
+                            row["suggested_decision"],
+                            999,
+                            1.0,
+                            now,
+                            json.dumps({"ai_promoted": True, "reasoning": row["reasoning_ru"]}, ensure_ascii=False),
+                        ),
+                    )
+            except Exception:
+                # If table does not exist or query fails, skip restoring AI suggestions
+                pass
             conn.commit()
 
     def get_promoted_pattern(self, pattern_type: str, pattern_value: str) -> Optional[dict[str, Any]]:

@@ -97,6 +97,7 @@ export const ruDictionary: TranslationDictionary = {
       data: {
         console: "Консоль",
         users: "Пользователи",
+        aiSuggestions: "Рекомендации ИИ",
         violations: "Нарушения",
         overrides: "Оверрайды",
         cache: "Кэш",
@@ -1049,6 +1050,8 @@ export const ruDictionary: TranslationDictionary = {
         "Единая операторская консоль с системными логами панели, heartbeat модулей и входящими данными от модулей.",
       users:
         "Основной поток для поиска пользователя, разбора карточки, ограничений, исключений и экспортных снимков.",
+      aiSuggestions:
+        "Предложения ИИ Gemini по классификации неопределенных/спорных сетей и исправлению ошибок модераторов.",
       violations:
         "Глобальный обзор активных ограничений и истории нарушений из рабочего состояния.",
       overrides:
@@ -1093,11 +1096,35 @@ export const ruDictionary: TranslationDictionary = {
       userUpdated: "Данные пользователя обновлены",
       exactOverride: "Точное переопределение сохранено",
       unsureOverride: "Переопределение для шаблона сохранено",
+      suggestionAccepted: "Рекомендация ИИ успешно принята. Спорные кейсы отправлены на перепроверку с высоким приоритетом.",
+      suggestionRejected: "Рекомендация ИИ отклонена.",
       cacheUpdated: "Запись кэша обновлена",
       learningUpdated: "Данные обучения обновлены",
       exportReady: "Экспортная карточка готова",
       exportDownloaded: "Экспортная карточка скачана",
       calibrationExportReady: "Архив калибровки сформирован",
+    },
+    aiSuggestions: {
+      pageTitle: "Рекомендации ИИ по обучению",
+      pageDescription: "Предложения ИИ Gemini по классификации неопределенных/спорных сетей и исправлению ошибок модераторов.",
+      empty: "Нет активных рекомендаций ИИ.",
+      loading: "Загрузка рекомендаций...",
+      confidence: "Уверенность ИИ: {value}%",
+      patternType: "Тип",
+      patternValue: "Паттерн",
+      decision: "Решение",
+      suggestedDecision: "Рекомендуемое решение",
+      currentDecision: "Текущее решение",
+      reasoning: "Обоснование ИИ",
+      operatorErrors: "Ошибки операторов",
+      operatorErrorsDetail: "Найдено подозрений на ошибки в {count} кейсах",
+      recheckReason: "Кейс #{id} отправлен на перепроверку",
+      actions: {
+        accept: "Принять",
+        reject: "Отклонить",
+        accepting: "Применение...",
+        rejecting: "Отклонение..."
+      }
     },
     users: {
       pageTitle: "Поиск пользователя",

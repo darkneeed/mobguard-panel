@@ -19,6 +19,7 @@ from ..schemas.data_admin import (
 from ..services.admin_audit import record_admin_action
 from ..services import data_admin as data_service
 from ..services import reviews as review_service
+from ..services import ai_learning_suggestions
 
 
 router = APIRouter(prefix="/admin/data", tags=["data-admin"])
@@ -546,3 +547,47 @@ def list_audit(
     container=Depends(get_container),
 ) -> dict[str, Any]:
     return data_service.list_admin_audit(container, limit=limit)
+
+
+@router.get("/learning/suggestions")
+def get_ai_learning_suggestions(
+    _: dict[str, Any] = Depends(require_permission(PERMISSION_DATA_READ)),
+    container=Depends(get_container),
+) -> list[dict[str, Any]]:
+    return ai_learning_suggestions.get_suggestions(container)
+
+
+@router.post("/learning/suggestions/{suggestion_id}/accept")
+def accept_ai_learning_suggestion(
+    suggestion_id: int,
+    session: dict[str, Any] = Depends(require_permission(PERMISSION_DATA_WRITE)),
+    container=Depends(get_container),
+) -> dict[str, Any]:
+    payload = ai_learning_suggestions.accept_suggestion(container, suggestion_id)
+    record_admin_action(
+        container,
+        session,
+        action="data.learning.suggestion.accept",
+        target_type="ai_suggestion",
+        target_id=str(suggestion_id),
+        details=payload,
+    )
+    return payload
+
+
+@router.post("/learning/suggestions/{suggestion_id}/reject")
+def reject_ai_learning_suggestion(
+    suggestion_id: int,
+    session: dict[str, Any] = Depends(require_permission(PERMISSION_DATA_WRITE)),
+    container=Depends(get_container),
+) -> dict[str, Any]:
+    payload = ai_learning_suggestions.reject_suggestion(container, suggestion_id)
+    record_admin_action(
+        container,
+        session,
+        action="data.learning.suggestion.reject",
+        target_type="ai_suggestion",
+        target_id=str(suggestion_id),
+        details={},
+    )
+    return payload

@@ -53,6 +53,7 @@ export const rulesNavigation: NavigationItem[] = [
 
 export const dataNavigation: NavigationItem[] = [
   { to: "/data/users", labelKey: "layout.subnav.data.users", permission: "data.read" },
+  { to: "/data/ai-suggestions", labelKey: "layout.subnav.data.aiSuggestions", permission: "data.read" },
   { to: "/data/events", labelKey: "layout.subnav.data.events", permission: "data.read" },
 ];
 

@@ -1476,6 +1476,24 @@ class PlatformStore:
                 )
                 """
             )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS ai_learning_suggestions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    pattern_type TEXT NOT NULL,
+                    pattern_value TEXT NOT NULL,
+                    current_decision TEXT,
+                    suggested_decision TEXT NOT NULL,
+                    confidence REAL NOT NULL,
+                    reasoning_ru TEXT NOT NULL,
+                    operator_errors_json TEXT,
+                    status TEXT DEFAULT 'PENDING',
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    UNIQUE(pattern_type, pattern_value, status)
+                )
+                """
+            )
 
             columns = {
                 row["name"] for row in conn.execute("PRAGMA table_info(ip_decisions)").fetchall()

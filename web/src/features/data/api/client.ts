@@ -104,6 +104,16 @@ export const dataApi = {
     request<Record<string, unknown>>(`/admin/data/learning/legacy/${rowId}`, {
       method: "DELETE"
     }),
+  getAiSuggestions: () =>
+    request<any[]>("/admin/data/learning/suggestions"),
+  acceptAiSuggestion: (id: number) =>
+    request<any>(`/admin/data/learning/suggestions/${id}/accept`, {
+      method: "POST"
+    }),
+  rejectAiSuggestion: (id: number) =>
+    request<any>(`/admin/data/learning/suggestions/${id}/reject`, {
+      method: "POST"
+    }),
   exportCalibration: (params: Record<string, string | number | boolean | undefined>) =>
     requestBlob(`/admin/data/exports/calibration?${buildSearchParams(params)}`),
   previewCalibration: (params: Record<string, string | number | boolean | undefined>) =>

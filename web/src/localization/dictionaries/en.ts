@@ -95,6 +95,7 @@ export const enDictionary: TranslationDictionary = {
       data: {
         console: "Console",
         users: "Users",
+        aiSuggestions: "AI Suggestions",
         violations: "Violations",
         overrides: "Overrides",
         cache: "Cache",
@@ -973,6 +974,7 @@ export const enDictionary: TranslationDictionary = {
     sectionDescriptions: {
       console: "Unified operator console with panel system logs, module heartbeats, and incoming module payloads.",
       users: "Primary operator workflow for user lookup, card inspection, exemptions, restrictions, and export snapshots.",
+      aiSuggestions: "Gemini AI suggestions for classifying unsure/grey-zone networks and auditing operator mistakes.",
       violations: "Global view of active restrictions and violation history stored in runtime state.",
       overrides: "Manual IP and unsure-pattern overrides that short-circuit detection decisions.",
       cache: "Live cache entries that can be corrected or removed without waiting for natural expiry.",
@@ -1009,11 +1011,35 @@ export const enDictionary: TranslationDictionary = {
       userUpdated: "User data updated",
       exactOverride: "Exact override saved",
       unsureOverride: "Unsure override saved",
+      suggestionAccepted: "AI suggestion accepted. Flagged cases sent for recheck with high priority.",
+      suggestionRejected: "AI suggestion rejected.",
       cacheUpdated: "Cache entry updated",
       learningUpdated: "Learning data updated",
       exportReady: "Export card is ready",
       exportDownloaded: "Export card downloaded",
       calibrationExportReady: "Calibration archive generated"
+    },
+    aiSuggestions: {
+      pageTitle: "AI Learning Recommendations",
+      pageDescription: "Gemini AI suggestions for classifying unsure/grey-zone networks and auditing operator mistakes.",
+      empty: "No active AI recommendations.",
+      loading: "Loading recommendations...",
+      confidence: "AI Confidence: {value}%",
+      patternType: "Type",
+      patternValue: "Pattern",
+      decision: "Decision",
+      suggestedDecision: "Suggested Decision",
+      currentDecision: "Current Decision",
+      reasoning: "AI Reasoning",
+      operatorErrors: "Operator Errors",
+      operatorErrorsDetail: "Found suspicious resolutions in {count} cases",
+      recheckReason: "Case #{id} sent for recheck",
+      actions: {
+        accept: "Accept",
+        reject: "Reject",
+        accepting: "Accepting...",
+        rejecting: "Rejecting..."
+      }
     },
     users: {
       pageTitle: "User search",
