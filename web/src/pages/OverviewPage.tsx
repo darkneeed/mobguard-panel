@@ -223,25 +223,67 @@ export function OverviewPage({ session: _session }: { session?: Session }) {
 
   return (
     <section className="page">
-      <div className="page-header page-header-stack">
+      <div className="page-header page-header-stack" style={{ marginBottom: "1rem" }}>
         <div>
           <h1>Главная</h1>
           <p className="page-lede">
             Состояние сервера панели, модулей и очереди. Данные обновляются автоматически.
           </p>
         </div>
-        <div className="dashboard-meta">
-          <span className={`status-badge ${summary && (summary.error_modules > 0 || summary.stale_modules > 0) ? "punitive" : summary && summary.warning_modules > 0 ? "severity-high" : "status-resolved"}`}>
+      </div>
+
+      <div 
+        className="status-bar-banner"
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          padding: "1rem 1.5rem",
+          borderRadius: "16px",
+          border: "1px solid var(--line)",
+          background: "var(--bg-panel)",
+          backdropFilter: "blur(20px)",
+          marginBottom: "1.5rem",
+          boxShadow: "var(--shadow)",
+          animation: "panel-enter 350ms cubic-bezier(0.16, 1, 0.3, 1) both"
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: "0.85rem" }}>
+          <span 
+            style={{
+              display: "inline-block",
+              width: "10px",
+              height: "10px",
+              borderRadius: "50%",
+              backgroundColor: summary && (summary.error_modules > 0 || summary.stale_modules > 0)
+                ? "var(--danger, #ef4444)"
+                : summary && summary.warning_modules > 0
+                  ? "var(--warning, #f59e0b)"
+                  : "var(--success, #10b981)",
+              boxShadow: `0 0 14px ${
+                summary && (summary.error_modules > 0 || summary.stale_modules > 0)
+                  ? "var(--danger, rgba(239, 68, 68, 0.6))"
+                  : summary && summary.warning_modules > 0
+                    ? "var(--warning, rgba(245, 158, 11, 0.6))"
+                    : "var(--success, rgba(16, 185, 129, 0.6))"
+              }`,
+              animation: "pulse-glow 2s infinite"
+            }} 
+          />
+          <span style={{ fontWeight: 600, fontSize: "0.95rem", color: "var(--ink)" }}>
             {summary
               ? summary.error_modules > 0 || summary.stale_modules > 0
-                ? "Есть критические сигналы"
+                ? "Внимание: Обнаружены критические сигналы в работе модулей"
                 : summary.warning_modules > 0
-                  ? "Есть предупреждения"
-                  : "Все модули в норме"
+                  ? "Предупреждение: Проверить статус некоторых модулей"
+                  : "Все модули работают стабильно и находятся в норме"
               : t("common.loading")}
           </span>
-          <span className="muted">
-            Последняя синхронизация {formatDisplayDateTime(
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.85rem", color: "var(--muted)" }}>
+          <Clock size={14} style={{ flexShrink: 0 }} />
+          <span>
+            Последняя синхронизация: {formatDisplayDateTime(
               panelServer?.collected_at || lastLoadedAt,
               t("common.notAvailable"),
               language,

@@ -101,6 +101,7 @@ export function ConfigHealthWidget() {
             className={`record-item ${getStatusClass(check.status)}`}
             style={{
               display: "flex",
+              flexDirection: "row",
               justifyContent: "space-between",
               alignItems: "center",
               padding: "0.75rem 1rem",

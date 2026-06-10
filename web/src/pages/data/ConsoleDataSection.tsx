@@ -138,112 +138,211 @@ export function ConsoleDataSection({
         </div>
       </div>
 
-      <div className="panel console-panel">
-        <div className="panel-heading panel-heading-row">
-          <div>
-            <h2>{t("data.console.title")}</h2>
-            <p className="muted">
-              {t("data.console.count", { count: totalCount })}
-            </p>
+      <div 
+        className="panel console-panel" 
+        style={{ 
+          background: "#080b11", 
+          borderRadius: "12px", 
+          border: "1px solid var(--line)", 
+          padding: 0, 
+          overflow: "hidden",
+          display: "flex",
+          flexDirection: "column",
+          boxShadow: "var(--shadow)"
+        }}
+      >
+        {/* Terminal Header */}
+        <div style={{
+          background: "rgba(15, 23, 42, 0.4)",
+          padding: "0.6rem 1rem",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          borderBottom: "1px solid var(--line)"
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.45rem" }}>
+            <span style={{ width: "11px", height: "11px", borderRadius: "50%", background: "#ef4444", display: "inline-block" }}></span>
+            <span style={{ width: "11px", height: "11px", borderRadius: "50%", background: "#eab308", display: "inline-block" }}></span>
+            <span style={{ width: "11px", height: "11px", borderRadius: "50%", background: "#22c55e", display: "inline-block" }}></span>
+            <span style={{ color: "var(--muted)", fontSize: "0.78rem", fontFamily: "var(--font-mono, monospace)", marginLeft: "0.5rem", fontWeight: 500 }}>
+              operator@mobguard-shell:~
+            </span>
           </div>
-          <span className="tag">
+          <span style={{ color: "var(--muted)", fontSize: "0.75rem", fontFamily: "var(--font-mono, monospace)" }}>
             {t("data.console.pagination.page", {
               page: currentPage,
               total: totalPages,
             })}
           </span>
         </div>
-        <div className="console-stream">
+
+        {/* Console logs body */}
+        <div 
+          className="console-stream" 
+          style={{ 
+            padding: "1rem", 
+            flex: 1, 
+            display: "flex", 
+            flexDirection: "column", 
+            gap: "0.35rem", 
+            overflowY: "auto", 
+            maxHeight: "35rem",
+            minHeight: "28rem"
+          }}
+        >
           {items.length === 0 ? (
-            <div className="provider-empty">
-              <span>{t("data.console.empty")}</span>
+            <div className="provider-empty" style={{ background: "transparent", border: 0 }}>
+              <span style={{ fontFamily: "var(--font-mono, monospace)", color: "var(--muted)" }}>
+                {t("data.console.empty")}
+              </span>
             </div>
           ) : null}
           {visibleConsoleItems.map((item) => (
-            <article
-              className={`console-entry console-entry-${item.level}`}
-              key={item.id}
+            <div 
+              key={item.id} 
+              className={`console-line level-${item.level}`}
+              style={{
+                fontFamily: "var(--font-mono, 'JetBrains Mono', Consolas, monospace)",
+                fontSize: "0.82rem",
+                lineHeight: "1.5",
+                padding: "0.35rem 0.5rem",
+                borderRadius: "6px",
+                borderBottom: "1px solid rgba(255, 255, 255, 0.015)",
+                display: "flex",
+                flexDirection: "column",
+                gap: "0.25rem",
+                transition: "background 0.15s ease",
+                backgroundColor: "rgba(255, 255, 255, 0.005)"
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.03)" }}
+              onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.005)" }}
             >
-              <div className="console-entry-head">
-                <span className="console-entry-time">
-                  {item.timestamp || t("common.notAvailable")}
+              {/* Header / Meta Row */}
+              <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "0.5rem", color: "var(--muted)" }}>
+                <span style={{ color: "#475569" }}>
+                  [{item.timestamp ? item.timestamp.split("T").join(" ").split("Z").join("") : "N/A"}]
                 </span>
-                <span className="tag">
-                  {t(`data.console.sources.${item.source}`)}
+                <span style={{ 
+                  color: item.level === "error" ? "var(--danger)" : item.level === "warn" ? "var(--warning)" : "var(--accent)",
+                  fontWeight: 600
+                }}>
+                  [{item.level.toUpperCase()}]
                 </span>
-                <span className={`tag console-level-${item.level}`}>
-                  {t(`data.console.levels.${item.level}`)}
-                </span>
-                {item.module_id ? (
-                  <span className="tag">{item.module_id}</span>
-                ) : null}
-                {item.service_name ? (
-                  <span className="tag">{item.service_name}</span>
-                ) : null}
-              </div>
-              <div className="console-entry-message">{item.message}</div>
-              <div className="console-entry-meta">
-                {item.module_name ? (
-                  <span>
-                    {t("data.console.meta.moduleName", {
-                      value: item.module_name,
-                    })}
+                {item.module_id && (
+                  <span style={{ color: "var(--accent-strong)" }}>
+                    [{item.module_name || item.module_id}]
                   </span>
-                ) : null}
-                {item.logger_name ? (
-                  <span>
-                    {t("data.console.meta.logger", { value: item.logger_name })}
-                  </span>
-                ) : null}
-                {item.event_uid ? (
-                  <span>
-                    {t("data.console.meta.eventUid", { value: item.event_uid })}
-                  </span>
-                ) : null}
-              </div>
-              <div className="record-json-stack">
-                {renderPayload(
-                  t("data.console.payload"),
-                  item.payload || undefined,
                 )}
-                {renderPayload(
-                  t("data.console.metaPayload"),
-                  item.meta || undefined,
+                {item.service_name && (
+                  <span style={{ color: "var(--accent)" }}>
+                    ({item.service_name})
+                  </span>
+                )}
+                {item.logger_name && (
+                  <span style={{ color: "#475569", fontSize: "0.78rem" }}>
+                    {item.logger_name}
+                  </span>
                 )}
               </div>
-            </article>
+
+              {/* Message Row */}
+              <div style={{ color: "var(--ink)", paddingLeft: "0.5rem", wordBreak: "break-all", whiteSpace: "pre-wrap" }}>
+                {item.message}
+              </div>
+
+              {/* Collapsible Details Row */}
+              {(item.payload || item.meta) && (
+                <div style={{ paddingLeft: "0.5rem", marginTop: "0.15rem" }}>
+                  <details style={{ cursor: "pointer" }}>
+                    <summary style={{ fontSize: "0.75rem", color: "var(--muted)", outline: "none", userSelect: "none" }}>
+                      [PAYLOAD / METADATA]
+                    </summary>
+                    <pre style={{
+                      margin: "0.35rem 0 0 0",
+                      padding: "0.65rem 0.85rem",
+                      background: "rgba(0, 0, 0, 0.4)",
+                      border: "1px solid var(--line)",
+                      borderRadius: "8px",
+                      fontSize: "0.78rem",
+                      color: "var(--success)",
+                      maxHeight: "20rem",
+                      overflow: "auto",
+                      fontFamily: "var(--font-mono, monospace)"
+                    }}>
+                      {JSON.stringify({ payload: item.payload, meta: item.meta }, null, 2)}
+                    </pre>
+                  </details>
+                </div>
+              )}
+            </div>
           ))}
           {hasMoreConsoleItems ? (
-            <div className="provider-empty muted" ref={loadMoreConsoleRef}>
-              <span>{t("common.loading")}</span>
+            <div className="provider-empty muted" ref={loadMoreConsoleRef} style={{ background: "transparent", border: 0 }}>
+              <span style={{ fontFamily: "var(--font-mono, monospace)", color: "var(--muted)" }}>
+                {t("common.loading")}
+              </span>
             </div>
           ) : null}
         </div>
-        <div className="record-actions">
-          <button
-            className="ghost"
-            disabled={currentPage <= 1}
-            onClick={() =>
-              setFilters((prev) => ({
-                ...prev,
-                page: Math.max(prev.page - 1, 1),
-              }))
-            }
-          >
-            {t("data.console.pagination.previous")}
-          </button>
-          <button
-            className="ghost"
-            disabled={currentPage >= totalPages}
-            onClick={() =>
-              setFilters((prev) => ({
-                ...prev,
-                page: Math.min(prev.page + 1, totalPages),
-              }))
-            }
-          >
-            {t("data.console.pagination.next")}
-          </button>
+
+        {/* Terminal Footer / Actions */}
+        <div style={{
+          background: "rgba(15, 23, 42, 0.4)",
+          padding: "0.6rem 1rem",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          borderTop: "1px solid var(--line)"
+        }}>
+          <div style={{ fontSize: "0.75rem", color: "var(--muted)", fontFamily: "var(--font-mono, monospace)" }}>
+            {t("data.console.count", { count: totalCount })}
+          </div>
+          <div style={{ display: "flex", gap: "0.5rem" }}>
+            <button
+              className="ghost small-button"
+              disabled={currentPage <= 1}
+              style={{
+                background: "transparent",
+                border: "1px solid var(--line)",
+                color: currentPage <= 1 ? "var(--muted)" : "var(--ink)",
+                padding: "0.35rem 0.75rem",
+                borderRadius: "6px",
+                fontSize: "0.75rem",
+                fontFamily: "var(--font-mono, monospace)",
+                cursor: currentPage <= 1 ? "not-allowed" : "pointer"
+              }}
+              onClick={() =>
+                setFilters((prev) => ({
+                  ...prev,
+                  page: Math.max(prev.page - 1, 1),
+                }))
+              }
+            >
+              {t("data.console.pagination.previous")}
+            </button>
+            <button
+              className="ghost small-button"
+              disabled={currentPage >= totalPages}
+              style={{
+                background: "transparent",
+                border: "1px solid var(--line)",
+                color: currentPage >= totalPages ? "var(--muted)" : "var(--ink)",
+                padding: "0.35rem 0.75rem",
+                borderRadius: "6px",
+                fontSize: "0.75rem",
+                fontFamily: "var(--font-mono, monospace)",
+                cursor: currentPage >= totalPages ? "not-allowed" : "pointer"
+              }}
+              onClick={() =>
+                setFilters((prev) => ({
+                  ...prev,
+                  page: Math.min(prev.page + 1, totalPages),
+                }))
+              }
+            >
+              {t("data.console.pagination.next")}
+            </button>
+          </div>
         </div>
       </div>
     </div>
