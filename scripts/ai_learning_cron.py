@@ -371,6 +371,15 @@ Respond strictly in JSON format matching the schema:
             
             with store._connect() as conn:
                 for sug in suggestions_data:
+                    curr_dec = next((p["current_decision"] for p in unique_patterns if p["type"] == sug["pattern_type"] and p["value"] == sug["pattern_value"]), None)
+                    has_changes = (
+                        (sug["suggested_decision"] != curr_dec) or
+                        (sug.get("operator_errors") and len(sug["operator_errors"]) > 0) or
+                        (sug.get("suggested_provider_profile") is not None)
+                    )
+                    if not has_changes:
+                        continue
+
                     # Check if already exists in status PENDING
                     existing = conn.execute(
                         """

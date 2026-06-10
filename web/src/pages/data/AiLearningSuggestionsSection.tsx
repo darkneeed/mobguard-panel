@@ -33,13 +33,18 @@ export function AiLearningSuggestionsSection({ t, language, canWriteData = true 
   const [suggestions, setSuggestions] = useState<AISuggestion[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionPending, setActionPending] = useState<Record<number, "accept" | "reject" | null>>({});
+  const [currentProfiles, setCurrentProfiles] = useState<any[]>([]);
 
   const loadSuggestions = async () => {
     try {
       setLoading(true);
-      const data = await api.getAiSuggestions();
+      const [data, rules] = await Promise.all([
+        api.getAiSuggestions(),
+        api.getDetectionSettings()
+      ]);
       // Filter to keep only PENDING suggestions
       setSuggestions(data.filter((s: any) => s.status === "PENDING"));
+      setCurrentProfiles((rules as any).rules?.provider_profiles || []);
     } catch (err) {
       pushToast("error", err instanceof Error ? err.message : t("data.errors.loadTabFailed"));
     } finally {
@@ -231,6 +236,7 @@ export function AiLearningSuggestionsSection({ t, language, canWriteData = true 
                 try {
                   const prof = JSON.parse(sug.suggested_provider_profile_json);
                   if (!prof || !prof.key) return null;
+                  const exists = currentProfiles.some(p => p.key === prof.key);
                   return (
                     <div
                       style={{
@@ -241,11 +247,22 @@ export function AiLearningSuggestionsSection({ t, language, canWriteData = true 
                         paddingTop: "1rem"
                       }}
                     >
-                      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", color: "var(--success)" }}>
-                        <Sparkles size={16} />
-                        <span style={{ fontSize: "0.8rem", fontWeight: 600, textTransform: "uppercase" }}>
-                          {t("data.aiSuggestions.operatorProfile")}
-                        </span>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", color: "var(--success)" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                          <Sparkles size={16} />
+                          <span style={{ fontSize: "0.8rem", fontWeight: 600, textTransform: "uppercase" }}>
+                            {t("data.aiSuggestions.operatorProfile")}
+                          </span>
+                        </div>
+                        {exists ? (
+                          <span style={{ fontSize: "0.75rem", fontWeight: 600, background: "rgba(249, 115, 22, 0.15)", color: "rgb(249, 115, 22)", padding: "0.15rem 0.45rem", borderRadius: "4px", border: "1px solid rgba(249, 115, 22, 0.2)" }}>
+                            {t("data.aiSuggestions.profileActionUpdate")}
+                          </span>
+                        ) : (
+                          <span style={{ fontSize: "0.75rem", fontWeight: 600, background: "rgba(16, 185, 129, 0.15)", color: "rgb(16, 185, 129)", padding: "0.15rem 0.45rem", borderRadius: "4px", border: "1px solid rgba(16, 185, 129, 0.2)" }}>
+                            {t("data.aiSuggestions.profileActionCreate")}
+                          </span>
+                        )}
                       </div>
                       <div
                         style={{

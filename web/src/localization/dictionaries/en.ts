@@ -1042,6 +1042,8 @@ export const enDictionary: TranslationDictionary = {
       profileAliases: "Aliases",
       profileMarkers: "Service Markers",
       profileAsns: "ASNs",
+      profileActionUpdate: "Update Profile",
+      profileActionCreate: "New Profile",
       actions: {
         accept: "Accept",
         reject: "Reject",

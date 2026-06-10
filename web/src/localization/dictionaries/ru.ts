@@ -1128,6 +1128,8 @@ export const ruDictionary: TranslationDictionary = {
       profileAliases: "Ключевые слова (aliases)",
       profileMarkers: "Маркеры услуг",
       profileAsns: "Автономные системы (ASNs)",
+      profileActionUpdate: "Обновление профиля",
+      profileActionCreate: "Новый профиль",
       actions: {
         accept: "Принять",
         reject: "Отклонить",
