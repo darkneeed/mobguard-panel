@@ -674,7 +674,8 @@ export function RulesPage({ session }: { session?: Session }) {
   }
 
   function renderRulesSaveBar() {
-    const labelKey = activeSection === "ai-optimizer" ? "layout.subnav.rules.aiOptimizer" : `layout.subnav.rules.${activeSection}`;
+    const sectionKey = activeSection === "ai-suggestions" ? "aiSuggestions" : (activeSection === "ai-optimizer" ? "aiOptimizer" : activeSection);
+    const labelKey = `layout.subnav.rules.${sectionKey}`;
     return (
       <div className="panel compact-toolbar">
         <div className="compact-toolbar-main">
@@ -1776,7 +1777,7 @@ export function RulesPage({ session }: { session?: Session }) {
         <div>
           <h1>{t("rules.title")}</h1>
           <p className="page-lede">
-            {t(`rules.sectionDescriptions.${activeSection === "ai-optimizer" ? "aiOptimizer" : activeSection}`)}
+            {t(`rules.sectionDescriptions.${activeSection === "ai-suggestions" ? "aiSuggestions" : (activeSection === "ai-optimizer" ? "aiOptimizer" : activeSection)}`)}
           </p>
         </div>
       </div>

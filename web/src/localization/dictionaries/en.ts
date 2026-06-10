@@ -753,6 +753,7 @@ export const enDictionary: TranslationDictionary = {
       policy: "Live decision policy plus enforcement-side access switching controls.",
       learning: "Promotion thresholds that decide when runtime learning becomes trusted.",
       aiOptimizer: "Generative optimization of threshold and scoring weight parameters based on daily traffic analysis using Gemini LLM.",
+      aiSuggestions: "Gemini AI suggestions for classifying unsure/grey-zone networks and auditing operator mistakes.",
       retention: "Storage retention windows that cap SQLite growth without removing active review state."
     },
     providerProfiles: {
