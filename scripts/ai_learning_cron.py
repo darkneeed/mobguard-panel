@@ -84,7 +84,7 @@ def run_ai_audit() -> None:
             FROM review_cases
             WHERE status = 'OPEN' AND asn IS NOT NULL AND asn != 0
             GROUP BY asn, isp
-            HAVING count >= 15
+            HAVING COUNT(*) >= 15
             """
         ).fetchall()
         for r in rows_asn:
@@ -103,7 +103,7 @@ def run_ai_audit() -> None:
             FROM review_cases
             WHERE status = 'OPEN' AND provider_key IS NOT NULL AND provider_key != ''
             GROUP BY provider_key
-            HAVING count >= 15
+            HAVING COUNT(*) >= 15
             """
         ).fetchall()
         for r in rows_prov:
