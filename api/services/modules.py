@@ -784,6 +784,16 @@ def _attach_runtime_metrics(
         module_id = str(payload.get("module_id") or "").strip()
         module_activity = per_module_activity.get(module_id, {})
         details = heartbeat_details.get(module_id, {})
+        
+        metadata = payload.get("metadata")
+        if isinstance(metadata, str):
+            try:
+                metadata = json.loads(metadata)
+            except Exception:
+                metadata = {}
+        if not isinstance(metadata, dict):
+            metadata = {}
+        payload["last_ip"] = details.get("client_ip") or metadata.get("client_ip") or ""
         panel_online = _panel_online_for_module(
             panel_online_map,
             module_id=module_id,

@@ -612,6 +612,7 @@ export function ModulesPage({ session }: { session?: Session }) {
             </div>
             <div className="queue-card-identifiers" style={{ marginTop: "0.25rem", display: "flex", flexDirection: "column", gap: "0.15rem" }}>
               <span>ID: {item.module_id}</span>
+              <span>IP: {item.last_ip || "—"}</span>
               <span>Версия: {item.version || "—"}</span>
             </div>
           </div>
@@ -629,31 +630,7 @@ export function ModulesPage({ session }: { session?: Session }) {
           </div>
         </div>
 
-        <div className="module-toggle-row" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "var(--surface-soft)", padding: "0.6rem 0.85rem", borderRadius: "8px", border: "1px solid var(--line)" }}>
-          <span style={{ fontSize: "0.85rem", fontWeight: 500, color: "var(--muted)" }}>Статус модуля:</span>
-          {togglingModuleId === item.module_id ? (
-            <Loader2 size={16} className="spinner" />
-          ) : (
-            <button
-              className={isModuleEnabled ? "btn-disable" : "btn-enable"}
-              style={{
-                padding: "0.35rem 0.85rem",
-                fontSize: "0.8rem",
-                borderRadius: "6px",
-                display: "inline-flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: "0.35rem",
-                minWidth: "100px"
-              }}
-              disabled={!canManageModules}
-              onClick={() => toggleModule(item)}
-            >
-              <span style={{ display: "inline-block", width: "6px", height: "6px", borderRadius: "50%", background: isModuleEnabled ? "var(--danger)" : "var(--success)" }} />
-              {isModuleEnabled ? "Отключить" : "Включить"}
-            </button>
-          )}
-        </div>
+
 
         <div className="module-ops-grid" style={{ gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
           <div className="module-ops-chip">
@@ -738,6 +715,28 @@ export function ModulesPage({ session }: { session?: Session }) {
               "Рестарт"
             )}
           </button>
+          {togglingModuleId === item.module_id ? (
+            <div style={{ flex: 1.2, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
+              <Loader2 size={14} className="spinner" />
+            </div>
+          ) : (
+            <button
+              className={isModuleEnabled ? "btn-disable" : "btn-enable"}
+              style={{
+                flex: 1.2,
+                padding: "0.5rem",
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "0.35rem",
+              }}
+              disabled={!canManageModules}
+              onClick={() => toggleModule(item)}
+            >
+              <span style={{ display: "inline-block", width: "6px", height: "6px", borderRadius: "50%", background: isModuleEnabled ? "var(--danger)" : "var(--success)" }} />
+              {isModuleEnabled ? "Отключить" : "Включить"}
+            </button>
+          )}
         </div>
       </article>
     );

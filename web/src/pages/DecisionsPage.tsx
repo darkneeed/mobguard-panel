@@ -340,7 +340,7 @@ export function DecisionsPage({ session: _session }: { session?: Session }) {
                 : "";
               const isVerdictHome = item.verdict === "HOME";
               const isVerdictMobile = item.verdict === "MOBILE";
-              const verdictClass = isVerdictHome ? "status-resolved" : isVerdictMobile ? "severity-medium" : "severity-low";
+              const verdictClass = isVerdictHome ? "punitive" : isVerdictMobile ? "status-resolved" : "severity-low";
 
               return (
                 <article

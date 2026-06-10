@@ -3,7 +3,7 @@ from __future__ import annotations
 import sqlite3
 from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, status, Request
 
 from ..dependencies import get_container, require_permission
 from ..permissions import (
@@ -33,14 +33,30 @@ def _bearer_token(authorization: Optional[str]) -> str:
     return token.strip()
 
 
+def _client_ip(request: Request) -> str:
+    x_forwarded_for = request.headers.get("x-forwarded-for")
+    if x_forwarded_for:
+        return x_forwarded_for.split(",")[0].strip()
+    x_real_ip = request.headers.get("x-real-ip")
+    if x_real_ip:
+        return x_real_ip.strip()
+    return request.client.host if request.client else ""
+
+
 @router.post("/module/register")
 def register_module(
     payload: ModuleRegisterRequest,
+    request: Request = None,
     authorization: Optional[str] = Header(default=None),
     container=Depends(get_container),
 ) -> dict[str, Any]:
     try:
-        return module_service.register_module(container, payload.model_dump(), _bearer_token(authorization))
+        client_ip = _client_ip(request) if request else ""
+        payload_dict = payload.model_dump()
+        if not isinstance(payload_dict.get("metadata"), dict):
+            payload_dict["metadata"] = {}
+        payload_dict["metadata"]["client_ip"] = client_ip
+        return module_service.register_module(container, payload_dict, _bearer_token(authorization))
     except module_service.ModuleStorageBusyError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except ValueError as exc:
@@ -50,11 +66,17 @@ def register_module(
 @router.post("/module/heartbeat")
 def module_heartbeat(
     payload: ModuleHeartbeatRequest,
+    request: Request = None,
     authorization: Optional[str] = Header(default=None),
     container=Depends(get_container),
 ) -> dict[str, Any]:
     try:
-        return module_service.record_module_heartbeat(container, payload.model_dump(), _bearer_token(authorization))
+        client_ip = _client_ip(request) if request else ""
+        payload_dict = payload.model_dump()
+        if not isinstance(payload_dict.get("details"), dict):
+            payload_dict["details"] = {}
+        payload_dict["details"]["client_ip"] = client_ip
+        return module_service.record_module_heartbeat(container, payload_dict, _bearer_token(authorization))
     except module_service.ModuleStorageBusyError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except ValueError as exc:

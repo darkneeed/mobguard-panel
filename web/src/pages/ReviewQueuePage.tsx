@@ -1194,10 +1194,10 @@ export function ReviewQueuePage({ session }: { session?: Session }) {
                     {/* Verdict & Score */}
                     <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap", background: "var(--surface-soft)", padding: "0.6rem 0.85rem", borderRadius: "10px" }}>
                       <span style={{ fontSize: "0.75rem", color: "var(--muted)", fontWeight: 600, textTransform: "uppercase" }}>Решение:</span>
-                      <span className={`status-badge ${item.verdict?.toLowerCase() === "home" ? "status-resolved" : "punitive"}`} style={{ fontWeight: 700, padding: "2px 8px", borderRadius: "6px" }}>
+                      <span className={`status-badge ${item.verdict?.toUpperCase() === "HOME" ? "punitive" : "status-resolved"}`} style={{ fontWeight: 700, padding: "2px 8px", borderRadius: "6px" }}>
                         {item.verdict}
                       </span>
-                      <span className="tag" style={{ padding: "2px 8px", borderRadius: "6px" }}>{item.confidence_band}</span>
+                      <span className={`tag ${item.confidence_band?.startsWith("PROBABLE_") ? "severity-high" : ""}`} style={{ padding: "2px 8px", borderRadius: "6px" }}>{item.confidence_band}</span>
                     </div>
 
                     {/* Provider & ASN Box */}

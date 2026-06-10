@@ -516,14 +516,18 @@ export function ReviewDetailPage({ session }: { session?: Session }) {
                 <div>
                   <dt>{t("reviewDetail.fields.verdict")}</dt>
                   <dd>
-                    <span className={`tag ${data.verdict === "HOME" ? "status-resolved" : data.verdict === "MOBILE" ? "severity-medium" : "severity-low"}`}>
+                    <span className={`tag ${data.verdict === "HOME" ? "punitive" : data.verdict === "MOBILE" ? "status-resolved" : "severity-low"}`}>
                       {formatValue(data.verdict as string | undefined)}
                     </span>
                   </dd>
                 </div>
                 <div>
                   <dt>{t("reviewDetail.fields.confidence")}</dt>
-                  <dd>{formatValue(data.confidence_band as string | undefined)}</dd>
+                  <dd>
+                    <span className={`tag ${data.confidence_band?.startsWith("PROBABLE_") ? "severity-high" : ""}`}>
+                      {formatValue(data.confidence_band as string | undefined)}
+                    </span>
+                  </dd>
                 </div>
                 <div>
                   <dt>{t("reviewDetail.fields.opened")}</dt>

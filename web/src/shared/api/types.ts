@@ -199,6 +199,7 @@ export type ModuleRecord = {
   token_reveal_available?: boolean;
   first_seen_at?: string;
   last_seen_at: string;
+  last_ip?: string | null;
   healthy?: boolean;
   seconds_since_last_seen?: number | null;
   stale_after_seconds?: number;
