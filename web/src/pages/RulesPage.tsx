@@ -6,6 +6,7 @@ import {
   api,
   EnforcementSettingsResponse,
   RulesState,
+  Session,
 } from "../api/client";
 import type { AutomationStatus } from "../api/client";
 import { FieldLabel } from "../components/FieldLabel";
@@ -20,6 +21,7 @@ import {
   parseListText,
 } from "../features/rules/lib/serializers";
 import { useI18n } from "../localization";
+import { hasPermission } from "../app/permissions";
 import {
   automationGuardrailLabels,
   automationModeLabel,
@@ -37,6 +39,7 @@ import {
   RulesDraft,
 } from "../rulesMeta";
 import { formatDisplayDateTime } from "../utils/datetime";
+import { AiLearningSuggestionsSection } from "./data/AiLearningSuggestionsSection";
 
 type GeneralSettingKey =
   | "usage_time_threshold"
@@ -155,6 +158,7 @@ const RULES_SECTIONS = [
   "lists",
   "providers",
   "learning",
+  "ai-suggestions",
   "ai-optimizer",
   "retention",
 ] as const;
@@ -171,10 +175,11 @@ function blankProviderProfile(): ProviderProfileDraft {
   };
 }
 
-export function RulesPage() {
+export function RulesPage({ session }: { session?: Session }) {
   const { t, language } = useI18n();
   const { section } = useParams();
   const navigate = useNavigate();
+  const canWriteRules = hasPermission(session, "rules.write");
   const activeSection = useMemo<RulesSection>(() => {
     return RULES_SECTIONS.includes(section as RulesSection)
       ? (section as RulesSection)
@@ -1714,6 +1719,15 @@ export function RulesPage() {
   }
 
   function renderSectionContent() {
+    if (activeSection === "ai-suggestions") {
+      return (
+        <AiLearningSuggestionsSection
+          t={t}
+          language={language}
+          canWriteData={canWriteRules}
+        />
+      );
+    }
     if (!draft && activeSection !== "general") return null;
     if (activeSection === "general") {
         return (
@@ -1762,7 +1776,7 @@ export function RulesPage() {
         <div>
           <h1>{t("rules.title")}</h1>
           <p className="page-lede">
-            {t(`rules.sectionDescriptions.${activeSection}`)}
+            {t(`rules.sectionDescriptions.${activeSection === "ai-optimizer" ? "aiOptimizer" : activeSection}`)}
           </p>
         </div>
       </div>

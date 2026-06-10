@@ -22,6 +22,7 @@ type AISuggestion = {
   confidence: number;
   reasoning_ru: string;
   operator_errors_json: string | null;
+  suggested_provider_profile_json: string | null;
   status: string;
   created_at: string;
   updated_at: string;
@@ -224,6 +225,86 @@ export function AiLearningSuggestionsSection({ t, language, canWriteData = true 
                   {sug.reasoning_ru}
                 </p>
               </div>
+              
+              {/* Recommended Operator Profile */}
+              {sug.suggested_provider_profile_json ? (() => {
+                try {
+                  const prof = JSON.parse(sug.suggested_provider_profile_json);
+                  if (!prof || !prof.key) return null;
+                  return (
+                    <div
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: "0.5rem",
+                        borderTop: "1px solid var(--line)",
+                        paddingTop: "1rem"
+                      }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", color: "var(--success)" }}>
+                        <Sparkles size={16} />
+                        <span style={{ fontSize: "0.8rem", fontWeight: 600, textTransform: "uppercase" }}>
+                          {t("data.aiSuggestions.operatorProfile")}
+                        </span>
+                      </div>
+                      <div
+                        style={{
+                          display: "grid",
+                          gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))",
+                          gap: "1rem",
+                          background: "rgba(255, 255, 255, 0.01)",
+                          padding: "1rem",
+                          borderRadius: "10px",
+                          border: "1px solid rgba(255, 255, 255, 0.03)",
+                          fontSize: "0.85rem"
+                        }}
+                      >
+                        <div>
+                          <span style={{ color: "var(--muted)" }}>{t("data.aiSuggestions.profileKey")}:</span>{" "}
+                          <strong style={{ color: "var(--ink)" }}>{prof.key}</strong>
+                        </div>
+                        <div>
+                          <span style={{ color: "var(--muted)" }}>{t("data.aiSuggestions.profileClassification")}:</span>{" "}
+                          <span className={`status-badge ${getDecisionBadgeClass(prof.classification.toUpperCase())}`} style={{ fontWeight: 700 }}>
+                            {prof.classification}
+                          </span>
+                        </div>
+                        {prof.aliases && prof.aliases.length > 0 && (
+                          <div style={{ gridColumn: "1 / -1" }}>
+                            <span style={{ color: "var(--muted)" }}>{t("data.aiSuggestions.profileAliases")}:</span>{" "}
+                            <span style={{ color: "var(--ink)" }}>{prof.aliases.join(", ")}</span>
+                          </div>
+                        )}
+                        {((prof.mobile_markers && prof.mobile_markers.length > 0) || (prof.home_markers && prof.home_markers.length > 0)) && (
+                          <div style={{ gridColumn: "1 / -1" }}>
+                            <span style={{ color: "var(--muted)" }}>{t("data.aiSuggestions.profileMarkers")}:</span>{" "}
+                            <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap", marginTop: "0.25rem" }}>
+                              {prof.mobile_markers?.map((m: string) => (
+                                <span key={m} className="tag status-resolved" style={{ fontSize: "0.75rem" }}>{m}</span>
+                              ))}
+                              {prof.home_markers?.map((m: string) => (
+                                <span key={m} className="tag severity-low" style={{ fontSize: "0.75rem" }}>{m}</span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {prof.asns && prof.asns.length > 0 && (
+                          <div style={{ gridColumn: "1 / -1" }}>
+                            <span style={{ color: "var(--muted)" }}>{t("data.aiSuggestions.profileAsns")}:</span>{" "}
+                            <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap", marginTop: "0.25rem" }}>
+                              {prof.asns.map((asn: number) => (
+                                <span key={asn} className="tag" style={{ fontSize: "0.75rem", background: "rgba(255,255,255,0.05)" }}>AS{asn}</span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                } catch (e) {
+                  return null;
+                }
+              })() : null}
 
               {/* Erroneous Cases List */}
               {errors.length > 0 ? (

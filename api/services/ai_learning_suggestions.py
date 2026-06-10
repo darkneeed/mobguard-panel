@@ -16,7 +16,7 @@ def get_suggestions(container: APIContainer) -> list[dict[str, Any]]:
         rows = conn.execute(
             """
             SELECT id, pattern_type, pattern_value, current_decision, suggested_decision,
-                   confidence, reasoning_ru, operator_errors_json, status, created_at, updated_at
+                   confidence, reasoning_ru, operator_errors_json, suggested_provider_profile_json, status, created_at, updated_at
             FROM ai_learning_suggestions
             ORDER BY created_at DESC
             """
@@ -61,6 +61,36 @@ def accept_suggestion(container: APIContainer, suggestion_id: int) -> dict[str, 
                 json.dumps({"ai_promoted": True, "reasoning": row["reasoning_ru"]}, ensure_ascii=False)
             )
         )
+        
+        # 2b. Add/Update Operator Profile in live rules if suggested
+        suggested_profile_json = row["suggested_provider_profile_json"]
+        if suggested_profile_json:
+            try:
+                suggested_profile = json.loads(suggested_profile_json)
+                if isinstance(suggested_profile, dict) and suggested_profile.get("key"):
+                    current_rules_state = container.store.get_live_rules_state()
+                    current_rules = current_rules_state.get("rules", {})
+                    current_profiles = list(current_rules.get("provider_profiles", []))
+                    
+                    updated_profiles = []
+                    found = False
+                    for prof in current_profiles:
+                        if prof.get("key") == suggested_profile["key"]:
+                            updated_profiles.append(suggested_profile)
+                            found = True
+                        else:
+                            updated_profiles.append(prof)
+                    if not found:
+                        updated_profiles.append(suggested_profile)
+                        
+                    container.store.update_live_rules(
+                        {"provider_profiles": updated_profiles},
+                        "AI Auto-Learning Suggestions",
+                        None
+                    )
+            except Exception as e:
+                # Keep executing reopened cases even if profile saving encounters validation/parsing errors
+                pass
         
         # 3. Process operator errors: reopen those cases and mark/prioritize them
         errors_json = row["operator_errors_json"]

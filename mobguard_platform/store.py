@@ -1487,6 +1487,7 @@ class PlatformStore:
                     confidence REAL NOT NULL,
                     reasoning_ru TEXT NOT NULL,
                     operator_errors_json TEXT,
+                    suggested_provider_profile_json TEXT,
                     status TEXT DEFAULT 'PENDING',
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL,
@@ -1494,6 +1495,11 @@ class PlatformStore:
                 )
                 """
             )
+            ai_sug_columns = {
+                row["name"] for row in conn.execute("PRAGMA table_info(ai_learning_suggestions)").fetchall()
+            }
+            if ai_sug_columns and "suggested_provider_profile_json" not in ai_sug_columns:
+                conn.execute("ALTER TABLE ai_learning_suggestions ADD COLUMN suggested_provider_profile_json TEXT")
 
             columns = {
                 row["name"] for row in conn.execute("PRAGMA table_info(ip_decisions)").fetchall()

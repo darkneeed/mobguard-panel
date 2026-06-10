@@ -386,7 +386,7 @@ export function AccessPage({
     <section className="page">
       <div className="page-header page-header-stack">
         <div>
-          <h1>{t("nav.system")}</h1>
+          <h1>{t("layout.nav.system")}</h1>
         </div>
         <div className="action-row">
           <span

@@ -40,16 +40,16 @@ class AILearningSuggestionsTests(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
-    def _insert_suggestion(self, pattern_type, pattern_value, suggested_decision, confidence, reasoning, errors_list, status="PENDING"):
+    def _insert_suggestion(self, pattern_type, pattern_value, suggested_decision, confidence, reasoning, errors_list, status="PENDING", provider_profile=None):
         with self.store._connect() as conn:
             conn.execute(
                 """
                 INSERT INTO ai_learning_suggestions (
                     pattern_type, pattern_value, current_decision, suggested_decision,
-                    confidence, reasoning_ru, operator_errors_json, status, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, '2026-06-10T12:00:00', '2026-06-10T12:00:00')
+                    confidence, reasoning_ru, operator_errors_json, suggested_provider_profile_json, status, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, '2026-06-10T12:00:00', '2026-06-10T12:00:00')
                 """,
-                (pattern_type, pattern_value, "MOBILE", suggested_decision, confidence, reasoning, json.dumps(errors_list), status)
+                (pattern_type, pattern_value, "MOBILE", suggested_decision, confidence, reasoning, json.dumps(errors_list), json.dumps(provider_profile) if provider_profile else None, status)
             )
             conn.commit()
 
@@ -142,6 +142,37 @@ class AILearningSuggestionsTests(unittest.TestCase):
             self.assertIsNotNone(active_row)
             self.assertEqual(active_row["decision"], "HOSTING")
             self.assertEqual(active_row["support"], 999)
+
+    def test_accept_suggestion_updates_live_rules_with_operator_profile(self):
+        profile = {
+            "key": "test_prov",
+            "classification": "mobile",
+            "aliases": ["test_prov"],
+            "mobile_markers": ["test_m"],
+            "home_markers": [],
+            "asns": [99991]
+        }
+        self._insert_suggestion("provider", "test_prov", "MOBILE", 0.99, "Обоснование", [], "PENDING", provider_profile=profile)
+        
+        suggestions = ai_learning_suggestions.get_suggestions(self.container)
+        sug_id = suggestions[0]["id"]
+        
+        # We need to ensure live_rules is initialized so get_live_rules_state works
+        with self.store._connect() as conn:
+            conn.execute(
+                "UPDATE live_rules SET rules_json = '{}', revision = 1 WHERE id = 1"
+            )
+            conn.commit()
+            
+        res = ai_learning_suggestions.accept_suggestion(self.container, sug_id)
+        self.assertTrue(res["success"])
+        
+        # Verify the profile is in live rules config!
+        rules_state = self.store.get_live_rules_state()
+        profiles = rules_state.get("rules", {}).get("provider_profiles", [])
+        self.assertEqual(len(profiles), 1)
+        self.assertEqual(profiles[0]["key"], "test_prov")
+        self.assertEqual(profiles[0]["asns"], [99991])
 
 if __name__ == "__main__":
     unittest.main()

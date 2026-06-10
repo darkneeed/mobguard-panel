@@ -162,7 +162,7 @@ export function AppRouter({
           path="/rules/:section"
           element={
             <PermissionRoute session={session} permission="rules.read">
-              <RulesPage />
+              <RulesPage session={session} />
             </PermissionRoute>
           }
         />

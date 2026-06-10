@@ -247,6 +247,13 @@ For each analyzed pattern, produce:
 4. `confidence`: float (0.0 to 1.0)
 5. `reasoning_ru`: A detailed explanation on why this classification was chosen (in Russian). Include ISP details, OS observations, and network background.
 6. `operator_errors`: list of integers (case IDs of erroneous operator resolutions, e.g., if a case was resolved as MOBILE but the ISP is clearly hosting like Hetzner, DigitalOcean, OVH, or Vultr).
+7. `suggested_provider_profile`: (optional object) If pattern_type is 'provider' or if you recommend configuring a new operator/provider profile in the configuration to map this network / ASN, include this object matching the schema:
+   - `key`: lowercase ASCII string representing the provider identifier (e.g. 'vultr', 'mts').
+   - `classification`: one of: 'mixed', 'mobile', 'home'.
+   - `aliases`: list of lowercase string aliases/keywords matching this provider (e.g. ['vultr']).
+   - `mobile_markers`: list of lowercase string markers (e.g. ['mobile', 'lte', 'pgw']).
+   - `home_markers`: list of lowercase string markers (e.g. ['fiber', 'gpon', 'fttb']).
+   - `asns`: list of integers (ASNs belonging to this operator).
 
 Respond strictly in JSON format matching the schema:
 {{
@@ -257,7 +264,15 @@ Respond strictly in JSON format matching the schema:
       "suggested_decision": "HOSTING",
       "confidence": 0.98,
       "reasoning_ru": "Этот ASN принадлежит хостинг-провайдеру...",
-      "operator_errors": [1024, 1025]
+      "operator_errors": [1024, 1025],
+      "suggested_provider_profile": {{
+        "key": "hostingco",
+        "classification": "home",
+        "aliases": ["hostingco"],
+        "mobile_markers": [],
+        "home_markers": ["fiber"],
+        "asns": [12345]
+      }}
     }}
   ]
 }}
@@ -292,6 +307,30 @@ Respond strictly in JSON format matching the schema:
                                 "operator_errors": {
                                     "type": "ARRAY",
                                     "items": {"type": "INTEGER"}
+                                },
+                                "suggested_provider_profile": {
+                                    "type": "OBJECT",
+                                    "properties": {
+                                        "key": {"type": "STRING"},
+                                        "classification": {"type": "STRING"},
+                                        "aliases": {
+                                            "type": "ARRAY",
+                                            "items": {"type": "STRING"}
+                                        },
+                                        "mobile_markers": {
+                                            "type": "ARRAY",
+                                            "items": {"type": "STRING"}
+                                        },
+                                        "home_markers": {
+                                            "type": "ARRAY",
+                                            "items": {"type": "STRING"}
+                                        },
+                                        "asns": {
+                                            "type": "ARRAY",
+                                            "items": {"type": "INTEGER"}
+                                        }
+                                    },
+                                    "required": ["key", "classification", "aliases", "mobile_markers", "home_markers", "asns"]
                                 }
                             },
                             "required": ["pattern_type", "pattern_value", "suggested_decision", "confidence", "reasoning_ru", "operator_errors"]
@@ -341,6 +380,8 @@ Respond strictly in JSON format matching the schema:
                         (sug["pattern_type"], sug["pattern_value"])
                     ).fetchone()
                     
+                    prof_val = sug.get("suggested_provider_profile")
+                    prof_json = json.dumps(prof_val, ensure_ascii=False) if prof_val else None
                     if existing:
                         # Update existing
                         conn.execute(
@@ -350,6 +391,7 @@ Respond strictly in JSON format matching the schema:
                                 confidence = ?,
                                 reasoning_ru = ?,
                                 operator_errors_json = ?,
+                                suggested_provider_profile_json = ?,
                                 updated_at = ?
                             WHERE id = ?
                             """,
@@ -358,6 +400,7 @@ Respond strictly in JSON format matching the schema:
                                 sug["confidence"],
                                 sug["reasoning_ru"],
                                 json.dumps(sug["operator_errors"]),
+                                prof_json,
                                 now,
                                 existing["id"] if "id" in existing.keys() else existing[0]
                             )
@@ -368,8 +411,8 @@ Respond strictly in JSON format matching the schema:
                             """
                             INSERT INTO ai_learning_suggestions (
                                 pattern_type, pattern_value, current_decision, suggested_decision,
-                                confidence, reasoning_ru, operator_errors_json, status, created_at, updated_at
-                            ) VALUES (?, ?, ?, ?, ?, ?, ?, 'PENDING', ?, ?)
+                                confidence, reasoning_ru, operator_errors_json, suggested_provider_profile_json, status, created_at, updated_at
+                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', ?, ?)
                             """,
                             (
                                 sug["pattern_type"],
@@ -379,6 +422,7 @@ Respond strictly in JSON format matching the schema:
                                 sug["confidence"],
                                 sug["reasoning_ru"],
                                 json.dumps(sug["operator_errors"]),
+                                prof_json,
                                 now,
                                 now
                             )

@@ -47,6 +47,7 @@ export const rulesNavigation: NavigationItem[] = [
   { to: "/rules/lists", labelKey: "layout.subnav.rules.lists", permission: "rules.read" },
   { to: "/rules/providers", labelKey: "layout.subnav.rules.providers", permission: "rules.read" },
   { to: "/rules/learning", labelKey: "layout.subnav.rules.learning", permission: "rules.read" },
+  { to: "/rules/ai-suggestions", labelKey: "layout.subnav.rules.aiSuggestions", permission: "rules.read" },
   { to: "/rules/ai-optimizer", labelKey: "layout.subnav.rules.aiOptimizer", permission: "rules.read" },
   { to: "/rules/retention", labelKey: "layout.subnav.rules.retention", permission: "rules.read" }
 ];
