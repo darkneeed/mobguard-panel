@@ -30,6 +30,7 @@ def get_suggestions(container: APIContainer) -> list[dict[str, Any]]:
     return [dict(row) for row in rows]
 
 def accept_suggestion(container: APIContainer, suggestion_id: int) -> dict[str, Any]:
+    reopened_cases = []
     with container.store._connect() as conn:
         if not container.store._table_exists(conn, "ai_learning_suggestions"):
             raise HTTPException(status_code=400, detail="Table ai_learning_suggestions not found")
@@ -45,6 +46,10 @@ def accept_suggestion(container: APIContainer, suggestion_id: int) -> dict[str, 
             
         now = _utcnow()
         # 1. Update suggestion status
+        conn.execute(
+            "DELETE FROM ai_learning_suggestions WHERE pattern_type = ? AND pattern_value = ? AND status = 'ACCEPTED'",
+            (row["pattern_type"], row["pattern_value"])
+        )
         conn.execute(
             "UPDATE ai_learning_suggestions SET status = 'ACCEPTED', updated_at = ? WHERE id = ?",
             (now, suggestion_id)
@@ -74,39 +79,8 @@ def accept_suggestion(container: APIContainer, suggestion_id: int) -> dict[str, 
             )
         )
         
-        # 2b. Add/Update Operator Profile in live rules if suggested
-        suggested_profile_json = row["suggested_provider_profile_json"]
-        if suggested_profile_json:
-            try:
-                suggested_profile = json.loads(suggested_profile_json)
-                if isinstance(suggested_profile, dict) and suggested_profile.get("key"):
-                    current_rules_state = container.store.get_live_rules_state()
-                    current_rules = current_rules_state.get("rules", {})
-                    current_profiles = list(current_rules.get("provider_profiles", []))
-                    
-                    updated_profiles = []
-                    found = False
-                    for prof in current_profiles:
-                        if prof.get("key") == suggested_profile["key"]:
-                            updated_profiles.append(suggested_profile)
-                            found = True
-                        else:
-                            updated_profiles.append(prof)
-                    if not found:
-                        updated_profiles.append(suggested_profile)
-                        
-                    container.store.update_live_rules(
-                        {"provider_profiles": updated_profiles},
-                        "AI Auto-Learning Suggestions",
-                        None
-                    )
-            except Exception as e:
-                # Keep executing reopened cases even if profile saving encounters validation/parsing errors
-                pass
-        
         # 3. Process operator errors: reopen those cases and mark/prioritize them
         errors_json = row["operator_errors_json"]
-        reopened_cases = []
         if errors_json:
             try:
                 case_ids = json.loads(errors_json)
@@ -141,6 +115,36 @@ def accept_suggestion(container: APIContainer, suggestion_id: int) -> dict[str, 
                 
         conn.commit()
         
+    # 2b. Add/Update Operator Profile in live rules if suggested (run outside db lock)
+    suggested_profile_json = row["suggested_provider_profile_json"]
+    if suggested_profile_json:
+        try:
+            suggested_profile = json.loads(suggested_profile_json)
+            if isinstance(suggested_profile, dict) and suggested_profile.get("key"):
+                current_rules_state = container.store.get_live_rules_state()
+                current_rules = current_rules_state.get("rules", {})
+                current_profiles = list(current_rules.get("provider_profiles", []))
+                
+                updated_profiles = []
+                found = False
+                for prof in current_profiles:
+                    if prof.get("key") == suggested_profile["key"]:
+                        updated_profiles.append(suggested_profile)
+                        found = True
+                    else:
+                        updated_profiles.append(prof)
+                if not found:
+                    updated_profiles.append(suggested_profile)
+                    
+                container.store.update_live_rules(
+                    {"provider_profiles": updated_profiles},
+                    "AI Auto-Learning Suggestions",
+                    None
+                )
+        except Exception as e:
+            # Keep executing reopened cases even if profile saving encounters validation/parsing errors
+            pass
+            
     return {
         "success": True,
         "suggestion_id": suggestion_id,
@@ -162,6 +166,10 @@ def reject_suggestion(container: APIContainer, suggestion_id: int) -> dict[str, 
             return {"success": False, "detail": f"Suggestion already {row['status']}"}
             
         now = _utcnow()
+        conn.execute(
+            "DELETE FROM ai_learning_suggestions WHERE pattern_type = ? AND pattern_value = ? AND status = 'REJECTED'",
+            (row["pattern_type"], row["pattern_value"])
+        )
         conn.execute(
             "UPDATE ai_learning_suggestions SET status = 'REJECTED', updated_at = ? WHERE id = ?",
             (now, suggestion_id)

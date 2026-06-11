@@ -28,6 +28,44 @@ type AISuggestion = {
   updated_at: string;
 };
 
+interface DiffItem<T> {
+  value: T;
+  type: "added" | "deleted" | "unchanged";
+}
+
+function diffLists<T extends string | number>(
+  existing: T[] | undefined,
+  recommended: T[] | undefined
+): DiffItem<T>[] {
+  const ext = existing || [];
+  const rec = recommended || [];
+  
+  const extSet = new Set(ext.map(v => String(v).trim().toLowerCase()));
+  const recSet = new Set(rec.map(v => String(v).trim().toLowerCase()));
+
+  const result: DiffItem<T>[] = [];
+
+  // Items deleted (exist in old but not in new)
+  for (const item of ext) {
+    const key = String(item).trim().toLowerCase();
+    if (!recSet.has(key)) {
+      result.push({ value: item, type: "deleted" });
+    }
+  }
+
+  // Items added or unchanged
+  for (const item of rec) {
+    const key = String(item).trim().toLowerCase();
+    if (extSet.has(key)) {
+      result.push({ value: item, type: "unchanged" });
+    } else {
+      result.push({ value: item, type: "added" });
+    }
+  }
+
+  return result;
+}
+
 export function AiLearningSuggestionsSection({ t, language, canWriteData = true }: Props) {
   const { pushToast } = useToast();
   const [suggestions, setSuggestions] = useState<AISuggestion[]>([]);
@@ -351,7 +389,8 @@ export function AiLearningSuggestionsSection({ t, language, canWriteData = true 
                 try {
                   const prof = JSON.parse(sug.suggested_provider_profile_json);
                   if (!prof || !prof.key) return null;
-                  const exists = currentProfiles.some(p => p.key === prof.key);
+                  const existingProf = currentProfiles.find(p => p.key === prof.key);
+                  const exists = !!existingProf;
                   return (
                     <div
                       style={{
@@ -397,39 +436,238 @@ export function AiLearningSuggestionsSection({ t, language, canWriteData = true 
                         </div>
                         <div>
                           <span style={{ color: "var(--muted)" }}>{t("data.aiSuggestions.profileClassification")}:</span>{" "}
-                          <span className={`status-badge ${getDecisionBadgeClass(prof.classification.toUpperCase())}`} style={{ fontWeight: 700 }}>
-                            {prof.classification}
-                          </span>
+                          {(() => {
+                            const showDiff = exists && existingProf && existingProf.classification !== prof.classification;
+                            if (showDiff) {
+                              return (
+                                <span style={{ display: "inline-flex", alignItems: "center", gap: "0.25rem" }}>
+                                  <span
+                                    className={`status-badge ${getDecisionBadgeClass((existingProf?.classification || "UNSURE").toUpperCase())}`}
+                                    style={{ textDecoration: "line-through", opacity: 0.6, fontWeight: 700 }}
+                                  >
+                                    {existingProf?.classification}
+                                  </span>
+                                  <span style={{ color: "var(--muted)" }}>→</span>
+                                  <span
+                                    className={`status-badge ${getDecisionBadgeClass(prof.classification.toUpperCase())}`}
+                                    style={{
+                                      fontWeight: 700,
+                                      borderColor: "#f97316",
+                                      color: "#f97316",
+                                      background: "rgba(249, 115, 22, 0.1)"
+                                    }}
+                                  >
+                                    {prof.classification}
+                                  </span>
+                                </span>
+                              );
+                            }
+                            return (
+                              <span className={`status-badge ${getDecisionBadgeClass(prof.classification.toUpperCase())}`} style={{ fontWeight: 700 }}>
+                                {prof.classification}
+                              </span>
+                            );
+                          })()}
                         </div>
-                        {prof.aliases && prof.aliases.length > 0 && (
-                          <div style={{ gridColumn: "1 / -1" }}>
-                            <span style={{ color: "var(--muted)" }}>{t("data.aiSuggestions.profileAliases")}:</span>{" "}
-                            <span style={{ color: "var(--ink)" }}>{prof.aliases.join(", ")}</span>
-                          </div>
-                        )}
-                        {((prof.mobile_markers && prof.mobile_markers.length > 0) || (prof.home_markers && prof.home_markers.length > 0)) && (
-                          <div style={{ gridColumn: "1 / -1" }}>
-                            <span style={{ color: "var(--muted)" }}>{t("data.aiSuggestions.profileMarkers")}:</span>{" "}
-                            <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap", marginTop: "0.25rem" }}>
-                              {prof.mobile_markers?.map((m: string) => (
-                                <span key={m} className="tag status-resolved" style={{ fontSize: "0.75rem" }}>{m}</span>
-                              ))}
-                              {prof.home_markers?.map((m: string) => (
-                                <span key={m} className="tag severity-low" style={{ fontSize: "0.75rem" }}>{m}</span>
-                              ))}
+                        {(() => {
+                          const extAliases = existingProf?.aliases || [];
+                          const recAliases = prof.aliases || [];
+                          if (extAliases.length === 0 && recAliases.length === 0) return null;
+
+                          const diff = diffLists(exists ? existingProf?.aliases : prof.aliases, prof.aliases);
+                          return (
+                            <div style={{ gridColumn: "1 / -1" }}>
+                              <span style={{ color: "var(--muted)" }}>{t("data.aiSuggestions.profileAliases")}:</span>{" "}
+                              <div style={{ display: "inline-flex", gap: "0.4rem", flexWrap: "wrap", marginTop: "0.25rem", verticalAlign: "middle" }}>
+                                {diff.map((item, idx) => {
+                                  let style: React.CSSProperties = {
+                                    fontSize: "0.75rem",
+                                    padding: "0.15rem 0.45rem",
+                                    borderRadius: "4px",
+                                    border: "1px solid rgba(255, 255, 255, 0.1)",
+                                    background: "rgba(255, 255, 255, 0.05)",
+                                    color: "var(--ink)"
+                                  };
+                                  if (item.type === "added") {
+                                    style = {
+                                      fontSize: "0.75rem",
+                                      padding: "0.15rem 0.45rem",
+                                      borderRadius: "4px",
+                                      border: "1px solid rgba(16, 185, 129, 0.3)",
+                                      background: "rgba(16, 185, 129, 0.1)",
+                                      color: "#10b981",
+                                      fontWeight: 600
+                                    };
+                                  } else if (item.type === "deleted") {
+                                    style = {
+                                      fontSize: "0.75rem",
+                                      padding: "0.15rem 0.45rem",
+                                      borderRadius: "4px",
+                                      border: "1px solid rgba(239, 68, 68, 0.3)",
+                                      background: "rgba(239, 68, 68, 0.1)",
+                                      color: "#ef4444",
+                                      textDecoration: "line-through",
+                                      opacity: 0.7
+                                    };
+                                  }
+                                  return (
+                                    <span key={idx} style={style}>
+                                      {item.value}
+                                    </span>
+                                  );
+                                })}
+                              </div>
                             </div>
-                          </div>
-                        )}
-                        {prof.asns && prof.asns.length > 0 && (
-                          <div style={{ gridColumn: "1 / -1" }}>
-                            <span style={{ color: "var(--muted)" }}>{t("data.aiSuggestions.profileAsns")}:</span>{" "}
-                            <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap", marginTop: "0.25rem" }}>
-                              {prof.asns.map((asn: number) => (
-                                <span key={asn} className="tag" style={{ fontSize: "0.75rem", background: "rgba(255,255,255,0.05)" }}>AS{asn}</span>
-                              ))}
+                          );
+                        })()}
+                        {(() => {
+                          const extMobile = existingProf?.mobile_markers || [];
+                          const recMobile = prof.mobile_markers || [];
+                          const extHome = existingProf?.home_markers || [];
+                          const recHome = prof.home_markers || [];
+
+                          if (extMobile.length === 0 && recMobile.length === 0 && extHome.length === 0 && recHome.length === 0) return null;
+
+                          const mobileDiff = diffLists(exists ? existingProf?.mobile_markers : prof.mobile_markers, prof.mobile_markers);
+                          const homeDiff = diffLists(exists ? existingProf?.home_markers : prof.home_markers, prof.home_markers);
+
+                          return (
+                            <div style={{ gridColumn: "1 / -1" }}>
+                              <span style={{ color: "var(--muted)" }}>{t("data.aiSuggestions.profileMarkers")}:</span>{" "}
+                              <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap", marginTop: "0.25rem" }}>
+                                {mobileDiff.map((item, idx) => {
+                                  if (item.type === "added") {
+                                    return (
+                                      <span
+                                        key={`mob-add-${idx}`}
+                                        className="tag status-resolved"
+                                        style={{
+                                          fontSize: "0.75rem",
+                                          border: "1px solid rgba(16, 185, 129, 0.6)",
+                                          background: "rgba(16, 185, 129, 0.25)",
+                                          color: "#10b981",
+                                          fontWeight: 700
+                                        }}
+                                      >
+                                        + {item.value}
+                                      </span>
+                                    );
+                                  }
+                                  if (item.type === "deleted") {
+                                    return (
+                                      <span
+                                        key={`mob-del-${idx}`}
+                                        className="tag"
+                                        style={{
+                                          fontSize: "0.75rem",
+                                          border: "1px solid rgba(239, 68, 68, 0.3)",
+                                          background: "rgba(239, 68, 68, 0.1)",
+                                          color: "#ef4444",
+                                          textDecoration: "line-through",
+                                          opacity: 0.7
+                                        }}
+                                      >
+                                        - {item.value}
+                                      </span>
+                                    );
+                                  }
+                                  return (
+                                    <span key={`mob-unc-${idx}`} className="tag status-resolved" style={{ fontSize: "0.75rem" }}>
+                                      {item.value}
+                                    </span>
+                                  );
+                                })}
+
+                                {homeDiff.map((item, idx) => {
+                                  if (item.type === "added") {
+                                    return (
+                                      <span
+                                        key={`home-add-${idx}`}
+                                        className="tag severity-low"
+                                        style={{
+                                          fontSize: "0.75rem",
+                                          border: "1px solid rgba(16, 185, 129, 0.6)",
+                                          background: "rgba(16, 185, 129, 0.25)",
+                                          color: "#10b981",
+                                          fontWeight: 700
+                                        }}
+                                      >
+                                        + {item.value}
+                                      </span>
+                                    );
+                                  }
+                                  if (item.type === "deleted") {
+                                    return (
+                                      <span
+                                        key={`home-del-${idx}`}
+                                        className="tag"
+                                        style={{
+                                          fontSize: "0.75rem",
+                                          border: "1px solid rgba(239, 68, 68, 0.3)",
+                                          background: "rgba(239, 68, 68, 0.1)",
+                                          color: "#ef4444",
+                                          textDecoration: "line-through",
+                                          opacity: 0.7
+                                        }}
+                                      >
+                                        - {item.value}
+                                      </span>
+                                    );
+                                  }
+                                  return (
+                                    <span key={`home-unc-${idx}`} className="tag severity-low" style={{ fontSize: "0.75rem" }}>
+                                      {item.value}
+                                    </span>
+                                  );
+                                })}
+                              </div>
                             </div>
-                          </div>
-                        )}
+                          );
+                        })()}
+                        {(() => {
+                          const extAsns = existingProf?.asns || [];
+                          const recAsns = prof.asns || [];
+                          if (extAsns.length === 0 && recAsns.length === 0) return null;
+
+                          const diff = diffLists(exists ? existingProf?.asns : prof.asns, prof.asns);
+                          return (
+                            <div style={{ gridColumn: "1 / -1" }}>
+                              <span style={{ color: "var(--muted)" }}>{t("data.aiSuggestions.profileAsns")}:</span>{" "}
+                              <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap", marginTop: "0.25rem" }}>
+                                {diff.map((item, idx) => {
+                                  let style: React.CSSProperties = {
+                                    fontSize: "0.75rem",
+                                    background: "rgba(255,255,255,0.05)"
+                                  };
+                                  let className = "tag";
+                                  if (item.type === "added") {
+                                    style = {
+                                      fontSize: "0.75rem",
+                                      border: "1px solid rgba(16, 185, 129, 0.4)",
+                                      background: "rgba(16, 185, 129, 0.1)",
+                                      color: "#10b981",
+                                      fontWeight: 700
+                                    };
+                                  } else if (item.type === "deleted") {
+                                    style = {
+                                      fontSize: "0.75rem",
+                                      border: "1px solid rgba(239, 68, 68, 0.3)",
+                                      background: "rgba(239, 68, 68, 0.1)",
+                                      color: "#ef4444",
+                                      textDecoration: "line-through",
+                                      opacity: 0.7
+                                    };
+                                  }
+                                  return (
+                                    <span key={idx} className={className} style={style}>
+                                      AS{item.value}
+                                    </span>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          );
+                        })()}
                       </div>
                     </div>
                   );

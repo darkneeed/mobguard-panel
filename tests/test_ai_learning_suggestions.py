@@ -174,5 +174,52 @@ class AILearningSuggestionsTests(unittest.TestCase):
         self.assertEqual(profiles[0]["key"], "test_prov")
         self.assertEqual(profiles[0]["asns"], [99991])
 
+    def test_accept_suggestion_conflict_deletes_previous_accepted(self):
+        # Insert an accepted suggestion for asn/7777
+        self._insert_suggestion("asn", "7777", "HOSTING", 0.95, "Prev justification", [], "ACCEPTED")
+        # Insert a pending suggestion for asn/7777
+        self._insert_suggestion("asn", "7777", "HOSTING", 0.96, "New justification", [], "PENDING")
+
+        suggestions = ai_learning_suggestions.get_suggestions(self.container)
+        pending_sug = next(s for s in suggestions if s["status"] == "PENDING" and s["pattern_value"] == "7777")
+        sug_id = pending_sug["id"]
+
+        # Accept the new one: it should delete the old accepted suggestion and succeed
+        res = ai_learning_suggestions.accept_suggestion(self.container, sug_id)
+        self.assertTrue(res["success"])
+
+        # Check there is exactly one accepted suggestion for asn/7777 in database
+        with self.store._connect() as conn:
+            rows = conn.execute(
+                "SELECT id, status, suggested_decision FROM ai_learning_suggestions WHERE pattern_type = 'asn' AND pattern_value = '7777'"
+            ).fetchall()
+            self.assertEqual(len(rows), 1)
+            self.assertEqual(rows[0]["status"], "ACCEPTED")
+            self.assertEqual(rows[0]["suggested_decision"], "HOSTING")
+
+    def test_reject_suggestion_conflict_deletes_previous_rejected(self):
+        # Insert a rejected suggestion for asn/7777
+        self._insert_suggestion("asn", "7777", "HOSTING", 0.95, "Prev justification", [], "REJECTED")
+        # Insert a pending suggestion for asn/7777
+        self._insert_suggestion("asn", "7777", "HOSTING", 0.96, "New justification", [], "PENDING")
+
+        suggestions = ai_learning_suggestions.get_suggestions(self.container)
+        pending_sug = next(s for s in suggestions if s["status"] == "PENDING" and s["pattern_value"] == "7777")
+        sug_id = pending_sug["id"]
+
+        # Reject the new one: it should delete the old rejected suggestion and succeed
+        res = ai_learning_suggestions.reject_suggestion(self.container, sug_id)
+        self.assertTrue(res["success"])
+
+        # Check there is exactly one rejected suggestion for asn/7777 in database
+        with self.store._connect() as conn:
+            rows = conn.execute(
+                "SELECT id, status, suggested_decision FROM ai_learning_suggestions WHERE pattern_type = 'asn' AND pattern_value = '7777'"
+            ).fetchall()
+            self.assertEqual(len(rows), 1)
+            self.assertEqual(rows[0]["status"], "REJECTED")
+            self.assertEqual(rows[0]["suggested_decision"], "HOSTING")
+
 if __name__ == "__main__":
     unittest.main()
+
