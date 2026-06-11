@@ -1029,6 +1029,7 @@ export const enDictionary: TranslationDictionary = {
     aiSuggestions: {
       pageTitle: "AI Learning Recommendations",
       pageDescription: "Gemini AI suggestions for classifying unsure/grey-zone networks and auditing operator mistakes.",
+      emptyTitle: "AI Recommendations",
       empty: "No active AI recommendations.",
       status: {
         lastRun: "Last generated: {value}",
@@ -1792,30 +1793,6 @@ export const enDictionary: TranslationDictionary = {
       limiter_rollout_mode: {
         label: "Limiter rollout mode",
         description: "Limiter stage: observe, warning_only, or enforce."
-      },
-      webhook_enabled: {
-        label: "Enable webhooks",
-        description: "Emit signed webhook events from ingest/enforcement pipeline."
-      },
-      webhook_urls: {
-        label: "Webhook URLs",
-        description: "One URL per line for outbound webhook delivery."
-      },
-      webhook_secret: {
-        label: "Webhook secret",
-        description: "Shared secret used for X-Webhook-Secret signature."
-      },
-      webhook_timeout_seconds: {
-        label: "Webhook timeout (sec)",
-        description: "HTTP timeout for webhook deliveries."
-      },
-      webhook_retry_attempts: {
-        label: "Webhook retry attempts",
-        description: "Maximum delivery attempts per webhook event."
-      },
-      webhook_backoff_seconds: {
-        label: "Webhook backoff (sec)",
-        description: "Base retry delay for webhook redelivery."
       }
     },
     telegramFields: {

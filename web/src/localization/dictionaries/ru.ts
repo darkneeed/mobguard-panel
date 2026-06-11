@@ -1115,6 +1115,7 @@ export const ruDictionary: TranslationDictionary = {
     aiSuggestions: {
       pageTitle: "Рекомендации ИИ по обучению",
       pageDescription: "Предложения ИИ Gemini по классификации неопределенных/спорных сетей и исправлению ошибок модераторов.",
+      emptyTitle: "Рекомендации ИИ",
       empty: "Нет активных рекомендаций ИИ.",
       status: {
         lastRun: "Последнее обновление: {value}",
@@ -1971,31 +1972,7 @@ export const ruDictionary: TranslationDictionary = {
       limiter_rollout_mode: {
         label: "Режим rollout limiter",
         description: "Этап limiter: observe, warning_only или enforce.",
-      },
-      webhook_enabled: {
-        label: "Включить webhooks",
-        description: "Отправлять подписанные webhook-события из ingest/enforcement.",
-      },
-      webhook_urls: {
-        label: "Webhook URL",
-        description: "Один URL на строку для outbound webhook-доставки.",
-      },
-      webhook_secret: {
-        label: "Webhook secret",
-        description: "Секрет для подписи X-Webhook-Secret.",
-      },
-      webhook_timeout_seconds: {
-        label: "Таймаут webhook (сек)",
-        description: "HTTP таймаут webhook-доставки.",
-      },
-      webhook_retry_attempts: {
-        label: "Повторы webhook",
-        description: "Максимум попыток доставки webhook-события.",
-      },
-      webhook_backoff_seconds: {
-        label: "Backoff webhook (сек)",
-        description: "Базовая задержка между ретраями webhook.",
-      },
+      }
     },
     telegramFields: {
       tg_admin_chat_id: {

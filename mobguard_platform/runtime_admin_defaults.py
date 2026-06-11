@@ -34,12 +34,6 @@ ENFORCEMENT_SETTINGS_DEFAULTS = {
     "limiter_group_by_subnet": True,
     "limiter_group_by_asn": True,
     "limiter_rollout_mode": "observe",
-    "webhook_enabled": False,
-    "webhook_urls": "",
-    "webhook_secret": "",
-    "webhook_timeout_seconds": 10,
-    "webhook_retry_attempts": 3,
-    "webhook_backoff_seconds": 2,
 }
 
 

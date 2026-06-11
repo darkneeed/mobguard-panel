@@ -77,7 +77,6 @@ export function OperationsDataSection({
   const limiterWindows = (violations?.limiter?.windows as Array<Record<string, unknown>> | undefined) || [];
   const limiterCooldowns = (violations?.limiter?.cooldowns as Array<Record<string, unknown>> | undefined) || [];
   const limiterIgnores = (violations?.limiter?.ignores as Array<Record<string, unknown>> | undefined) || [];
-  const webhookDeliveries = (violations?.webhooks as Array<Record<string, unknown>> | undefined) || [];
   const exactIp = (overrides?.exact_ip as Array<Record<string, unknown>> | undefined) || [];
   const unsure = (overrides?.unsure_patterns as Array<Record<string, unknown>> | undefined) || [];
   const items = (cache?.items as Array<Record<string, unknown>> | undefined) || [];
@@ -106,11 +105,6 @@ export function OperationsDataSection({
     hasMore: hasMoreLimiterIgnores,
     loadMoreRef: loadMoreLimiterIgnoresRef,
   } = useVisibleItems(limiterIgnores, { initialCount: 20, step: 20 });
-  const {
-    visibleItems: visibleWebhookDeliveries,
-    hasMore: hasMoreWebhookDeliveries,
-    loadMoreRef: loadMoreWebhookDeliveriesRef,
-  } = useVisibleItems(webhookDeliveries, { initialCount: 20, step: 20 });
   const {
     visibleItems: visibleExactIp,
     hasMore: hasMoreExactIp,
@@ -224,29 +218,6 @@ export function OperationsDataSection({
             ))}
             {hasMoreLimiterCooldowns || hasMoreLimiterIgnores ? (
               <div className="provider-empty muted" ref={hasMoreLimiterCooldowns ? loadMoreLimiterCooldownsRef : loadMoreLimiterIgnoresRef}>
-                <span>{t("common.loading")}</span>
-              </div>
-            ) : null}
-          </div>
-        </div>
-        <div className="panel">
-          <h2>Webhook deliveries</h2>
-          <div className="record-list">
-            {visibleWebhookDeliveries.map((item) => (
-              <div className="record-item" key={String(item.id)}>
-                <div className="record-main">
-                  <span className="record-title">{String(item.event_type)}</span>
-                  <span className="tag">{String(item.status)}</span>
-                </div>
-                <div className="record-meta">
-                  <span>{String(item.target_url)}</span>
-                  <span>{String(item.attempt_count)}</span>
-                  <span>{formatDisplayDateTime(String(item.created_at ?? ""), t("common.notAvailable"), language)}</span>
-                </div>
-              </div>
-            ))}
-            {hasMoreWebhookDeliveries ? (
-              <div className="provider-empty muted" ref={loadMoreWebhookDeliveriesRef}>
                 <span>{t("common.loading")}</span>
               </div>
             ) : null}

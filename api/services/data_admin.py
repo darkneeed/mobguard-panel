@@ -466,14 +466,7 @@ def list_violations(container: APIContainer) -> dict[str, Any]:
             LIMIT 200
             """
         ).fetchall() if container.store._table_exists(conn, "limiter_ignore_rules") else []
-        webhook_deliveries = conn.execute(
-            """
-            SELECT id, event_type, target_url, status, attempt_count, response_status, error_text, delivered_at, created_at
-            FROM webhook_deliveries
-            ORDER BY created_at DESC, id DESC
-            LIMIT 200
-            """
-        ).fetchall() if container.store._table_exists(conn, "webhook_deliveries") else []
+        webhook_deliveries = []
     return {
         "active": [dict(row) for row in active],
         "history": [dict(row) for row in history],

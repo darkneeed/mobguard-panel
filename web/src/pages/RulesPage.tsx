@@ -63,13 +63,7 @@ type GeneralSettingKey =
   | "limiter_ignore_ttl_seconds"
   | "limiter_group_by_subnet"
   | "limiter_group_by_asn"
-  | "limiter_rollout_mode"
-  | "webhook_enabled"
-  | "webhook_urls"
-  | "webhook_secret"
-  | "webhook_timeout_seconds"
-  | "webhook_retry_attempts"
-  | "webhook_backoff_seconds";
+  | "limiter_rollout_mode";
 
 type GeneralSettingField = {
   key: GeneralSettingKey;
@@ -111,12 +105,6 @@ const GENERAL_SETTINGS_FIELDS: GeneralSettingField[] = [
     inputType: "choice",
     choices: LIMITER_ROLLOUT_MODE_OPTIONS,
   },
-  { key: "webhook_enabled", inputType: "boolean" },
-  { key: "webhook_urls", inputType: "text" },
-  { key: "webhook_secret", inputType: "text" },
-  { key: "webhook_timeout_seconds", inputType: "number" },
-  { key: "webhook_retry_attempts", inputType: "number" },
-  { key: "webhook_backoff_seconds", inputType: "number" },
 ];
 
 const AUTOMATION_GENERAL_FIELD_KEYS = [
@@ -750,49 +738,61 @@ export function RulesPage({ session }: { session?: Session }) {
     setSaved("");
   }
 
-  function renderRulesSaveBar() {
+  function renderUnifiedHeaderBlock() {
     const sectionKey = activeSection === "ai-suggestions" ? "aiSuggestions" : (activeSection === "ai-optimizer" ? "aiOptimizer" : activeSection);
-    const labelKey = `layout.subnav.rules.${sectionKey}`;
-    return (
-      <div className="panel compact-toolbar">
-        <div className="compact-toolbar-main">
-          <strong>{t(labelKey as any)}</strong>
-          <span className="muted">{t("rules.settingSectionDescription")}</span>
-        </div>
-        <div className="action-row">
-          <span className={dirty ? "tag review-only" : "tag severity-low"}>
-            {dirty ? t("common.unsavedChanges") : t("common.saved")}
-          </span>
-          <button disabled={!dirty || rulesSaving} onClick={saveRules}>
-            {rulesSaving && (
-              <Loader2 size={14} className="spinner" style={{ marginRight: "6px" }} />
-            )}
-            {t("rules.saveRules")}
-          </button>
-        </div>
-      </div>
-    );
-  }
+    const parentGroup = ["learning", "aiSuggestions", "aiOptimizer"].includes(sectionKey) ? "quality" : "system";
+    const sectionTitle = t(`layout.subnav.${parentGroup}.${sectionKey}` as any);
+    const sectionDescription = t(`rules.sectionDescriptions.${sectionKey}`);
 
-  function renderGeneralSaveBar() {
+    const isGeneral = activeSection === "general";
+    const isReadOnly = activeSection === "ai-suggestions";
+    
+    const isDirty = isGeneral ? generalDirty : dirty;
+    const isSaving = isGeneral ? generalSaving : rulesSaving;
+    const onSave = isGeneral ? saveGeneralSettings : saveRules;
+
     return (
-      <div className="panel compact-toolbar">
-        <div className="compact-toolbar-main">
-          <strong>{t("rules.general.title")}</strong>
-          <span className="muted">{t("rules.general.description")}</span>
-        </div>
-        <div className="action-row">
-          <span
-            className={generalDirty ? "tag review-only" : "tag severity-low"}
-          >
-            {generalDirty ? t("common.unsavedChanges") : t("common.saved")}
-          </span>
-          <button disabled={!generalDirty || generalSaving} onClick={saveGeneralSettings}>
-            {generalSaving && (
-              <Loader2 size={14} className="spinner" style={{ marginRight: "6px" }} />
+      <div className="panel unified-header-panel" style={{ display: "flex", flexDirection: "column", gap: "1rem", marginBottom: "1.5rem", padding: "1.5rem" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "1.5rem", flexWrap: "wrap" }}>
+          <div style={{ flex: 1, minWidth: "250px" }}>
+            <h2 style={{ fontSize: "1.25rem", fontWeight: 700, margin: 0 }}>{sectionTitle}</h2>
+            <p className="muted" style={{ margin: "0.35rem 0 0.75rem 0", fontSize: "0.875rem", lineHeight: "1.45" }}>
+              {sectionDescription}
+            </p>
+            {state && (
+              <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap", fontSize: "0.8rem", color: "var(--muted)" }}>
+                <span>
+                  {t("rules.revision", { value: state.revision })}
+                </span>
+                <span>
+                  {t("rules.updatedAt", {
+                    value: formatDisplayDateTime(
+                      state.updated_at,
+                      t("common.notAvailable"),
+                      language,
+                    ),
+                  })}
+                </span>
+                <span>
+                  {t("rules.updatedBy", { value: updatedBy })}
+                </span>
+              </div>
             )}
-            {t("rules.general.save")}
-          </button>
+          </div>
+
+          {!isReadOnly && (
+            <div style={{ display: "flex", alignItems: "center", gap: "1rem", marginTop: "0.25rem" }}>
+              <span className={isDirty ? "tag review-only" : "tag severity-low"}>
+                {isDirty ? t("common.unsavedChanges") : t("common.saved")}
+              </span>
+              <button disabled={!isDirty || isSaving || !canWriteRules} onClick={onSave} className="small-button" style={{ padding: "0.5rem 1.25rem" }}>
+                {isSaving && (
+                  <Loader2 size={14} className="spinner" style={{ marginRight: "6px" }} />
+                )}
+                {isGeneral ? t("rules.general.save") : t("rules.saveRules")}
+              </button>
+            </div>
+          )}
         </div>
       </div>
     );
@@ -1179,10 +1179,6 @@ export function RulesPage({ session }: { session?: Session }) {
     if (!draft) return null;
     return (
       <div className="panel">
-        <div className="panel-heading">
-          <h2>{title}</h2>
-          <p className="muted">{description}</p>
-        </div>
         <div className="form-grid compact-form-grid">
           {RULE_SETTING_FIELDS.filter((field) =>
             sectionKeys.includes(field.sectionKey),
@@ -1755,7 +1751,7 @@ export function RulesPage({ session }: { session?: Session }) {
       );
     }
 
-    const disabledBtn = aiOptimizerStatus ? !aiOptimizerStatus.can_run : false;
+    const disabledBtn = !canWriteRules || aiOptimizerLoading || (aiOptimizerStatus ? !aiOptimizerStatus.can_run : true);
 
     return (
       <div className="panel" style={{ display: "flex", flexDirection: "column", gap: "1rem", border: "1px solid var(--accent-soft)", background: "linear-gradient(180deg, var(--bg-panel) 0%, rgba(59, 130, 246, 0.02) 100%)", padding: "1.5rem" }}>
@@ -1956,7 +1952,6 @@ export function RulesPage({ session }: { session?: Session }) {
     if (activeSection === "general") {
         return (
           <>
-            {renderGeneralSaveBar()}
             {renderAutomationControlsPanel()}
             {renderPolicyPanel()}
             {renderGeneralPanel()}
@@ -1965,7 +1960,6 @@ export function RulesPage({ session }: { session?: Session }) {
       }
     return (
       <>
-        {renderRulesSaveBar()}
         {activeSection === "ai-optimizer" ? renderAiOptimizationPanel() : null}
         {activeSection === "lists" ? renderListsPanels() : null}
         {activeSection === "providers" ? renderProvidersPanel() : null}
@@ -1999,33 +1993,17 @@ export function RulesPage({ session }: { session?: Session }) {
 
   return (
     <section className="page">
-      <div className="page-header page-header-stack">
+      <div className="page-header page-header-stack" style={{ marginBottom: "1rem" }}>
         <div>
           <h1>{pathname.startsWith("/quality/") ? t("layout.nav.quality") : t("layout.nav.system")}</h1>
-          <p className="page-lede">
-            {t(`rules.sectionDescriptions.${activeSection === "ai-suggestions" ? "aiSuggestions" : (activeSection === "ai-optimizer" ? "aiOptimizer" : activeSection)}`)}
-          </p>
         </div>
       </div>
       {error ? <div className="error-box">{error}</div> : null}
       {saved ? <div className="ok-box">{saved}</div> : null}
-      {state ? (
-        <div className="panel compact-toolbar compact-toolbar-meta">
-          <span>{t("rules.revision", { value: state.revision })}</span>
-          <span>
-            {t("rules.updatedAt", {
-              value: formatDisplayDateTime(
-                state.updated_at,
-                t("common.notAvailable"),
-                language,
-              ),
-            })}
-          </span>
-          <span>{t("rules.updatedBy", { value: updatedBy })}</span>
-        </div>
-      ) : null}
+      
+      {renderUnifiedHeaderBlock()}
 
-      {!draft && !generalDraft ? (
+      {!draft && !generalDraft && activeSection !== "ai-suggestions" ? (
         <div className="detail-grid">
           {Array.from({ length: 3 }).map((_, index) => (
             <div className="panel skeleton-card" key={index}>

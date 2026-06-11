@@ -23,7 +23,6 @@ from .services.db_maintenance import db_maintenance_loop
 from .services.ingest_pipeline import enforcement_dispatcher_loop, ingest_worker_loop
 from .services.reviews import run_startup_auto_recheck
 from .services.telegram_notifier import TelegramNotifier
-from .services.webhook_dispatcher import WebhookDispatcher
 
 
 container = build_container()
@@ -37,9 +36,6 @@ async def lifespan(app: FastAPI):
     telegram_notifier = TelegramNotifier(app.state.container)
     setattr(app.state.container, "telegram_notifier", telegram_notifier)
     await telegram_notifier.start()
-    webhook_dispatcher = WebhookDispatcher(app.state.container)
-    setattr(app.state.container, "webhook_dispatcher", webhook_dispatcher)
-    await webhook_dispatcher.start()
     maintenance_task = asyncio.create_task(db_maintenance_loop(app.state.container))
     ingest_worker_task = asyncio.create_task(ingest_worker_loop(app.state.container))
     enforcement_dispatcher_task = asyncio.create_task(enforcement_dispatcher_loop(app.state.container))
@@ -61,7 +57,6 @@ async def lifespan(app: FastAPI):
         with suppress(asyncio.CancelledError):
             await startup_auto_recheck_task
         await telegram_notifier.stop()
-        await webhook_dispatcher.stop()
 
 
 def create_app() -> FastAPI:

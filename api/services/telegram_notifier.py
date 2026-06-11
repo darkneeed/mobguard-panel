@@ -320,17 +320,6 @@ async def emit_ingest_notifications(
     if notifier is None:
         return
     try:
-        webhook_dispatcher = getattr(container, "webhook_dispatcher", None)
-        webhook_payload = {
-            "event_type": "ingest.analysis_event",
-            "user": dict(user),
-            "bundle": bundle.to_dict() if hasattr(bundle, "to_dict") else {},
-            "tag": tag,
-            "review_reason": review_reason,
-            "enforcement": dict(enforcement or {}),
-        }
-        if webhook_dispatcher is not None:
-            await webhook_dispatcher.emit("ingest.analysis_event", webhook_payload)
         if review_reason and bundle.case_id:
             await _notify_review_case(notifier, container, user, bundle, tag, review_reason)
         if enforcement:

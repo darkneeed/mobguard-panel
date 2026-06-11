@@ -1439,25 +1439,6 @@ class PlatformStore:
             )
             conn.execute(
                 """
-                CREATE TABLE IF NOT EXISTS webhook_deliveries (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    event_type TEXT NOT NULL,
-                    target_url TEXT NOT NULL,
-                    status TEXT NOT NULL,
-                    attempt_count INTEGER NOT NULL DEFAULT 0,
-                    response_status INTEGER,
-                    response_body TEXT NOT NULL DEFAULT '',
-                    error_text TEXT NOT NULL DEFAULT '',
-                    delivered_at TEXT NOT NULL DEFAULT '',
-                    next_attempt_at TEXT NOT NULL DEFAULT '',
-                    payload_json TEXT NOT NULL DEFAULT '{}',
-                    created_at TEXT NOT NULL,
-                    updated_at TEXT NOT NULL
-                )
-                """
-            )
-            conn.execute(
-                """
                 CREATE TABLE IF NOT EXISTS telegram_topic_routing (
                     event_key TEXT PRIMARY KEY,
                     topic_id INTEGER NOT NULL DEFAULT 0,
@@ -1807,9 +1788,6 @@ class PlatformStore:
             )
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_limiter_ignore_rules_expires ON limiter_ignore_rules(expires_at)"
-            )
-            conn.execute(
-                "CREATE INDEX IF NOT EXISTS idx_webhook_deliveries_status_next_attempt ON webhook_deliveries(status, next_attempt_at, created_at)"
             )
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_review_cases_status ON review_cases(status, updated_at)"
@@ -3280,7 +3258,6 @@ class PlatformStore:
             "violation_history_retention_days": resolved_review_retention_days,
             "subnet_evidence_retention_days": max(subnet_mobile_ttl, subnet_home_ttl),
             "limiter_state_retention_days": resolved_review_retention_days,
-            "webhook_delivery_retention_days": resolved_review_retention_days,
         }
 
     def run_db_maintenance(self, mode: str = "periodic") -> dict[str, Any]:
@@ -3312,9 +3289,6 @@ class PlatformStore:
         ).isoformat()
         limiter_state_cutoff = (
             now_utc - timedelta(days=settings["limiter_state_retention_days"])
-        ).isoformat()
-        webhook_delivery_cutoff = (
-            now_utc - timedelta(days=settings["webhook_delivery_retention_days"])
         ).isoformat()
         resolved_review_cutoff = (
             now_utc - timedelta(days=settings["resolved_review_retention_days"])
@@ -3448,13 +3422,6 @@ class PlatformStore:
                         "DELETE FROM limiter_ignore_rules WHERE expires_at < ?",
                         (now_utc.isoformat(),),
                     )
-                if self._table_exists(conn, "webhook_deliveries"):
-                    deleted["webhook_deliveries"] = _execute_with_changes(
-                        conn,
-                        "DELETE FROM webhook_deliveries WHERE created_at < ?",
-                        (webhook_delivery_cutoff,),
-                    )
-
                 deleted.setdefault("review_resolutions", 0)
                 deleted.setdefault("review_labels", 0)
                 deleted.setdefault("review_cases", 0)
