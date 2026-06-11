@@ -8,6 +8,7 @@ import { renderWithProviders } from "../test/renderWithProviders";
 vi.mock("../api/client", () => ({
   api: {
     getAutoDecisions: vi.fn(),
+    getEnforcementSettings: vi.fn(),
   },
 }));
 
@@ -18,6 +19,13 @@ describe("DecisionsPage", () => {
   });
 
   it("loads and renders auto-decided events with enforcement state", async () => {
+    vi.mocked(api.getEnforcementSettings).mockResolvedValue({
+      automation_status: {
+        mode: "enforce",
+        reasons: [],
+        guardrails: [],
+      },
+    } as any);
     vi.mocked(api.getAutoDecisions).mockResolvedValue({
       items: [
         {

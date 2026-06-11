@@ -86,7 +86,7 @@ export const ruDictionary: TranslationDictionary = {
     subnav: {
       rules: {
         general: "Общие",
-        thresholds: "Пороги",
+        thresholds: "Калибровка",
         lists: "Списки",
         providers: "Провайдеры",
         policy: "Политика",
@@ -781,7 +781,7 @@ export const ruDictionary: TranslationDictionary = {
       },
     },
     sectionTitles: {
-      thresholds: "Пороги, скоринг и поведение",
+      thresholds: "Калибровка, скоринг и поведение",
       policy: "Политика детекта",
       learning: "Контроль обучения",
       aiOptimizer: "AI Оптимизатор порогов",
@@ -791,7 +791,7 @@ export const ruDictionary: TranslationDictionary = {
       general:
         "Общие параметры эскалации, предупреждений и переключения доступа в отдельной вкладке.",
       thresholds:
-        "Пороговые значения, веса скоринга и окна поведенческих сигналов в одном месте.",
+        "Пороговые значения, веса скоринга, лимитер и поведение в одном месте.",
       lists:
         "Списки ASN и ключевых слов, формирующие первичные сигналы и исключения.",
       providers:

@@ -1,9 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
+import { Shield } from "lucide-react";
 
-import { AnalysisEventItem, api, Session } from "../api/client";
+import { AnalysisEventItem, api, Session, AutomationStatus } from "../api/client";
 import { describeScopeContext } from "../features/reviews/lib/scopeContext";
 import { useI18n } from "../localization";
+import {
+  automationGuardrailLabels,
+  automationModeLabel,
+  automationModeReasonLabels,
+} from "../shared/automationStatus";
 import { buildSearchParams } from "../shared/api/request";
 import { useVisiblePolling } from "../shared/useVisiblePolling";
 import { formatDisplayDateTime } from "../utils/datetime";
@@ -75,6 +81,7 @@ export function DecisionsPage({ session: _session }: { session?: Session }) {
   const [lastUpdatedAt, setLastUpdatedAt] = useState("");
   const [visibleCardsCount, setVisibleCardsCount] = useState(filters.page_size);
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
+  const [automationStatus, setAutomationStatus] = useState<AutomationStatus | null>(null);
 
   useEffect(() => {
     const nextFilters = normalizeFilters(searchParams);
@@ -101,11 +108,15 @@ export function DecisionsPage({ session: _session }: { session?: Session }) {
 
   async function load() {
     try {
-      const payload = await api.getAutoDecisions({
-        ...effectiveFilters,
-        compact: true,
-      });
+      const [payload, enforcementPayload] = await Promise.all([
+        api.getAutoDecisions({
+          ...effectiveFilters,
+          compact: true,
+        }),
+        api.getEnforcementSettings(),
+      ]);
       setData(payload);
+      setAutomationStatus(enforcementPayload.automation_status ?? null);
       setError("");
       setLastUpdatedAt(new Date().toISOString());
     } catch (err) {
@@ -200,6 +211,16 @@ export function DecisionsPage({ session: _session }: { session?: Session }) {
     return highlights;
   }
 
+  const automationModeReasons = automationModeReasonLabels(t, automationStatus);
+  const automationGuardrails = automationGuardrailLabels(t, automationStatus);
+  const automationMode = automationModeLabel(t, automationStatus);
+  const automationModeBadgeClass =
+    automationStatus?.mode === "enforce"
+      ? "status-resolved"
+      : automationStatus?.mode === "warning_only"
+        ? "severity-high"
+        : "review-only";
+
   return (
     <section className="page">
       <div className="page-header page-header-stack">
@@ -225,6 +246,79 @@ export function DecisionsPage({ session: _session }: { session?: Session }) {
           </span>
         </div>
       </div>
+
+      {automationStatus && (
+        <div className="panel" style={{ marginBottom: "1.5rem" }}>
+          <div className="panel-heading">
+            <h2>Автоматизация решений</h2>
+            <p className="muted">
+              Текущий режим работы и критерии автоматического применения мер к пользователям.
+            </p>
+          </div>
+          
+          <div className={`automation-banner ${automationModeBadgeClass}`}>
+            <div className="automation-banner-icon">
+              <Shield size={24} />
+            </div>
+            <div className="automation-banner-content">
+              <h3 className="automation-banner-title">
+                Режим: {automationMode}
+              </h3>
+              <p className="automation-banner-desc">
+                {automationStatus.mode === "enforce"
+                  ? "Все ограничения применяются на Remnawave в реальном времени автоматически."
+                  : automationStatus.mode === "warning_only"
+                    ? "Режим симуляции (Dry Run). Решения записываются в журнал решений, но не применяются на Remnawave."
+                    : "Автоматическое принятие решений отключено. Все инциденты направляются на ручную модерацию."}
+              </p>
+            </div>
+          </div>
+
+          <div className="automation-info-grid">
+            <div className="automation-info-card">
+              <h4>Причины переключения режима</h4>
+              {automationModeReasons.length ? (
+                <div className="automation-tag-list">
+                  {automationModeReasons.map((reason) => (
+                    <div className="automation-tag-item warning" key={reason}>
+                      <span>⚠️</span>
+                      <span>{reason}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="muted" style={{ margin: 0, fontSize: "0.85rem" }}>
+                  Активных условий переключения режима нет (штатный режим).
+                </p>
+              )}
+            </div>
+
+            <div className="automation-info-card">
+              <h4>Активные предохранители (Guardrails)</h4>
+              {automationGuardrails.length ? (
+                <div className="automation-tag-list">
+                  {automationGuardrails.map((guardrail) => (
+                    <div className="automation-tag-item danger" key={guardrail}>
+                      <span>🛡️</span>
+                      <span>{guardrail}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="muted" style={{ margin: 0, fontSize: "0.85rem" }}>
+                  Предохранители не активны (система работает без ограничений скорости блокировок).
+                </p>
+              )}
+            </div>
+          </div>
+
+          <div className="action-row" style={{ marginTop: "1.5rem", borderTop: "1px solid var(--line)", paddingTop: "1rem" }}>
+            <Link className="button-link" to="/rules/general">
+              Настроить правила и лимиты
+            </Link>
+          </div>
+        </div>
+      )}
 
       <div className="panel">
         <div className="panel-heading">

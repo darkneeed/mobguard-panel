@@ -397,7 +397,24 @@ export function ModulesPage({ session }: { session?: Session }) {
     setPanelError("");
     setSaved("");
     try {
-      const payload = toProvisioningPayload(draft);
+      let finalDraft = draft;
+      const trimmedManual = manualTag.trim();
+      if (trimmedManual) {
+        const currentTags = draft.inbound_tags
+          .split(/\r?\n/)
+          .map((t) => t.trim())
+          .filter(Boolean);
+        if (!currentTags.includes(trimmedManual)) {
+          const nextTags = [...currentTags, trimmedManual];
+          finalDraft = {
+            ...draft,
+            inbound_tags: nextTags.join("\n")
+          };
+          setDraft(finalDraft);
+          setManualTag("");
+        }
+      }
+      const payload = toProvisioningPayload(finalDraft);
       if (modalMode === "create") {
         const response = (await api.createModule(
           payload,
@@ -908,7 +925,7 @@ export function ModulesPage({ session }: { session?: Session }) {
                   />
                 </div>
                 <div className="rule-field rule-field-wide">
-                  <label style={{ display: "block", marginBottom: "0.25rem", fontWeight: 600 }}>
+                  <label htmlFor="module-inbound-tags" style={{ display: "block", marginBottom: "0.25rem", fontWeight: 600 }}>
                     {t("modules.fields.inboundTags")}
                   </label>
                   <p className="muted" style={{ fontSize: "0.825rem", marginTop: 0, marginBottom: "0.75rem", color: "var(--muted)" }}>
@@ -1000,6 +1017,7 @@ export function ModulesPage({ session }: { session?: Session }) {
 
                       <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
                         <input
+                          id="module-inbound-tags"
                           placeholder="Добавить тег вручную (например: my-custom-inbound)"
                           value={manualTag}
                           onChange={(e) => setManualTag(e.target.value)}
@@ -1415,7 +1433,7 @@ export function ModulesPage({ session }: { session?: Session }) {
                             </div>
 
                             <div className="rule-field" style={{ marginBottom: "0.5rem" }}>
-                              <label style={{ fontSize: "0.8rem", color: "var(--muted)", fontWeight: 600, marginBottom: "0.15rem" }}>
+                              <label htmlFor="module-inbound-tags-dash" style={{ fontSize: "0.8rem", color: "var(--muted)", fontWeight: 600, marginBottom: "0.15rem" }}>
                                 INBOUND теги Remnawave
                               </label>
                               <p className="muted" style={{ fontSize: "0.75rem", marginTop: 0, marginBottom: "0.5rem", color: "var(--muted)", lineHeight: "1.4" }}>
@@ -1507,6 +1525,7 @@ export function ModulesPage({ session }: { session?: Session }) {
 
                                   <div style={{ display: "flex", gap: "0.4rem", alignItems: "center" }}>
                                     <input
+                                      id="module-inbound-tags-dash"
                                       placeholder="Добавить тег вручную..."
                                       value={manualTag}
                                       onChange={(e) => setManualTag(e.target.value)}

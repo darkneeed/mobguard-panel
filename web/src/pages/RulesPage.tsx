@@ -129,8 +129,31 @@ const AUTOMATION_GENERAL_FIELD_SET = new Set<string>(
   AUTOMATION_GENERAL_FIELD_KEYS,
 );
 
+const CALIBRATION_GENERAL_KEYS = [
+  "usage_time_threshold",
+  "limiter_enabled",
+  "limiter_threshold_count",
+  "limiter_window_seconds",
+  "limiter_cooldown_seconds",
+  "limiter_tolerance",
+  "limiter_tolerance_multiplier",
+  "limiter_ignore_ttl_seconds",
+  "limiter_group_by_subnet",
+  "limiter_group_by_asn",
+  "limiter_rollout_mode",
+] as const;
+const CALIBRATION_GENERAL_SET = new Set<string>(
+  CALIBRATION_GENERAL_KEYS,
+);
+
 const GENERAL_RUNTIME_FIELDS = GENERAL_SETTINGS_FIELDS.filter(
-  (field) => !AUTOMATION_GENERAL_FIELD_SET.has(field.key),
+  (field) =>
+    !AUTOMATION_GENERAL_FIELD_SET.has(field.key) &&
+    !CALIBRATION_GENERAL_SET.has(field.key),
+);
+
+const CALIBRATION_GENERAL_FIELDS = GENERAL_SETTINGS_FIELDS.filter((field) =>
+  CALIBRATION_GENERAL_SET.has(field.key),
 );
 
 const AUTOMATION_GENERAL_FIELDS = GENERAL_SETTINGS_FIELDS.filter((field) =>
@@ -277,6 +300,10 @@ export function RulesPage({ session }: { session?: Session }) {
 
   const dirty = JSON.stringify(draft) !== JSON.stringify(savedDraft);
   const generalDirty = GENERAL_RUNTIME_FIELDS.some(
+    (field) =>
+      (generalDraft?.[field.key] ?? "") !== (savedGeneralDraft?.[field.key] ?? ""),
+  );
+  const calibrationGeneralDirty = CALIBRATION_GENERAL_FIELDS.some(
     (field) =>
       (generalDraft?.[field.key] ?? "") !== (savedGeneralDraft?.[field.key] ?? ""),
   );
@@ -533,7 +560,7 @@ export function RulesPage({ session }: { session?: Session }) {
     try {
       setGeneralSaving(true);
       const response = (await api.updateEnforcementSettings({
-        settings: serializeGeneralSettings(generalDraft, GENERAL_RUNTIME_FIELDS),
+        settings: serializeGeneralSettings(generalDraft, GENERAL_SETTINGS_FIELDS),
       })) as EnforcementSettingsResponse;
       const normalized = normalizeGeneralSettingsDraft(
         response.settings,
@@ -1152,6 +1179,103 @@ export function RulesPage({ session }: { session?: Session }) {
     );
   }
 
+  function renderCalibrationLimiterPanel() {
+    if (!generalDraft) return null;
+    return (
+      <div className="panel" style={{ marginTop: "1.5rem" }}>
+        <div className="panel-heading panel-heading-row" style={{ borderBottom: "1px solid var(--line)", paddingBottom: "1rem", marginBottom: "1.5rem" }}>
+          <div>
+            <h2>Параметры лимитера и анализа</h2>
+            <p className="muted">Калибровка порогов ограничения частоты запросов и окон анализа.</p>
+          </div>
+          <div className="action-row">
+            <span className={calibrationGeneralDirty ? "tag review-only" : "tag severity-low"}>
+              {calibrationGeneralDirty ? t("common.unsavedChanges") : t("common.saved")}
+            </span>
+            <button disabled={!calibrationGeneralDirty || generalSaving} onClick={saveGeneralSettings}>
+              {generalSaving && (
+                <Loader2 size={14} className="spinner" style={{ marginRight: "6px" }} />
+              )}
+              {t("rules.general.save")}
+            </button>
+          </div>
+        </div>
+        {generalError ? <div className="error-box">{generalError}</div> : null}
+        {generalSaved ? <div className="ok-box">{generalSaved}</div> : null}
+        <div className="form-grid compact-form-grid">
+          {CALIBRATION_GENERAL_FIELDS.map((field) => {
+            const meta = generalFieldMeta(field.key);
+            return (
+              <div
+                className={
+                  field.inputType === "number-list"
+                    ? "rule-field rule-field-wide compact-rule-field"
+                    : "rule-field compact-rule-field"
+                }
+                key={field.key}
+              >
+                <FieldLabel label={meta.label} description={meta.description} />
+                {field.inputType === "boolean" ? (
+                  <select
+                    value={generalDraft[field.key] || "false"}
+                    onChange={(event) =>
+                      updateGeneralField(field.key, event.target.value)
+                    }
+                  >
+                    <option value="true">{t("common.true")}</option>
+                    <option value="false">{t("common.false")}</option>
+                  </select>
+                ) : field.inputType === "number-list" ? (
+                  <textarea
+                    className="note-box compact-note-box"
+                    value={generalDraft[field.key] || ""}
+                    onChange={(event) =>
+                      updateGeneralField(field.key, event.target.value)
+                    }
+                  />
+                ) : field.inputType === "choice" ? (
+                  <select
+                    value={
+                      generalDraft[field.key] ||
+                      field.choices?.[0] ||
+                      ""
+                    }
+                    onChange={(event) =>
+                      updateGeneralField(field.key, event.target.value)
+                    }
+                  >
+                    {(field.choices || []).map((choice) => (
+                      <option key={choice} value={choice}>
+                        {t(`automationStatus.modes.${choice}` as const)}
+                      </option>
+                    ))}
+                  </select>
+                ) : field.inputType === "text" ? (
+                  <input
+                    type="text"
+                    value={generalDraft[field.key] || ""}
+                    onChange={(event) =>
+                      updateGeneralField(field.key, event.target.value)
+                    }
+                  />
+                ) : (
+                  <input
+                    type="number"
+                    step={field.step}
+                    value={generalDraft[field.key] || ""}
+                    onChange={(event) =>
+                      updateGeneralField(field.key, event.target.value)
+                    }
+                  />
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
   function renderGeneralPanel() {
     if (!generalDraft) return null;
     return (
@@ -1746,13 +1870,16 @@ export function RulesPage({ session }: { session?: Session }) {
         {activeSection === "ai-optimizer" ? renderAiOptimizationPanel() : null}
         {activeSection === "lists" ? renderListsPanels() : null}
         {activeSection === "providers" ? renderProvidersPanel() : null}
-        {activeSection === "thresholds"
-          ? renderSettingPanel(
+        {activeSection === "thresholds" ? (
+          <>
+            {renderSettingPanel(
               t("rules.sectionTitles.thresholds"),
               t("rules.sectionDescriptions.thresholds"),
               ["thresholds", "scores", "behavior"],
-            )
-          : null}
+            )}
+            {renderCalibrationLimiterPanel()}
+          </>
+        ) : null}
         {activeSection === "learning"
           ? renderSettingPanel(
               t("rules.sectionTitles.learning"),

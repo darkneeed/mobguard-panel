@@ -84,7 +84,7 @@ export const enDictionary: TranslationDictionary = {
     subnav: {
       rules: {
         general: "General",
-        thresholds: "Thresholds",
+        thresholds: "Calibration",
         lists: "Lists",
         providers: "Providers",
         policy: "Policy",
@@ -739,7 +739,7 @@ export const enDictionary: TranslationDictionary = {
       },
     },
     sectionTitles: {
-      thresholds: "Thresholds, scores, and behavior",
+      thresholds: "Calibration, scores, and behavior",
       policy: "Detection policy",
       learning: "Learning controls",
       aiOptimizer: "AI Threshold Optimizer",
@@ -747,7 +747,7 @@ export const enDictionary: TranslationDictionary = {
     },
     sectionDescriptions: {
       general: "Runtime-wide escalation, warning, and access switching settings in one dedicated place.",
-      thresholds: "Decision thresholds, score weights, and behavior windows tuned in one place.",
+      thresholds: "Decision thresholds, score weights, rate limiter and behavior windows tuned in one place.",
       lists: "ASN and keyword lists that shape primary evidence and exclusions.",
       providers: "Provider aliases, markers, and carrier-specific hints used in review-first flows.",
       policy: "Live decision policy plus enforcement-side access switching controls.",
