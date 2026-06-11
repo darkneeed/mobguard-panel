@@ -85,8 +85,8 @@ export function ConfigHealthWidget() {
 
   return (
     <div className="panel" style={{ marginBottom: "1.5rem" }}>
-      <div className="panel-heading" style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-        <ShieldCheck size={20} style={{ color: "var(--accent)" }} />
+      <div className="panel-heading" style={{ display: "flex", flexDirection: "row", alignItems: "center", gap: "0.75rem" }}>
+        <ShieldCheck size={20} style={{ color: "var(--accent)", flexShrink: 0 }} />
         <div>
           <h2>Состояние конфигурации</h2>
           <p className="muted">Параметры безопасности, списков и интеграций.</p>
