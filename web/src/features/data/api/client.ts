@@ -106,6 +106,20 @@ export const dataApi = {
     }),
   getAiSuggestions: () =>
     request<any[]>("/admin/data/learning/suggestions"),
+  getAiSuggestionsStatus: () =>
+    request<{
+      last_run: string | null;
+      cooldown_seconds: number;
+      seconds_remaining: number;
+      can_run: boolean;
+    }>("/admin/data/learning/suggestions/status"),
+  generateAiSuggestions: () =>
+    request<{
+      status: string;
+      message: string;
+    }>("/admin/data/learning/suggestions/generate", {
+      method: "POST"
+    }),
   acceptAiSuggestion: (id: number) =>
     request<any>(`/admin/data/learning/suggestions/${id}/accept`, {
       method: "POST"

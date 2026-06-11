@@ -70,8 +70,8 @@ describe("RulesPage retention settings", () => {
     });
 
     renderWithProviders(<RulesPage />, {
-      route: "/rules/retention",
-      path: "/rules/:section"
+      route: "/system/retention",
+      path: "/system/:section"
     });
 
     expect(await screen.findByText("Database retention")).toBeInTheDocument();
@@ -119,8 +119,8 @@ describe("RulesPage retention settings", () => {
     });
 
     renderWithProviders(<RulesPage />, {
-      route: "/rules/general",
-      path: "/rules/:section",
+      route: "/system/general",
+      path: "/system/:section",
     });
 
     expect(await screen.findByRole("button", { name: "Save automation controls" })).toBeInTheDocument();
@@ -200,8 +200,8 @@ describe("RulesPage retention settings", () => {
     });
 
     renderWithProviders(<RulesPage />, {
-      route: "/rules/general",
-      path: "/rules/:section",
+      route: "/system/general",
+      path: "/system/:section",
     });
 
     const automationHeadings = await screen.findAllByText("Operating mode");

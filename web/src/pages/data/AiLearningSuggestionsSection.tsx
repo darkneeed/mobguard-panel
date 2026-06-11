@@ -34,17 +34,26 @@ export function AiLearningSuggestionsSection({ t, language, canWriteData = true 
   const [loading, setLoading] = useState(true);
   const [actionPending, setActionPending] = useState<Record<number, "accept" | "reject" | null>>({});
   const [currentProfiles, setCurrentProfiles] = useState<any[]>([]);
+  const [status, setStatus] = useState<{
+    last_run: string | null;
+    cooldown_seconds: number;
+    seconds_remaining: number;
+    can_run: boolean;
+  } | null>(null);
+  const [generating, setGenerating] = useState(false);
 
   const loadSuggestions = async () => {
     try {
       setLoading(true);
-      const [data, rules] = await Promise.all([
+      const [data, rules, statusData] = await Promise.all([
         api.getAiSuggestions(),
-        api.getDetectionSettings()
+        api.getDetectionSettings(),
+        api.getAiSuggestionsStatus()
       ]);
       // Filter to keep only PENDING suggestions
       setSuggestions(data.filter((s: any) => s.status === "PENDING"));
       setCurrentProfiles((rules as any).rules?.provider_profiles || []);
+      setStatus(statusData);
     } catch (err) {
       pushToast("error", err instanceof Error ? err.message : t("data.errors.loadTabFailed"));
     } finally {
@@ -55,6 +64,58 @@ export function AiLearningSuggestionsSection({ t, language, canWriteData = true 
   useEffect(() => {
     void loadSuggestions();
   }, []);
+
+  useEffect(() => {
+    if (!status || status.seconds_remaining <= 0) return;
+    const interval = setInterval(() => {
+      setStatus(prev => {
+        if (!prev) return null;
+        const nextSec = prev.seconds_remaining - 1;
+        return {
+          ...prev,
+          seconds_remaining: nextSec > 0 ? nextSec : 0,
+          can_run: nextSec <= 0
+        };
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [status]);
+
+  const handleGenerate = async () => {
+    try {
+      setGenerating(true);
+      const res = await api.generateAiSuggestions();
+      pushToast("success", res.message || "AI suggestions generation triggered successfully");
+      await loadSuggestions();
+    } catch (err) {
+      pushToast("error", err instanceof Error ? err.message : "Failed to trigger AI suggestions generation");
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const formatRemainingTime = (seconds: number) => {
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = seconds % 60;
+    if (h > 0) {
+      return `${h} ч. ${m} мин.`;
+    }
+    if (m > 0) {
+      return `${m} мин. ${s} сек.`;
+    }
+    return `${s} сек.`;
+  };
+
+  const formatLastRun = (isoString: string | null) => {
+    if (!isoString) return t("data.aiSuggestions.status.neverRun") || "Никогда";
+    try {
+      const date = new Date(isoString);
+      return date.toLocaleString(language === "ru" ? "ru-RU" : "en-US");
+    } catch (e) {
+      return isoString;
+    }
+  };
 
   const handleAccept = async (id: number) => {
     setActionPending(prev => ({ ...prev, [id]: "accept" }));
@@ -116,18 +177,6 @@ export function AiLearningSuggestionsSection({ t, language, canWriteData = true 
     );
   }
 
-  if (suggestions.length === 0) {
-    return (
-      <div className="panel" style={{ textAlign: "center", padding: "3rem" }}>
-        <Sparkles size={48} className="muted" style={{ margin: "0 auto 1.5rem auto", opacity: 0.5 }} />
-        <h2>{t("data.aiSuggestions.pageTitle")}</h2>
-        <p className="muted" style={{ maxWidth: "500px", margin: "0.5rem auto 0 auto" }}>
-          {t("data.aiSuggestions.empty")}
-        </p>
-      </div>
-    );
-  }
-
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
       <div className="panel-heading" style={{ marginBottom: "0.5rem" }}>
@@ -135,7 +184,73 @@ export function AiLearningSuggestionsSection({ t, language, canWriteData = true 
         <p className="muted">{t("data.aiSuggestions.pageDescription")}</p>
       </div>
 
-      <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+      {/* AI Cooldown and Action Card */}
+      <div
+        className="panel"
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          gap: "1.5rem",
+          padding: "1.25rem 1.5rem",
+          border: "1px solid var(--line)",
+          borderRadius: "16px",
+          background: "linear-gradient(135deg, rgba(99, 102, 241, 0.05) 0%, rgba(168, 85, 247, 0.05) 100%)",
+        }}
+      >
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
+          <span style={{ fontSize: "0.85rem", color: "var(--muted)" }}>
+            {t("data.aiSuggestions.status.lastRun") || "Последнее обновление"}:{" "}
+            <strong style={{ color: "var(--ink)" }}>{status ? formatLastRun(status.last_run) : "..."}</strong>
+          </span>
+          {status && status.seconds_remaining > 0 && (
+            <span style={{ fontSize: "0.85rem", color: "var(--warning)" }}>
+              {t("data.aiSuggestions.status.cooldownActive") || "Доступно через"}:{" "}
+              <strong>{formatRemainingTime(status.seconds_remaining)}</strong>
+            </span>
+          )}
+        </div>
+        <div>
+          <button
+            disabled={!canWriteData || generating || (status ? !status.can_run : true)}
+            onClick={handleGenerate}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "0.5rem",
+              background: (status && !status.can_run) ? "var(--surface-soft)" : "var(--accent)",
+              color: (status && !status.can_run) ? "var(--muted)" : "#fff",
+              border: 0,
+              cursor: (status && !status.can_run) ? "not-allowed" : "pointer",
+              padding: "0.6rem 1.25rem",
+              borderRadius: "8px",
+              fontWeight: 600,
+              fontSize: "0.875rem",
+              transition: "all 0.2s"
+            }}
+          >
+            {generating ? (
+              <Loader2 size={16} className="spinner" />
+            ) : (
+              <Sparkles size={16} />
+            )}
+            {generating
+              ? (t("data.aiSuggestions.status.generating") || "Обновление...")
+              : (t("data.aiSuggestions.status.generateButton") || "Обновить рекомендации")}
+          </button>
+        </div>
+      </div>
+
+      {suggestions.length === 0 ? (
+        <div className="panel" style={{ textAlign: "center", padding: "3rem" }}>
+          <Sparkles size={48} className="muted" style={{ margin: "0 auto 1.5rem auto", opacity: 0.5 }} />
+          <h2>{t("data.aiSuggestions.emptyTitle") || t("data.aiSuggestions.pageTitle")}</h2>
+          <p className="muted" style={{ maxWidth: "500px", margin: "0.5rem auto 0 auto" }}>
+            {t("data.aiSuggestions.empty")}
+          </p>
+        </div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
         {suggestions.map((sug) => {
           const errors = parseOperatorErrors(sug.operator_errors_json);
           const isPendingAccept = actionPending[sug.id] === "accept";
@@ -411,7 +526,8 @@ export function AiLearningSuggestionsSection({ t, language, canWriteData = true 
             </div>
           );
         })}
-      </div>
+        </div>
+      )}
     </div>
   );
 }

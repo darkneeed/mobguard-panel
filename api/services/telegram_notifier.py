@@ -151,6 +151,22 @@ class TelegramNotifier:
             return False
         if dedupe_key and self._is_deduped(f"user:{dedupe_key}"):
             return False
+        logger.info("Sending Telegram notification to user %s: event=%s", telegram_id, event)
+        try:
+            self.container.store.record_admin_audit_event(
+                actor_subject="system",
+                actor_role="system",
+                actor_auth_method="system",
+                actor_telegram_id=None,
+                actor_username="system",
+                action="telegram.notification.user",
+                target_type="user",
+                target_id=str(telegram_id),
+                details={"event": event, "text": text, "dry_run": dry_run},
+            )
+        except Exception:
+            logger.exception("Failed to write Telegram notification audit log")
+
         await self._queue.put(
             _QueuedTelegramMessage(
                 token=token,

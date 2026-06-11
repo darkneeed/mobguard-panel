@@ -549,6 +549,31 @@ def list_audit(
     return data_service.list_admin_audit(container, limit=limit)
 
 
+@router.get("/learning/suggestions/status")
+def get_ai_learning_suggestions_status(
+    _: dict[str, Any] = Depends(require_permission(PERMISSION_DATA_READ)),
+    container=Depends(get_container),
+) -> dict[str, Any]:
+    return ai_learning_suggestions.get_suggestions_cooldown_status(container)
+
+
+@router.post("/learning/suggestions/generate")
+def generate_ai_learning_suggestions(
+    session: dict[str, Any] = Depends(require_permission(PERMISSION_DATA_WRITE)),
+    container=Depends(get_container),
+) -> dict[str, Any]:
+    payload = ai_learning_suggestions.generate_suggestions_on_demand(container, session)
+    record_admin_action(
+        container,
+        session,
+        action="data.learning.suggestions.generate",
+        target_type="ai_suggestions",
+        target_id="generate",
+        details={},
+    )
+    return payload
+
+
 @router.get("/learning/suggestions")
 def get_ai_learning_suggestions(
     _: dict[str, Any] = Depends(require_permission(PERMISSION_DATA_READ)),

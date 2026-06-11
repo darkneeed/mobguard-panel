@@ -873,6 +873,11 @@ export const ruDictionary: TranslationDictionary = {
       goToSettings: "Перейти к настройкам системы",
       generateButton: "Сгенерировать AI-рекомендации",
       generating: "Анализируем лог трафика и генерируем рекомендации через Gemini...",
+      status: {
+        lastRun: "Последнее обновление: {value}",
+        neverRun: "Никогда",
+        cooldownActive: "Доступно через"
+      },
       overallSummary: "Общее заключение AI",
       recommendationsTitle: "Рекомендованные изменения",
       fieldLabel: "Настройка",
@@ -1111,6 +1116,13 @@ export const ruDictionary: TranslationDictionary = {
       pageTitle: "Рекомендации ИИ по обучению",
       pageDescription: "Предложения ИИ Gemini по классификации неопределенных/спорных сетей и исправлению ошибок модераторов.",
       empty: "Нет активных рекомендаций ИИ.",
+      status: {
+        lastRun: "Последнее обновление: {value}",
+        neverRun: "Никогда",
+        cooldownActive: "Доступно через",
+        generating: "Аудит ИИ в процессе...",
+        generateButton: "Обновить рекомендации"
+      },
       loading: "Загрузка рекомендаций...",
       confidence: "Уверенность ИИ: {value}%",
       patternType: "Тип",

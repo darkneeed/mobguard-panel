@@ -59,7 +59,14 @@ export const settingsApi = {
       overall_summary: string;
     }>("/admin/settings/ai-optimize", {
       method: "POST"
-    })
+    }),
+  getAiOptimizerStatus: () =>
+    request<{
+      last_run: string | null;
+      cooldown_seconds: number;
+      seconds_remaining: number;
+      can_run: boolean;
+    }>("/admin/settings/ai-optimize/status")
 
 };
 

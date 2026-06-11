@@ -36,7 +36,7 @@ export function Layout({
     .filter((group) => group.items.length > 0);
 
   useEffect(() => {
-    const targets = ["/queue", "/decisions", "/rules/general", "/data/console", "/data/users", "/quality"];
+    const targets = ["/queue", "/decisions", "/system/general", "/data/console", "/data/users", "/quality"];
     const browserWindow = window as Window & {
       requestIdleCallback?: (cb: () => void) => number;
       cancelIdleCallback?: (id: number) => void;
@@ -67,9 +67,6 @@ export function Layout({
             <small>{t("layout.brandSubtitle")}</small>
           </div>
         </Link>
-        <span className="sidebar-username chip">
-          Пользователь: {username || t("common.admin")}
-        </span>
         {visiblePrimaryNavigation.map((group) => (
           <div className="sidebar-group" key={group.titleKey}>
             <span className="sidebar-group-title">{t(group.titleKey)}</span>

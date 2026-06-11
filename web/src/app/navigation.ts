@@ -20,13 +20,12 @@ export const primaryNavigation: NavigationGroup[] = [
       { to: "/modules", labelKey: "layout.nav.modules", permission: "modules.read" },
       { to: "/queue", labelKey: "layout.nav.queue", permission: "reviews.read" },
       { to: "/decisions", labelKey: "layout.nav.decisions", permission: "data.read" },
-      { to: "/quality", labelKey: "layout.nav.quality", permission: "quality.read" }
+      { to: "/quality/metrics", labelKey: "layout.nav.quality", permission: "quality.read" }
     ]
   },
   {
     titleKey: "layout.groups.configure",
     items: [
-      { to: "/rules/general", labelKey: "layout.nav.rules", permission: "rules.read" },
       { to: "/telegram", labelKey: "layout.nav.telegram", permission: "settings.telegram.read" },
       { to: "/system/access", labelKey: "layout.nav.system", permission: "settings.access.read" }
     ]
@@ -41,15 +40,11 @@ export const primaryNavigation: NavigationGroup[] = [
   }
 ];
 
-export const rulesNavigation: NavigationItem[] = [
-  { to: "/rules/general", labelKey: "layout.subnav.rules.general", permission: "rules.read" },
-  { to: "/rules/thresholds", labelKey: "layout.subnav.rules.thresholds", permission: "rules.read" },
-  { to: "/rules/lists", labelKey: "layout.subnav.rules.lists", permission: "rules.read" },
-  { to: "/rules/providers", labelKey: "layout.subnav.rules.providers", permission: "rules.read" },
-  { to: "/rules/learning", labelKey: "layout.subnav.rules.learning", permission: "rules.read" },
-  { to: "/rules/ai-suggestions", labelKey: "layout.subnav.rules.aiSuggestions", permission: "rules.read" },
-  { to: "/rules/ai-optimizer", labelKey: "layout.subnav.rules.aiOptimizer", permission: "rules.read" },
-  { to: "/rules/retention", labelKey: "layout.subnav.rules.retention", permission: "rules.read" }
+export const qualityNavigation: NavigationItem[] = [
+  { to: "/quality/metrics", labelKey: "layout.subnav.quality.metrics", permission: "quality.read" },
+  { to: "/quality/learning", labelKey: "layout.subnav.quality.learning", permission: "rules.read" },
+  { to: "/quality/ai-suggestions", labelKey: "layout.subnav.quality.aiSuggestions", permission: "rules.read" },
+  { to: "/quality/ai-optimizer", labelKey: "layout.subnav.quality.aiOptimizer", permission: "rules.read" }
 ];
 
 export const dataNavigation: NavigationItem[] = [
@@ -61,11 +56,16 @@ export const dataNavigation: NavigationItem[] = [
 export const systemNavigation: NavigationItem[] = [
   { to: "/system/access", labelKey: "layout.subnav.system.access", permission: "settings.access.read" },
   { to: "/system/branding", labelKey: "layout.subnav.system.branding", permission: "settings.access.read" },
+  { to: "/system/general", labelKey: "layout.subnav.system.general", permission: "rules.read" },
+  { to: "/system/thresholds", labelKey: "layout.subnav.system.thresholds", permission: "rules.read" },
+  { to: "/system/lists", labelKey: "layout.subnav.system.lists", permission: "rules.read" },
+  { to: "/system/providers", labelKey: "layout.subnav.system.providers", permission: "rules.read" },
+  { to: "/system/retention", labelKey: "layout.subnav.system.retention", permission: "rules.read" }
 ];
 
 export function getSecondaryNavigation(pathname: string): NavigationItem[] {
-  if (pathname.startsWith("/rules")) {
-    return rulesNavigation;
+  if (pathname.startsWith("/quality")) {
+    return qualityNavigation;
   }
   if (pathname.startsWith("/data")) {
     return dataNavigation;

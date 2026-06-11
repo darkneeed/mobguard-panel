@@ -816,6 +816,11 @@ export const enDictionary: TranslationDictionary = {
       goToSettings: "Go to System Settings",
       generateButton: "Generate AI Suggestions",
       generating: "Analyzing traffic statistics and generating recommendations via Gemini...",
+      status: {
+        lastRun: "Last generated: {value}",
+        neverRun: "Never",
+        cooldownActive: "Next generation available in"
+      },
       overallSummary: "Overall AI Summary",
       recommendationsTitle: "Recommended Adjustments",
       fieldLabel: "Setting",
@@ -1025,6 +1030,13 @@ export const enDictionary: TranslationDictionary = {
       pageTitle: "AI Learning Recommendations",
       pageDescription: "Gemini AI suggestions for classifying unsure/grey-zone networks and auditing operator mistakes.",
       empty: "No active AI recommendations.",
+      status: {
+        lastRun: "Last generated: {value}",
+        neverRun: "Never",
+        cooldownActive: "Next generation available in",
+        generating: "Running Gemini Audit...",
+        generateButton: "Regenerate Recommendations"
+      },
       loading: "Loading recommendations...",
       confidence: "AI Confidence: {value}%",
       patternType: "Type",

@@ -433,7 +433,7 @@ export function OverviewPage({ session: _session }: { session?: Session }) {
           </div>
 
           <div className="action-row" style={{ marginTop: "1.5rem", borderTop: "1px solid var(--line)", paddingTop: "1rem" }}>
-            <Link className="button-link" to="/rules/general">
+            <Link className="button-link" to="/system/general">
               Настроить правила и лимиты
             </Link>
             <Link className="button-link ghost" to="/decisions">

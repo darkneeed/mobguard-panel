@@ -1938,6 +1938,15 @@ class PlatformStore:
                 "CREATE INDEX IF NOT EXISTS idx_admin_action_audit_created ON admin_action_audit(created_at DESC)"
             )
 
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS system_metadata (
+                    key TEXT PRIMARY KEY,
+                    value TEXT NOT NULL
+                )
+                """
+            )
+
             live_rules = conn.execute("SELECT rules_json FROM live_rules WHERE id = 1").fetchone()
             if not live_rules:
                 seed_meta = {"revision": 1, "updated_at": _utcnow(), "updated_by": "system"}
@@ -1954,6 +1963,29 @@ class PlatformStore:
                     str(seed_meta["updated_by"]),
                 )
             self._run_review_scope_backfill_conn(conn, force=False)
+            conn.commit()
+
+    def get_metadata_value(self, key: str) -> Optional[str]:
+        with self._connect() as conn:
+            if not self._table_exists(conn, "system_metadata"):
+                return None
+            row = conn.execute("SELECT value FROM system_metadata WHERE key = ?", (key,)).fetchone()
+            if row:
+                try:
+                    return row["value"]
+                except Exception:
+                    return row[0]
+            return None
+
+    def set_metadata_value(self, key: str, value: str) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO system_metadata (key, value) VALUES (?, ?)
+                ON CONFLICT(key) DO UPDATE SET value = excluded.value
+                """,
+                (key, value)
+            )
             conn.commit()
 
     def get_module(self, module_id: str) -> Optional[dict[str, Any]]:

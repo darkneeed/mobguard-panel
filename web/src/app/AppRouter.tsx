@@ -1,5 +1,5 @@
 import { Suspense, lazy, type ComponentType, type ReactElement, useMemo } from "react";
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes, useParams } from "react-router-dom";
 
 import { api, BrandingConfig, Session } from "../api/client";
 import { PaletteName, ThemeMode } from "./appearance";
@@ -80,6 +80,69 @@ function PermissionRoute({
   return children;
 }
 
+function SystemPage({
+  session,
+  branding,
+  onBrandingChange,
+  language,
+  onLanguageChange,
+  palette,
+  onPaletteChange,
+  theme,
+  onThemeChange
+}: {
+  session: Session;
+  branding: BrandingConfig;
+  onBrandingChange: (branding: BrandingConfig) => void;
+  language: Language;
+  onLanguageChange: (language: Language) => void;
+  palette: PaletteName;
+  onPaletteChange: (palette: PaletteName) => void;
+  theme: ThemeMode;
+  onThemeChange: (theme: ThemeMode) => void;
+}) {
+  const { section } = useParams<{ section?: string }>();
+  const systemRulesSections = ["general", "thresholds", "lists", "providers", "retention"];
+  if (section && systemRulesSections.includes(section)) {
+    return (
+      <PermissionRoute session={session} permission="rules.read">
+        <RulesPage session={session} />
+      </PermissionRoute>
+    );
+  }
+  return (
+    <PermissionRoute session={session} permission="settings.access.read">
+      <AccessPage
+        branding={branding}
+        onBrandingChange={onBrandingChange}
+        language={language}
+        onLanguageChange={onLanguageChange}
+        palette={palette}
+        onPaletteChange={onPaletteChange}
+        theme={theme}
+        onThemeChange={onThemeChange}
+      />
+    </PermissionRoute>
+  );
+}
+
+function QualityPageWrapper({ session }: { session: Session }) {
+  const { section } = useParams<{ section?: string }>();
+  const qualityRulesSections = ["learning", "ai-suggestions", "ai-optimizer"];
+  if (section && qualityRulesSections.includes(section)) {
+    return (
+      <PermissionRoute session={session} permission="rules.read">
+        <RulesPage session={session} />
+      </PermissionRoute>
+    );
+  }
+  return (
+    <PermissionRoute session={session} permission="quality.read">
+      <QualityPage />
+    </PermissionRoute>
+  );
+}
+
 export function AppRouter({
   session,
   language,
@@ -157,15 +220,6 @@ export function AppRouter({
             </PermissionRoute>
           }
         />
-        <Route path="/rules" element={<Navigate to="/rules/general" replace />} />
-        <Route
-          path="/rules/:section"
-          element={
-            <PermissionRoute session={session} permission="rules.read">
-              <RulesPage session={session} />
-            </PermissionRoute>
-          }
-        />
         <Route
           path="/telegram"
           element={
@@ -178,18 +232,17 @@ export function AppRouter({
         <Route
           path="/system/:section"
           element={
-            <PermissionRoute session={session} permission="settings.access.read">
-              <AccessPage
-                branding={branding}
-                onBrandingChange={setBranding}
-                language={language}
-                onLanguageChange={setLanguage}
-                palette={palette}
-                onPaletteChange={setPalette}
-                theme={theme}
-                onThemeChange={setTheme}
-              />
-            </PermissionRoute>
+            <SystemPage
+              session={session}
+              branding={branding}
+              onBrandingChange={setBranding}
+              language={language}
+              onLanguageChange={setLanguage}
+              palette={palette}
+              onPaletteChange={setPalette}
+              theme={theme}
+              onThemeChange={setTheme}
+            />
           }
         />
         <Route path="/data" element={<Navigate to="/data/users" replace />} />
@@ -201,12 +254,11 @@ export function AppRouter({
             </PermissionRoute>
           }
         />
+        <Route path="/quality" element={<Navigate to="/quality/metrics" replace />} />
         <Route
-          path="/quality"
+          path="/quality/:section"
           element={
-            <PermissionRoute session={session} permission="quality.read">
-              <QualityPage />
-            </PermissionRoute>
+            <QualityPageWrapper session={session} />
           }
         />
         <Route

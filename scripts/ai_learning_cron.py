@@ -35,13 +35,14 @@ def send_telegram_alert(token: str, chat_id: str, text: str) -> None:
     except Exception as e:
         print(f"Failed to send Telegram notification: {e}")
 
-def run_ai_audit() -> None:
-    from mobguard_platform.storage.factory import build_storage_bundle
+def run_ai_audit(runtime=None, store=None) -> None:
+    if runtime is None or store is None:
+        from mobguard_platform.storage.factory import build_storage_bundle
 
-    root_dir = Path(__file__).resolve().parents[1]
-    runtime = load_runtime_context(root_dir, os.getenv("BAN_SYSTEM_DIR"))
-    storage_bundle = build_storage_bundle(runtime)
-    store = storage_bundle.store
+        root_dir = Path(__file__).resolve().parents[1]
+        runtime = load_runtime_context(root_dir, os.getenv("BAN_SYSTEM_DIR"))
+        storage_bundle = build_storage_bundle(runtime)
+        store = storage_bundle.store
     
     # 1. Load Gemini configurations
     settings = runtime.config.get("settings", {})
@@ -361,6 +362,9 @@ Respond strictly in JSON format matching the schema:
                 
             text_content = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "")
             suggestions_data = json.loads(text_content).get("suggestions", [])
+            
+            # Record last successful suggestions audit timestamp
+            store.set_metadata_value("last_ai_suggestions_timestamp", datetime.utcnow().replace(microsecond=0).isoformat())
             
             print(f"Gemini returned {len(suggestions_data)} recommendations.")
             

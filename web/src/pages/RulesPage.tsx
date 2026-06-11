@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 
 import {
@@ -202,6 +202,7 @@ export function RulesPage({ session }: { session?: Session }) {
   const { t, language } = useI18n();
   const { section } = useParams();
   const navigate = useNavigate();
+  const { pathname } = useLocation();
   const canWriteRules = hasPermission(session, "rules.write");
   const activeSection = useMemo<RulesSection>(() => {
     return RULES_SECTIONS.includes(section as RulesSection)
@@ -252,12 +253,61 @@ export function RulesPage({ session }: { session?: Session }) {
   const [editingSuggestionValue, setEditingSuggestionValue] = useState<string>("");
   const [aiProposalApplied, setAiProposalApplied] = useState(false);
 
-  useEffect(() => {
-    if (section && RULES_SECTIONS.includes(section as RulesSection)) {
-      return;
+  const [aiOptimizerStatus, setAiOptimizerStatus] = useState<{
+    last_run: string | null;
+    cooldown_seconds: number;
+    seconds_remaining: number;
+    can_run: boolean;
+  } | null>(null);
+
+  const loadAiOptimizerStatus = async () => {
+    try {
+      const res = await api.getAiOptimizerStatus();
+      setAiOptimizerStatus(res);
+    } catch (err) {
+      console.error(err);
     }
-    navigate("/rules/general", { replace: true });
-  }, [navigate, section]);
+  };
+
+  useEffect(() => {
+    if (activeSection === "ai-optimizer") {
+      void loadAiOptimizerStatus();
+    }
+  }, [activeSection]);
+
+  useEffect(() => {
+    if (!aiOptimizerStatus || aiOptimizerStatus.seconds_remaining <= 0) return;
+    const interval = setInterval(() => {
+      setAiOptimizerStatus(prev => {
+        if (!prev) return null;
+        const nextSec = prev.seconds_remaining - 1;
+        return {
+          ...prev,
+          seconds_remaining: nextSec > 0 ? nextSec : 0,
+          can_run: nextSec <= 0
+        };
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [aiOptimizerStatus]);
+
+  useEffect(() => {
+    const systemSections = ["general", "thresholds", "lists", "providers", "retention"];
+    const qualitySections = ["learning", "ai-suggestions", "ai-optimizer"];
+    if (section) {
+      if (systemSections.includes(section) && pathname.startsWith("/system/")) {
+        return;
+      }
+      if (qualitySections.includes(section) && pathname.startsWith("/quality/")) {
+        return;
+      }
+    }
+    if (pathname.startsWith("/quality/")) {
+      navigate("/quality/learning", { replace: true });
+    } else {
+      navigate("/system/general", { replace: true });
+    }
+  }, [navigate, section, pathname]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1599,10 +1649,34 @@ export function RulesPage({ session }: { session?: Session }) {
         if (res.error) {
           setAiOptimizerError(res.error);
         }
+        await loadAiOptimizerStatus();
       } catch (err) {
         setAiOptimizerError(err instanceof Error ? err.message : String(err));
       } finally {
         setAiOptimizerLoading(false);
+      }
+    };
+
+    const formatRemainingTime = (seconds: number) => {
+      const h = Math.floor(seconds / 3600);
+      const m = Math.floor((seconds % 3600) / 60);
+      const s = seconds % 60;
+      if (h > 0) {
+        return `${h} ч. ${m} мин.`;
+      }
+      if (m > 0) {
+        return `${m} мин. ${s} сек.`;
+      }
+      return `${s} сек.`;
+    };
+
+    const formatLastRun = (isoString: string | null) => {
+      if (!isoString) return t("rules.aiOptimizer.status.neverRun") || "Никогда";
+      try {
+        const date = new Date(isoString);
+        return date.toLocaleString(language === "ru" ? "ru-RU" : "en-US");
+      } catch (e) {
+        return isoString;
       }
     };
 
@@ -1681,6 +1755,8 @@ export function RulesPage({ session }: { session?: Session }) {
       );
     }
 
+    const disabledBtn = aiOptimizerStatus ? !aiOptimizerStatus.can_run : false;
+
     return (
       <div className="panel" style={{ display: "flex", flexDirection: "column", gap: "1rem", border: "1px solid var(--accent-soft)", background: "linear-gradient(180deg, var(--bg-panel) 0%, rgba(59, 130, 246, 0.02) 100%)", padding: "1.5rem" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
@@ -1692,12 +1768,35 @@ export function RulesPage({ session }: { session?: Session }) {
             <p className="muted" style={{ margin: "0.25rem 0 0 0", fontSize: "0.85rem" }}>
               Интеллектуальная оптимизация пороговых настроек на основе логов с помощью Gemini.
             </p>
+            {aiOptimizerStatus && (
+              <div style={{ display: "flex", flexDirection: "column", gap: "0.15rem", marginTop: "0.5rem", fontSize: "0.8rem" }}>
+                <span className="muted">
+                  {t("rules.aiOptimizer.status.lastRun") || "Последний запуск"}:{" "}
+                  <strong style={{ color: "var(--ink)" }}>{formatLastRun(aiOptimizerStatus.last_run)}</strong>
+                </span>
+                {aiOptimizerStatus.seconds_remaining > 0 && (
+                  <span style={{ color: "var(--warning)" }}>
+                    {t("rules.aiOptimizer.status.cooldownActive") || "Доступно через"}:{" "}
+                    <strong>{formatRemainingTime(aiOptimizerStatus.seconds_remaining)}</strong>
+                  </span>
+                )}
+              </div>
+            )}
           </div>
           {!aiOptimizerLoading && (
             <button 
               onClick={runAiOptimize}
+              disabled={disabledBtn}
               className="small-button" 
-              style={{ background: "var(--accent)", color: "#fff", border: 0, cursor: "pointer", padding: "0.5rem 1rem", borderRadius: "var(--radius-md)", fontWeight: "600" }}
+              style={{
+                background: disabledBtn ? "var(--surface-soft)" : "var(--accent)",
+                color: disabledBtn ? "var(--muted)" : "#fff",
+                border: 0,
+                cursor: disabledBtn ? "not-allowed" : "pointer",
+                padding: "0.5rem 1rem",
+                borderRadius: "var(--radius-md)",
+                fontWeight: "600"
+              }}
             >
               {t("rules.aiOptimizer.generateButton")}
             </button>
@@ -1902,7 +2001,7 @@ export function RulesPage({ session }: { session?: Session }) {
     <section className="page">
       <div className="page-header page-header-stack">
         <div>
-          <h1>{t("rules.title")}</h1>
+          <h1>{pathname.startsWith("/quality/") ? t("layout.nav.quality") : t("layout.nav.system")}</h1>
           <p className="page-lede">
             {t(`rules.sectionDescriptions.${activeSection === "ai-suggestions" ? "aiSuggestions" : (activeSection === "ai-optimizer" ? "aiOptimizer" : activeSection)}`)}
           </p>

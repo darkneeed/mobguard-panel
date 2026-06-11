@@ -82,7 +82,7 @@ describe("AppRouter", () => {
 
   it("supports nested rules and data routes", async () => {
     render(
-      <MemoryRouter initialEntries={["/rules/policy", "/data/cache"]} initialIndex={0}>
+      <MemoryRouter initialEntries={["/system/general", "/data/cache"]} initialIndex={0}>
         <LanguageProvider language="en" setLanguage={() => undefined}>
           <AppRouter {...baseProps} />
         </LanguageProvider>
@@ -92,16 +92,16 @@ describe("AppRouter", () => {
     expect(await screen.findByText("Rules Screen")).toBeInTheDocument();
   });
 
-  it("redirects /rules to the dedicated general tab route", async () => {
+  it("redirects /system to the dedicated access tab route", async () => {
     render(
-      <MemoryRouter initialEntries={["/rules"]}>
+      <MemoryRouter initialEntries={["/system"]}>
         <LanguageProvider language="en" setLanguage={() => undefined}>
           <AppRouter {...baseProps} />
         </LanguageProvider>
       </MemoryRouter>
     );
 
-    expect((await screen.findAllByText("Rules Screen")).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText("Access Screen")).length).toBeGreaterThan(0);
   });
 
   it("redirects a viewer away from owner-only routes", async () => {

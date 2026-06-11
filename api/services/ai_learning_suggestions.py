@@ -169,3 +169,52 @@ def reject_suggestion(container: APIContainer, suggestion_id: int) -> dict[str, 
         conn.commit()
         
     return {"success": True, "suggestion_id": suggestion_id}
+
+
+def get_suggestions_cooldown_status(container: APIContainer) -> dict[str, Any]:
+    last_run_str = container.store.get_metadata_value("last_ai_suggestions_timestamp")
+    cooldown_hours = 12
+    cooldown_seconds = cooldown_hours * 3600
+    if not last_run_str:
+        return {
+            "last_run": None,
+            "cooldown_seconds": cooldown_seconds,
+            "seconds_remaining": 0,
+            "can_run": True
+        }
+    try:
+        last_run = datetime.fromisoformat(last_run_str)
+        elapsed = (datetime.utcnow() - last_run).total_seconds()
+        seconds_remaining = max(0, int(cooldown_seconds - elapsed))
+        return {
+            "last_run": last_run_str,
+            "cooldown_seconds": cooldown_seconds,
+            "seconds_remaining": seconds_remaining,
+            "can_run": seconds_remaining <= 0
+        }
+    except Exception:
+        return {
+            "last_run": None,
+            "cooldown_seconds": cooldown_seconds,
+            "seconds_remaining": 0,
+            "can_run": True
+        }
+
+
+def generate_suggestions_on_demand(container: APIContainer, session: dict[str, Any]) -> dict[str, Any]:
+    status = get_suggestions_cooldown_status(container)
+    if not status["can_run"]:
+        raise HTTPException(status_code=400, detail=f"Cooldown in effect. Please wait {status['seconds_remaining']} seconds.")
+    
+    settings = container.runtime.config.get("settings", {})
+    api_key = settings.get("gemini_api_key", "").strip()
+    if not api_key:
+        raise HTTPException(status_code=400, detail="Gemini API key is not configured. Please enter your API Key in System > Integrations.")
+
+    from scripts.ai_learning_cron import run_ai_audit
+    run_ai_audit(container.runtime, container.store)
+    
+    return {
+        "success": True,
+        "suggestions": get_suggestions(container)
+    }

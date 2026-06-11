@@ -6,6 +6,7 @@ import urllib.request
 import urllib.error
 from datetime import datetime, timedelta
 from typing import Any, Optional
+from fastapi import HTTPException
 
 from ..context import APIContainer
 from .runtime_state import load_runtime_config, load_env_values
@@ -151,7 +152,41 @@ def get_ai_optimization_data(container: APIContainer) -> dict[str, Any]:
         "recent_events": recent_events
     }
 
+def get_optimizer_cooldown_status(container: APIContainer) -> dict[str, Any]:
+    last_run_str = container.store.get_metadata_value("last_ai_optimizer_timestamp")
+    cooldown_hours = 12
+    cooldown_seconds = cooldown_hours * 3600
+    if not last_run_str:
+        return {
+            "last_run": None,
+            "cooldown_seconds": cooldown_seconds,
+            "seconds_remaining": 0,
+            "can_run": True
+        }
+    try:
+        last_run = datetime.fromisoformat(last_run_str)
+        elapsed = (datetime.utcnow() - last_run).total_seconds()
+        seconds_remaining = max(0, int(cooldown_seconds - elapsed))
+        return {
+            "last_run": last_run_str,
+            "cooldown_seconds": cooldown_seconds,
+            "seconds_remaining": seconds_remaining,
+            "can_run": seconds_remaining <= 0
+        }
+    except Exception:
+        return {
+            "last_run": None,
+            "cooldown_seconds": cooldown_seconds,
+            "seconds_remaining": 0,
+            "can_run": True
+        }
+
 def generate_gemini_recommendations(container: APIContainer) -> dict[str, Any]:
+    # Check cooldown first
+    status = get_optimizer_cooldown_status(container)
+    if not status["can_run"]:
+        raise HTTPException(status_code=400, detail=f"Cooldown in effect. Please wait {status['seconds_remaining']} seconds.")
+
     runtime_config = load_runtime_config(container)
     settings = runtime_config.get("settings", {})
     
@@ -279,6 +314,10 @@ Respond strictly in JSON format matching the schema:
                 text_content = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "")
                 parsed_response = json.loads(text_content)
                 parsed_response["configured"] = True
+                
+                # Record successful optimizer execution timestamp
+                container.store.set_metadata_value("last_ai_optimizer_timestamp", datetime.utcnow().replace(microsecond=0).isoformat())
+                
                 return parsed_response
             else:
                 raise ValueError("No candidates returned from Gemini API")

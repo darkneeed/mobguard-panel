@@ -153,6 +153,14 @@ def put_enforcement_settings(
     return result
 
 
+@router.get("/ai-optimize/status")
+def get_ai_optimize_status(
+    _: dict[str, Any] = Depends(require_permission(PERMISSION_RULES_READ)),
+    container=Depends(get_container),
+) -> dict[str, Any]:
+    return ai_optimizer_service.get_optimizer_cooldown_status(container)
+
+
 @router.post("/ai-optimize")
 def post_ai_optimize(
     session: dict[str, Any] = Depends(require_permission(PERMISSION_RULES_READ)),
