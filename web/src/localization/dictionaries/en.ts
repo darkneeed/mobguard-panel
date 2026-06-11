@@ -82,17 +82,6 @@ export const enDictionary: TranslationDictionary = {
       bedolaga: "Bedolaga",
     },
     subnav: {
-      rules: {
-        general: "General",
-        thresholds: "Calibration",
-        lists: "Lists",
-        providers: "Providers",
-        policy: "Policy",
-        learning: "Learning",
-        aiSuggestions: "AI Suggestions",
-        aiOptimizer: "AI Optimizer",
-        retention: "Retention",
-      },
       data: {
         console: "Console",
         users: "Users",
@@ -109,6 +98,17 @@ export const enDictionary: TranslationDictionary = {
       system: {
         access: "Access",
         branding: "Appearance",
+        general: "General",
+        thresholds: "Calibration",
+        lists: "Lists",
+        providers: "Providers",
+        retention: "Retention",
+      },
+      quality: {
+        metrics: "Metrics",
+        learning: "Learning",
+        aiSuggestions: "AI Suggestions",
+        aiOptimizer: "AI Optimizer",
       },
     },
     theme: {

@@ -84,17 +84,6 @@ export const ruDictionary: TranslationDictionary = {
       bedolaga: "Bedolaga",
     },
     subnav: {
-      rules: {
-        general: "Общие",
-        thresholds: "Калибровка",
-        lists: "Списки",
-        providers: "Провайдеры",
-        policy: "Политика",
-        learning: "Обучение",
-        aiSuggestions: "Рекомендации ИИ",
-        aiOptimizer: "AI Оптимизатор",
-        retention: "Хранение",
-      },
       data: {
         console: "Консоль",
         users: "Пользователи",
@@ -111,6 +100,17 @@ export const ruDictionary: TranslationDictionary = {
       system: {
         access: "Доступ",
         branding: "Оформление",
+        general: "Общие",
+        thresholds: "Калибровка",
+        lists: "Списки",
+        providers: "Провайдеры",
+        retention: "Хранение",
+      },
+      quality: {
+        metrics: "Метрики",
+        learning: "Обучение",
+        aiSuggestions: "Рекомендации ИИ",
+        aiOptimizer: "AI Оптимизатор",
       },
     },
     theme: {
