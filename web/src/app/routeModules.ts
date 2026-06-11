@@ -9,9 +9,9 @@ const routeLoaders: Array<{ match: string; loader: RouteLoader }> = [
   { match: "/rules", loader: () => import("../pages/RulesPage") },
   { match: "/telegram", loader: () => import("../pages/TelegramPage") },
   { match: "/system", loader: () => import("../pages/AccessPage") },
+  { match: "/data/bedolaga", loader: () => import("../pages/BedolagaPage") },
   { match: "/data", loader: () => import("../pages/DataPage") },
-  { match: "/quality", loader: () => import("../pages/QualityPage") },
-  { match: "/bedolaga", loader: () => import("../pages/BedolagaPage") }
+  { match: "/quality", loader: () => import("../pages/QualityPage") }
 ];
 
 const prefetched = new Set<string>();

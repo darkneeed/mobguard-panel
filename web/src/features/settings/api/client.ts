@@ -45,7 +45,7 @@ export const settingsApi = {
         ? `/admin/tools/remnawave-inbounds?module_name=${encodeURIComponent(moduleName)}`
         : "/admin/tools/remnawave-inbounds"
     ),
-  aiOptimize: () =>
+  aiOptimize: (force?: boolean) =>
     request<{
       configured: boolean;
       error?: string;
@@ -57,7 +57,7 @@ export const settingsApi = {
         estimated_impact_percent: number;
       }>;
       overall_summary: string;
-    }>("/admin/settings/ai-optimize", {
+    }>(force ? "/admin/settings/ai-optimize?force=true" : "/admin/settings/ai-optimize", {
       method: "POST"
     }),
   getAiOptimizerStatus: () =>

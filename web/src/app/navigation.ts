@@ -34,8 +34,7 @@ export const primaryNavigation: NavigationGroup[] = [
     titleKey: "layout.groups.operate",
     items: [
       { to: "/data/console", labelKey: "layout.nav.console", permission: "data.read" },
-      { to: "/data/users", labelKey: "layout.nav.data", permission: "data.read" },
-      { to: "/bedolaga", labelKey: "layout.nav.bedolaga", permission: "data.read" }
+      { to: "/data/users", labelKey: "layout.nav.data", permission: "data.read" }
     ]
   }
 ];
@@ -49,8 +48,7 @@ export const qualityNavigation: NavigationItem[] = [
 
 export const dataNavigation: NavigationItem[] = [
   { to: "/data/users", labelKey: "layout.subnav.data.users", permission: "data.read" },
-  { to: "/data/ai-suggestions", labelKey: "layout.subnav.data.aiSuggestions", permission: "data.read" },
-  { to: "/data/events", labelKey: "layout.subnav.data.events", permission: "data.read" },
+  { to: "/data/bedolaga", labelKey: "layout.nav.bedolaga", permission: "data.read" }
 ];
 
 export const systemNavigation: NavigationItem[] = [
@@ -64,6 +62,9 @@ export const systemNavigation: NavigationItem[] = [
 ];
 
 export function getSecondaryNavigation(pathname: string): NavigationItem[] {
+  if (pathname.startsWith("/data/console")) {
+    return [];
+  }
   if (pathname.startsWith("/quality")) {
     return qualityNavigation;
   }

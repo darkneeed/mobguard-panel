@@ -181,11 +181,12 @@ def get_optimizer_cooldown_status(container: APIContainer) -> dict[str, Any]:
             "can_run": True
         }
 
-def generate_gemini_recommendations(container: APIContainer) -> dict[str, Any]:
+def generate_gemini_recommendations(container: APIContainer, force: bool = False) -> dict[str, Any]:
     # Check cooldown first
-    status = get_optimizer_cooldown_status(container)
-    if not status["can_run"]:
-        raise HTTPException(status_code=400, detail=f"Cooldown in effect. Please wait {status['seconds_remaining']} seconds.")
+    if not force:
+        status = get_optimizer_cooldown_status(container)
+        if not status["can_run"]:
+            raise HTTPException(status_code=400, detail=f"Cooldown in effect. Please wait {status['seconds_remaining']} seconds.")
 
     runtime_config = load_runtime_config(container)
     settings = runtime_config.get("settings", {})

@@ -163,7 +163,8 @@ def get_ai_optimize_status(
 
 @router.post("/ai-optimize")
 def post_ai_optimize(
+    force: bool = False,
     session: dict[str, Any] = Depends(require_permission(PERMISSION_RULES_READ)),
     container=Depends(get_container),
 ) -> dict[str, Any]:
-    return ai_optimizer_service.generate_gemini_recommendations(container)
+    return ai_optimizer_service.generate_gemini_recommendations(container, force=force)

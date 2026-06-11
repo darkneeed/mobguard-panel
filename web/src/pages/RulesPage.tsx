@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
-import { Loader2 } from "lucide-react";
+import { Loader2, AlertTriangle } from "lucide-react";
 
 import {
   api,
@@ -248,12 +248,33 @@ export function RulesPage({ session }: { session?: Session }) {
     can_run: boolean;
   } | null>(null);
 
+  const [showOptimizerCooldownConfirm, setShowOptimizerCooldownConfirm] = useState(false);
+  const [optimizerConfirmTimer, setOptimizerConfirmTimer] = useState(0);
+
   const loadAiOptimizerStatus = async () => {
     try {
       const res = await api.getAiOptimizerStatus();
       setAiOptimizerStatus(res);
     } catch (err) {
       console.error(err);
+    }
+  };
+
+  const runAiOptimize = async (force?: boolean) => {
+    setAiOptimizerLoading(true);
+    setAiOptimizerError("");
+    setAiProposalApplied(false);
+    try {
+      const res = await api.aiOptimize(force);
+      setAiOptimizerResult(res);
+      if (res.error) {
+        setAiOptimizerError(res.error);
+      }
+      await loadAiOptimizerStatus();
+    } catch (err) {
+      setAiOptimizerError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setAiOptimizerLoading(false);
     }
   };
 
@@ -278,6 +299,14 @@ export function RulesPage({ session }: { session?: Session }) {
     }, 1000);
     return () => clearInterval(interval);
   }, [aiOptimizerStatus]);
+
+  useEffect(() => {
+    if (!showOptimizerCooldownConfirm || optimizerConfirmTimer <= 0) return;
+    const interval = setInterval(() => {
+      setOptimizerConfirmTimer((prev) => prev - 1);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [showOptimizerCooldownConfirm, optimizerConfirmTimer]);
 
   useEffect(() => {
     const systemSections = ["general", "thresholds", "lists", "providers", "retention"];
@@ -1635,21 +1664,12 @@ export function RulesPage({ session }: { session?: Session }) {
   function renderAiOptimizationPanel() {
     const isConfigured = state?.gemini_configured ?? false;
 
-    const runAiOptimize = async () => {
-      setAiOptimizerLoading(true);
-      setAiOptimizerError("");
-      setAiProposalApplied(false);
-      try {
-        const res = await api.aiOptimize();
-        setAiOptimizerResult(res);
-        if (res.error) {
-          setAiOptimizerError(res.error);
-        }
-        await loadAiOptimizerStatus();
-      } catch (err) {
-        setAiOptimizerError(err instanceof Error ? err.message : String(err));
-      } finally {
-        setAiOptimizerLoading(false);
+    const handleGenerateClick = () => {
+      if (aiOptimizerStatus && aiOptimizerStatus.seconds_remaining > 0) {
+        setOptimizerConfirmTimer(10);
+        setShowOptimizerCooldownConfirm(true);
+      } else {
+        void runAiOptimize(false);
       }
     };
 
@@ -1751,7 +1771,7 @@ export function RulesPage({ session }: { session?: Session }) {
       );
     }
 
-    const disabledBtn = !canWriteRules || aiOptimizerLoading || (aiOptimizerStatus ? !aiOptimizerStatus.can_run : true);
+    const disabledBtn = !canWriteRules || aiOptimizerLoading;
 
     return (
       <div className="panel" style={{ display: "flex", flexDirection: "column", gap: "1rem", border: "1px solid var(--accent-soft)", background: "linear-gradient(180deg, var(--bg-panel) 0%, rgba(59, 130, 246, 0.02) 100%)", padding: "1.5rem" }}>
@@ -1781,7 +1801,7 @@ export function RulesPage({ session }: { session?: Session }) {
           </div>
           {!aiOptimizerLoading && (
             <button 
-              onClick={runAiOptimize}
+              onClick={handleGenerateClick}
               disabled={disabledBtn}
               className="small-button" 
               style={{
@@ -2019,6 +2039,103 @@ export function RulesPage({ session }: { session?: Session }) {
       ) : null}
 
       {renderSectionContent()}
+      {showOptimizerCooldownConfirm && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: "rgba(0, 0, 0, 0.75)",
+            backdropFilter: "blur(4px)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 9999,
+            padding: "1rem"
+          }}
+        >
+          <div
+            className="panel"
+            style={{
+              maxWidth: "480px",
+              width: "100%",
+              padding: "1.75rem",
+              border: "1px solid var(--line)",
+              borderRadius: "16px",
+              background: "var(--surface)",
+              boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.3), 0 10px 10px -5px rgba(0, 0, 0, 0.3)",
+              display: "flex",
+              flexDirection: "column",
+              gap: "1.25rem"
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", color: "var(--warning)" }}>
+              <AlertTriangle size={24} />
+              <h3 style={{ margin: 0, fontSize: "1.2rem", fontWeight: 600 }}>
+                {language === "ru" ? "Внимание: Куулдаун активен" : "Warning: Cooldown active"}
+              </h3>
+            </div>
+            
+            <p style={{ margin: 0, fontSize: "0.95rem", lineHeight: "1.5", color: "var(--ink)" }}>
+              {language === "ru"
+                ? "Запуск ручного обновления оптимизатора до истечения лимита приведет к повторному запросу к ИИ. Это значительно увеличит расход токенов. Вы действительно хотите продолжить?"
+                : "Triggering manual optimizer generation before the cooldown limit expires will make another request to the AI. This will significantly increase token usage. Are you sure you want to proceed?"}
+            </p>
+
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "flex-end",
+                gap: "0.75rem",
+                marginTop: "0.5rem"
+              }}
+            >
+              <button
+                className="ghost"
+                onClick={() => setShowOptimizerCooldownConfirm(false)}
+                style={{
+                  padding: "0.5rem 1rem",
+                  borderRadius: "8px",
+                  fontSize: "0.875rem",
+                  fontWeight: 600,
+                  cursor: "pointer"
+                }}
+              >
+                {language === "ru" ? "Отмена" : "Cancel"}
+              </button>
+
+              <button
+                disabled={optimizerConfirmTimer > 0}
+                onClick={async () => {
+                  setShowOptimizerCooldownConfirm(false);
+                  await runAiOptimize(true);
+                }}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  minWidth: "120px",
+                  background: optimizerConfirmTimer > 0 ? "var(--surface-soft)" : "var(--accent)",
+                  color: optimizerConfirmTimer > 0 ? "var(--muted)" : "#fff",
+                  border: 0,
+                  cursor: optimizerConfirmTimer > 0 ? "not-allowed" : "pointer",
+                  padding: "0.5rem 1rem",
+                  borderRadius: "8px",
+                  fontSize: "0.875rem",
+                  fontWeight: 600,
+                  transition: "all 0.2s"
+                }}
+              >
+                {optimizerConfirmTimer > 0 
+                  ? `${language === "ru" ? "Подтвердить" : "Confirm"} (${optimizerConfirmTimer})`
+                  : (language === "ru" ? "Подтвердить" : "Confirm")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }

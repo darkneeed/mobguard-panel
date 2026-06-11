@@ -231,6 +231,8 @@ def detect_asn_source(runtime_dir: str, single_mmdb_path: Optional[str] = None) 
         return {"type": "split_mmdb", "label": "Split IPv4/IPv6 ASN MMDB", "files": files}
     if os.path.exists(iptoasn_path):
         return {"type": "iptoasn_tsv", "label": "IPtoASN TSV", "files": [iptoasn_path]}
+    if os.environ.get("IPINFO_TOKEN"):
+        return {"type": "ipinfo", "label": "IPInfo API", "files": ["IPInfo.io"]}
     return {"type": "missing", "label": "ASN source missing", "files": []}
 
 

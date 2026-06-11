@@ -247,6 +247,14 @@ export function AppRouter({
         />
         <Route path="/data" element={<Navigate to="/data/users" replace />} />
         <Route
+          path="/data/bedolaga"
+          element={
+            <PermissionRoute session={session} permission="data.read">
+              <BedolagaPage />
+            </PermissionRoute>
+          }
+        />
+        <Route
           path="/data/:section"
           element={
             <PermissionRoute session={session} permission="data.read">
@@ -259,14 +267,6 @@ export function AppRouter({
           path="/quality/:section"
           element={
             <QualityPageWrapper session={session} />
-          }
-        />
-        <Route
-          path="/bedolaga"
-          element={
-            <PermissionRoute session={session} permission="data.read">
-              <BedolagaPage />
-            </PermissionRoute>
           }
         />
       </Route>
