@@ -15,7 +15,6 @@ import { useToast } from "../components/ToastProvider";
 import { useI18n } from "../localization";
 import { downloadBlob } from "../shared/api/request";
 import { useVisiblePolling } from "../shared/useVisiblePolling";
-import { EventsDataSection } from "./data/EventsDataSection";
 import { ConsoleDataSection } from "./data/ConsoleDataSection";
 import { UserDataSection } from "./data/UserDataSection";
 import { AiLearningSuggestionsSection } from "./data/AiLearningSuggestionsSection";
@@ -448,21 +447,13 @@ export function DataPage({ session }: { session?: Session }) {
         )
       ) : null}
       {dataView === "events" ? (
-        <>
-          <ConsoleDataSection
-            t={t}
-            consoleData={consoleData}
-            filters={consoleFilters}
-            setFilters={(updater) => setConsoleFilters((prev) => updater(prev))}
-          />
-          <EventsDataSection
-            t={t}
-            language={language}
-            events={events}
-            filters={eventFilters}
-            setFilters={(updater) => setEventFilters((prev) => updater(prev))}
-          />
-        </>
+        <ConsoleDataSection
+          t={t}
+          language={language}
+          consoleData={consoleData}
+          filters={consoleFilters}
+          setFilters={(updater) => setConsoleFilters((prev) => updater(prev))}
+        />
       ) : null}
     </section>
   );

@@ -17,6 +17,7 @@ type ConsoleFilters = {
 
 type Props = {
   t: TranslateFn;
+  language?: string;
   consoleData: ConsoleListResponse | null;
   filters: ConsoleFilters;
   setFilters: (updater: (prev: ConsoleFilters) => ConsoleFilters) => void;
@@ -24,6 +25,7 @@ type Props = {
 
 export function ConsoleDataSection({
   t,
+  language = "ru",
   consoleData,
   filters,
   setFilters,
@@ -63,84 +65,13 @@ export function ConsoleDataSection({
   }
 
   return (
-    <div className="detail-grid">
-      <div className="panel">
-        <div className="panel-heading">
-          <h2>{t("data.console.filtersTitle")}</h2>
-          <p className="muted">{t("data.console.description")}</p>
-        </div>
-        <div className="filters compact-form-grid">
-          <input
-            placeholder={t("data.console.filters.search")}
-            value={filters.q}
-            onChange={(event) => updateFilter("q", event.target.value)}
-          />
-          <select
-            value={filters.source}
-            onChange={(event) => updateFilter("source", event.target.value)}
-          >
-            <option value="">{t("data.console.filters.anySource")}</option>
-            <option value="system">{t("data.console.sources.system")}</option>
-            <option value="module_event">
-              {t("data.console.sources.module_event")}
-            </option>
-            <option value="module_heartbeat">
-              {t("data.console.sources.module_heartbeat")}
-            </option>
-          </select>
-          <select
-            value={filters.level}
-            onChange={(event) => updateFilter("level", event.target.value)}
-          >
-            <option value="">{t("data.console.filters.anyLevel")}</option>
-            <option value="info">{t("data.console.levels.info")}</option>
-            <option value="warn">{t("data.console.levels.warn")}</option>
-            <option value="error">{t("data.console.levels.error")}</option>
-          </select>
-          <input
-            placeholder={t("data.console.filters.moduleId")}
-            value={filters.module_id}
-            onChange={(event) => updateFilter("module_id", event.target.value)}
-          />
-          <select
-            value={String(pageSize)}
-            onChange={(event) =>
-              updateFilter("page_size", Number(event.target.value))
-            }
-          >
-            <option value="50">
-              {t("data.console.pagination.pageSizeOption", { value: 50 })}
-            </option>
-            <option value="100">
-              {t("data.console.pagination.pageSizeOption", { value: 100 })}
-            </option>
-            <option value="200">
-              {t("data.console.pagination.pageSizeOption", { value: 200 })}
-            </option>
-          </select>
-        </div>
-        <div className="record-meta">
-          <span className="chip">
-            {t("data.console.sourceCount.system", {
-              count: sourceCounts.system ?? 0,
-            })}
-          </span>
-          <span className="chip">
-            {t("data.console.sourceCount.moduleEvents", {
-              count: sourceCounts.module_event ?? 0,
-            })}
-          </span>
-          <span className="chip">
-            {t("data.console.sourceCount.moduleHeartbeats", {
-              count: sourceCounts.module_heartbeat ?? 0,
-            })}
-          </span>
-        </div>
-      </div>
-
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", width: "100%", gap: "1.5rem", paddingBottom: "2rem" }}>
+      {/* Console panel (Centered, 70% width) */}
       <div 
         className="panel console-panel" 
         style={{ 
+          width: "70%",
+          minWidth: "320px",
           background: "#080b11", 
           borderRadius: "12px", 
           border: "1px solid var(--line)", 
@@ -343,6 +274,130 @@ export function ConsoleDataSection({
               {t("data.console.pagination.next")}
             </button>
           </div>
+        </div>
+      </div>
+
+      {/* Filters under console (70% width, centered) */}
+      <div
+        className="panel"
+        style={{
+          width: "70%",
+          minWidth: "320px",
+          display: "flex",
+          gap: "1.5rem",
+          alignItems: "center",
+          justifyContent: "space-between",
+          padding: "1.25rem 1.5rem",
+          border: "1px solid var(--line)",
+          borderRadius: "12px",
+          background: "var(--surface)",
+          boxShadow: "var(--shadow)",
+          flexWrap: "wrap"
+        }}
+      >
+        <div style={{ display: "flex", gap: "1.5rem", flex: 1, flexWrap: "wrap" }}>
+          {/* Source filter */}
+          <div style={{ display: "flex", flexDirection: "column", gap: "0.35rem" }}>
+            <span style={{ fontSize: "0.75rem", color: "var(--muted)", fontWeight: 600, textTransform: "uppercase" }}>
+              {language === "ru" ? "Источник" : "Source"}
+            </span>
+            <select
+              value={filters.source}
+              onChange={(event) => updateFilter("source", event.target.value)}
+              style={{
+                padding: "0.45rem 0.75rem",
+                borderRadius: "6px",
+                border: "1px solid var(--line)",
+                background: "var(--surface-soft)",
+                color: "var(--ink)",
+                minWidth: "150px"
+              }}
+            >
+              <option value="">{t("data.console.filters.anySource")}</option>
+              <option value="system">{t("data.console.sources.system")}</option>
+              <option value="module_event">
+                {t("data.console.sources.module_event")}
+              </option>
+              <option value="module_heartbeat">
+                {t("data.console.sources.module_heartbeat")}
+              </option>
+            </select>
+          </div>
+
+          {/* Level filter */}
+          <div style={{ display: "flex", flexDirection: "column", gap: "0.35rem" }}>
+            <span style={{ fontSize: "0.75rem", color: "var(--muted)", fontWeight: 600, textTransform: "uppercase" }}>
+              {language === "ru" ? "Уровень" : "Level"}
+            </span>
+            <select
+              value={filters.level}
+              onChange={(event) => updateFilter("level", event.target.value)}
+              style={{
+                padding: "0.45rem 0.75rem",
+                borderRadius: "6px",
+                border: "1px solid var(--line)",
+                background: "var(--surface-soft)",
+                color: "var(--ink)",
+                minWidth: "120px"
+              }}
+            >
+              <option value="">{t("data.console.filters.anyLevel")}</option>
+              <option value="info">{t("data.console.levels.info")}</option>
+              <option value="warn">{t("data.console.levels.warn")}</option>
+              <option value="error">{t("data.console.levels.error")}</option>
+            </select>
+          </div>
+
+          {/* Search query */}
+          <div style={{ display: "flex", flexDirection: "column", gap: "0.35rem", flex: 1, minWidth: "180px" }}>
+            <span style={{ fontSize: "0.75rem", color: "var(--muted)", fontWeight: 600, textTransform: "uppercase" }}>
+              {language === "ru" ? "Поиск" : "Search"}
+            </span>
+            <input
+              placeholder={t("data.console.filters.search")}
+              value={filters.q}
+              onChange={(event) => updateFilter("q", event.target.value)}
+              style={{
+                padding: "0.45rem 0.75rem",
+                borderRadius: "6px",
+                border: "1px solid var(--line)",
+                background: "var(--surface-soft)",
+                color: "var(--ink)",
+                width: "100%"
+              }}
+            />
+          </div>
+        </div>
+
+        {/* Page Size filter */}
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.35rem" }}>
+          <span style={{ fontSize: "0.75rem", color: "var(--muted)", fontWeight: 600, textTransform: "uppercase" }}>
+            {language === "ru" ? "На страницу" : "n per page"}
+          </span>
+          <select
+            value={String(pageSize)}
+            onChange={(event) =>
+              updateFilter("page_size", Number(event.target.value))
+            }
+            style={{
+              padding: "0.45rem 0.75rem",
+              borderRadius: "6px",
+              border: "1px solid var(--line)",
+              background: "var(--surface-soft)",
+              color: "var(--ink)",
+              minWidth: "100px"
+            }}
+          >
+            <option value="50">
+              {t("data.console.pagination.pageSizeOption", { value: 50 })}
+            </option>
+            <option value="100">
+              {t("data.console.pagination.pageSizeOption", { value: 100 })}
+            </option>
+            <option value="200">
+              {t("data.console.pagination.pageSizeOption", { value: 200 })}
+            </option>
+          </select>
         </div>
       </div>
     </div>
