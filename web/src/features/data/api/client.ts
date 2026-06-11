@@ -113,11 +113,11 @@ export const dataApi = {
       seconds_remaining: number;
       can_run: boolean;
     }>("/admin/data/learning/suggestions/status"),
-  generateAiSuggestions: () =>
+  generateAiSuggestions: (force?: boolean) =>
     request<{
       status: string;
       message: string;
-    }>("/admin/data/learning/suggestions/generate", {
+    }>(`/admin/data/learning/suggestions/generate${force ? "?force=true" : ""}`, {
       method: "POST"
     }),
   acceptAiSuggestion: (id: number) =>

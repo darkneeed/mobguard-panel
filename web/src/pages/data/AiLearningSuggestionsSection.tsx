@@ -79,6 +79,8 @@ export function AiLearningSuggestionsSection({ t, language, canWriteData = true 
     can_run: boolean;
   } | null>(null);
   const [generating, setGenerating] = useState(false);
+  const [showCooldownConfirm, setShowCooldownConfirm] = useState(false);
+  const [confirmTimer, setConfirmTimer] = useState(10);
 
   const loadSuggestions = async () => {
     try {
@@ -119,10 +121,24 @@ export function AiLearningSuggestionsSection({ t, language, canWriteData = true 
     return () => clearInterval(interval);
   }, [status]);
 
-  const handleGenerate = async () => {
+  useEffect(() => {
+    if (!showCooldownConfirm || confirmTimer <= 0) return;
+    const interval = setInterval(() => {
+      setConfirmTimer(prev => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [showCooldownConfirm, confirmTimer]);
+
+  const handleGenerate = async (force?: boolean) => {
     try {
       setGenerating(true);
-      const res = await api.generateAiSuggestions();
+      const res = await api.generateAiSuggestions(force);
       pushToast("success", res.message || "AI suggestions generation triggered successfully");
       await loadSuggestions();
     } catch (err) {
@@ -130,6 +146,24 @@ export function AiLearningSuggestionsSection({ t, language, canWriteData = true 
     } finally {
       setGenerating(false);
     }
+  };
+
+  const onTriggerUpdateClick = () => {
+    if (status && !status.can_run) {
+      setShowCooldownConfirm(true);
+      setConfirmTimer(10);
+    } else {
+      void handleGenerate(false);
+    }
+  };
+
+  const handleConfirmCooldownGenerate = () => {
+    setShowCooldownConfirm(false);
+    void handleGenerate(true);
+  };
+
+  const handleCancelCooldownGenerate = () => {
+    setShowCooldownConfirm(false);
   };
 
   const formatRemainingTime = (seconds: number) => {
@@ -250,16 +284,16 @@ export function AiLearningSuggestionsSection({ t, language, canWriteData = true 
         </div>
         <div>
           <button
-            disabled={!canWriteData || generating || (status ? !status.can_run : true)}
-            onClick={handleGenerate}
+            disabled={!canWriteData || generating}
+            onClick={onTriggerUpdateClick}
             style={{
               display: "inline-flex",
               alignItems: "center",
               gap: "0.5rem",
-              background: (status && !status.can_run) ? "var(--surface-soft)" : "var(--accent)",
-              color: (status && !status.can_run) ? "var(--muted)" : "#fff",
+              background: "var(--accent)",
+              color: "#fff",
               border: 0,
-              cursor: (status && !status.can_run) ? "not-allowed" : "pointer",
+              cursor: "pointer",
               padding: "0.6rem 1.25rem",
               borderRadius: "8px",
               fontWeight: 600,
@@ -764,6 +798,101 @@ export function AiLearningSuggestionsSection({ t, language, canWriteData = true 
             </div>
           );
         })}
+        </div>
+      )}
+
+      {showCooldownConfirm && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: "rgba(0, 0, 0, 0.75)",
+            backdropFilter: "blur(4px)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 9999,
+            padding: "1rem"
+          }}
+        >
+          <div
+            className="panel"
+            style={{
+              maxWidth: "480px",
+              width: "100%",
+              padding: "1.75rem",
+              border: "1px solid var(--line)",
+              borderRadius: "16px",
+              background: "var(--surface)",
+              boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.3), 0 10px 10px -5px rgba(0, 0, 0, 0.3)",
+              display: "flex",
+              flexDirection: "column",
+              gap: "1.25rem"
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", color: "var(--warning)" }}>
+              <AlertTriangle size={24} />
+              <h3 style={{ margin: 0, fontSize: "1.2rem", fontWeight: 600 }}>
+                {language === "ru" ? "Внимание: Куулдаун активен" : "Warning: Cooldown active"}
+              </h3>
+            </div>
+            
+            <p style={{ margin: 0, fontSize: "0.95rem", lineHeight: "1.5", color: "var(--ink)" }}>
+              {language === "ru"
+                ? "Запуск ручного обновления рекомендаций до истечения 12-часового лимита приведет к повторному запросу к ИИ. Это значительно увеличит расход токенов. Вы действительно хотите продолжить?"
+                : "Triggering manual suggestion generation before the 12-hour limit expires will make another request to the AI. This will significantly increase token usage. Are you sure you want to proceed?"}
+            </p>
+
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "flex-end",
+                gap: "0.75rem",
+                marginTop: "0.5rem"
+              }}
+            >
+              <button
+                className="ghost"
+                onClick={handleCancelCooldownGenerate}
+                style={{
+                  padding: "0.5rem 1rem",
+                  borderRadius: "8px",
+                  fontSize: "0.875rem",
+                  fontWeight: 600,
+                  cursor: "pointer"
+                }}
+              >
+                {language === "ru" ? "Отмена" : "Cancel"}
+              </button>
+
+              <button
+                disabled={confirmTimer > 0}
+                onClick={handleConfirmCooldownGenerate}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  minWidth: "120px",
+                  background: confirmTimer > 0 ? "var(--surface-soft)" : "var(--accent)",
+                  color: confirmTimer > 0 ? "var(--muted)" : "#fff",
+                  border: 0,
+                  cursor: confirmTimer > 0 ? "not-allowed" : "pointer",
+                  padding: "0.5rem 1rem",
+                  borderRadius: "8px",
+                  fontSize: "0.875rem",
+                  fontWeight: 600,
+                  transition: "all 0.2s"
+                }}
+              >
+                {confirmTimer > 0 
+                  ? `${language === "ru" ? "Подтвердить" : "Confirm"} (${confirmTimer})`
+                  : (language === "ru" ? "Подтвердить" : "Confirm")}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

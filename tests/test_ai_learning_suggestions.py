@@ -35,7 +35,11 @@ class AILearningSuggestionsTests(unittest.TestCase):
         self.analysis_store.init_schema()
         self.store.init_schema()
         self.store.sync_runtime_config(json.loads(self.config_path.read_text(encoding="utf-8")))
-        self.container = SimpleNamespace(store=self.store, analysis_store=self.analysis_store)
+        self.container = SimpleNamespace(
+            store=self.store,
+            analysis_store=self.analysis_store,
+            runtime=SimpleNamespace(config={"settings": {}})
+        )
 
     def tearDown(self):
         shutil.rmtree(self.temp_dir, ignore_errors=True)
@@ -219,6 +223,23 @@ class AILearningSuggestionsTests(unittest.TestCase):
             self.assertEqual(len(rows), 1)
             self.assertEqual(rows[0]["status"], "REJECTED")
             self.assertEqual(rows[0]["suggested_decision"], "HOSTING")
+
+    def test_generate_suggestions_cooldown_force(self):
+        from fastapi import HTTPException
+        # Set cooldown active
+        self.store.set_metadata_value("last_ai_suggestions_timestamp", "2026-06-12T01:00:00")
+        
+        # Calling with force=False should raise HTTPException with "Cooldown in effect"
+        with self.assertRaises(HTTPException) as ctx:
+            ai_learning_suggestions.generate_suggestions_on_demand(self.container, {}, force=False)
+        self.assertEqual(ctx.exception.status_code, 400)
+        self.assertIn("Cooldown in effect", ctx.exception.detail)
+
+        # Calling with force=True should bypass cooldown check (and raise "Gemini API key is not configured" instead of cooldown)
+        with self.assertRaises(HTTPException) as ctx:
+            ai_learning_suggestions.generate_suggestions_on_demand(self.container, {}, force=True)
+        self.assertEqual(ctx.exception.status_code, 400)
+        self.assertIn("Gemini API key is not configured", ctx.exception.detail)
 
 if __name__ == "__main__":
     unittest.main()

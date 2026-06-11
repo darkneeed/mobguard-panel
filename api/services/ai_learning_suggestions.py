@@ -209,9 +209,9 @@ def get_suggestions_cooldown_status(container: APIContainer) -> dict[str, Any]:
         }
 
 
-def generate_suggestions_on_demand(container: APIContainer, session: dict[str, Any]) -> dict[str, Any]:
+def generate_suggestions_on_demand(container: APIContainer, session: dict[str, Any], force: bool = False) -> dict[str, Any]:
     status = get_suggestions_cooldown_status(container)
-    if not status["can_run"]:
+    if not status["can_run"] and not force:
         raise HTTPException(status_code=400, detail=f"Cooldown in effect. Please wait {status['seconds_remaining']} seconds.")
     
     settings = container.runtime.config.get("settings", {})

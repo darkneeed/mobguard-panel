@@ -559,10 +559,11 @@ def get_ai_learning_suggestions_status(
 
 @router.post("/learning/suggestions/generate")
 def generate_ai_learning_suggestions(
+    force: bool = False,
     session: dict[str, Any] = Depends(require_permission(PERMISSION_DATA_WRITE)),
     container=Depends(get_container),
 ) -> dict[str, Any]:
-    payload = ai_learning_suggestions.generate_suggestions_on_demand(container, session)
+    payload = ai_learning_suggestions.generate_suggestions_on_demand(container, session, force=force)
     record_admin_action(
         container,
         session,
