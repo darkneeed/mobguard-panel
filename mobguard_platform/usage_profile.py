@@ -1040,6 +1040,8 @@ def build_usage_profile_snapshot(
         "usage_profile_summary": usage_profile_summary,
         "summary_score": len(soft_reasons),
         "summary_reason_set": list(soft_reasons),
+        "traffic_limit_bytes": panel_user.get("trafficLimitBytes") if isinstance(panel_user, Mapping) else (panel_user.get("traffic_limit_bytes") if isinstance(panel_user, Mapping) else None),
+        "traffic_limit_strategy": panel_user.get("trafficLimitStrategy") if isinstance(panel_user, Mapping) else (panel_user.get("traffic_limit_strategy") if isinstance(panel_user, Mapping) else None),
     }
 
 
@@ -1085,11 +1087,7 @@ def determine_risk_title(usage_profile: Mapping[str, Any] | None, bundle: Any | 
     profile = usage_profile if isinstance(usage_profile, Mapping) else {}
     soft_reasons = profile.get("soft_reasons") or []
 
-    # 1. ПРЕВЫШЕНИЕ ТРАФИКА
-    if "traffic_burst" in soft_reasons:
-        return "ПРЕВЫШЕНИЕ ТРАФИКА"
-
-    # 2. ПРЕВЫШЕНИЕ КОЛИЧЕСТВА УСТРОЙСТВ
+    # 1. ПРЕВЫШЕНИЕ КОЛИЧЕСТВА УСТРОЙСТВ (device rotation, mismatched OS, or count > limit)
     limit = profile.get("hwid_device_limit")
     count = profile.get("hwid_device_count_exact")
     is_device_limit_exceeded = False
@@ -1102,7 +1100,7 @@ def determine_risk_title(usage_profile: Mapping[str, Any] | None, bundle: Any | 
     if "device_rotation" in soft_reasons or "device_os_mismatch" in soft_reasons or is_device_limit_exceeded:
         return "ПРЕВЫШЕНИЕ КОЛИЧЕСТВА УСТРОЙСТВ"
 
-    # 3. НЕВЕРНЫЙ ТИП ПОДКЛЮЧЕНИЯ
+    # 2. НЕВЕРНЫЙ ТИП ПОДКЛЮЧЕНИЯ (home verdict, or provider_fanout)
     has_home_verdict = False
     if bundle is not None:
         confidence = str(getattr(bundle, "confidence_band", "")).upper()
@@ -1112,6 +1110,14 @@ def determine_risk_title(usage_profile: Mapping[str, Any] | None, bundle: Any | 
 
     if has_home_verdict or "provider_fanout" in soft_reasons:
         return "НЕВЕРНЫЙ ТИП ПОДКЛЮЧЕНИЯ"
+
+    # 3. ВСПЛЕСК ТРАФИКА / ПРЕВЫШЕНИЕ ТРАФИКА
+    if "traffic_burst" in soft_reasons:
+        traffic_limit_bytes = profile.get("traffic_limit_bytes")
+        if traffic_limit_bytes is not None and traffic_limit_bytes > 0:
+            return "ПРЕВЫШЕНИЕ ТРАФИКА"
+        else:
+            return "ВСПЛЕСК ТРАФИКА"
 
     return "РИСК ПРОФИЛЯ ИСПОЛЬЗОВАНИЯ"
 

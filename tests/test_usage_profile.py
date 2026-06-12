@@ -480,6 +480,44 @@ class UsageProfileTests(unittest.TestCase):
         self.assertIn("provider_fanout", snapshot["soft_reasons"])
         self.assertFalse(shared_account_suspected_from_usage_profile(snapshot))
 
+    def test_determine_risk_title_scenarios(self):
+        from mobguard_platform.usage_profile import determine_risk_title
+
+        # Scenario 1: Traffic burst, no limit (unlimited)
+        profile_unlimited = {
+            "soft_reasons": ["traffic_burst"],
+            "traffic_limit_bytes": 0
+        }
+        self.assertEqual(determine_risk_title(profile_unlimited), "ВСПЛЕСК ТРАФИКА")
+
+        # Scenario 2: Traffic burst, limit is None (unlimited fallback)
+        profile_none_limit = {
+            "soft_reasons": ["traffic_burst"],
+            "traffic_limit_bytes": None
+        }
+        self.assertEqual(determine_risk_title(profile_none_limit), "ВСПЛЕСК ТРАФИКА")
+
+        # Scenario 3: Traffic burst, positive limit
+        profile_limited = {
+            "soft_reasons": ["traffic_burst"],
+            "traffic_limit_bytes": 10 * 1024 * 1024 * 1024
+        }
+        self.assertEqual(determine_risk_title(profile_limited), "ПРЕВЫШЕНИЕ ТРАФИКА")
+
+        # Scenario 4: Prioritize Device Rotation over Traffic Burst
+        profile_both = {
+            "soft_reasons": ["traffic_burst", "device_rotation"],
+            "traffic_limit_bytes": 0
+        }
+        self.assertEqual(determine_risk_title(profile_both), "ПРЕВЫШЕНИЕ КОЛИЧЕСТВА УСТРОЙСТВ")
+
+        # Scenario 5: Prioritize Connection Type (provider_fanout) over Traffic Burst
+        profile_connection = {
+            "soft_reasons": ["traffic_burst", "provider_fanout"],
+            "traffic_limit_bytes": 0
+        }
+        self.assertEqual(determine_risk_title(profile_connection), "НЕВЕРНЫЙ ТИП ПОДКЛЮЧЕНИЯ")
+
 
 if __name__ == "__main__":
     unittest.main()
