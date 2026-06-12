@@ -183,17 +183,36 @@ def _module_remnawave_node_aliases(container: APIContainer) -> dict[str, str]:
     return aliases
 
 
+def _normalize_name(name: str) -> str:
+    s = name.lower()
+    s = s.replace("яндекс", "yandex").replace("вк", "vk").replace("телеграм", "telegram")
+    return "".join(c for c in s if c.isalnum())
+
+
+def _fuzzy_names_match(norm1: str, norm2: str) -> bool:
+    if not norm1 or not norm2:
+        return False
+    if norm1 == norm2:
+        return True
+    if norm1 in norm2 or norm2 in norm1:
+        return abs(len(norm1) - len(norm2)) <= 5
+    return False
+
+
 def _panel_online_for_module(
     panel_online_map: dict[str, int],
     *,
     module_id: str,
     module_name: str,
     aliases: dict[str, str],
+    last_ip: str = "",
 ) -> int:
     lookup_keys = {
         module_id.strip().lower(),
         module_name.strip().lower(),
     }
+    if last_ip.strip():
+        lookup_keys.add(last_ip.strip().lower())
     for alias_key in (module_id.strip().lower(), module_name.strip().lower()):
         raw_alias = aliases.get(alias_key)
         if not raw_alias:
@@ -202,11 +221,26 @@ def _panel_online_for_module(
             normalized_alias = alias.strip().lower()
             if normalized_alias:
                 lookup_keys.add(normalized_alias)
+
+    norm_module_name = _normalize_name(module_name)
+    norm_module_id = _normalize_name(module_id)
+
     resolved = 0
+    # Try exact matches first
     for key in lookup_keys:
         if not key:
             continue
-        resolved = max(resolved, int(panel_online_map.get(key) or 0))
+        if key in panel_online_map:
+            resolved = max(resolved, int(panel_online_map.get(key) or 0))
+
+    # Try fuzzy normalization substring match
+    if resolved == 0:
+        for node_name, users in panel_online_map.items():
+            norm_node = _normalize_name(node_name)
+            if _fuzzy_names_match(norm_module_name, norm_node) or \
+               _fuzzy_names_match(norm_module_id, norm_node):
+                resolved = max(resolved, int(users or 0))
+
     return resolved
 
 
@@ -461,10 +495,13 @@ def _panel_nodes_online_map(container: APIContainer) -> dict[str, int]:
             users_online = 0
         uuid_key = str(row.get("uuid") or "").strip().lower()
         name_key = str(row.get("name") or "").strip().lower()
+        ip_key = str(row.get("address") or "").strip().lower()
         if uuid_key:
             payload[uuid_key] = users_online
         if name_key:
             payload[name_key] = users_online
+        if ip_key:
+            payload[ip_key] = users_online
     return payload
 
 
@@ -799,6 +836,7 @@ def _attach_runtime_metrics(
             module_id=module_id,
             module_name=str(payload.get("module_name") or ""),
             aliases=panel_node_aliases,
+            last_ip=payload.get("last_ip", ""),
         )
         heartbeat_metrics = _heartbeat_activity(details)
         activity_active_users = int(module_activity.get("active_users") or 0)
@@ -812,6 +850,9 @@ def _attach_runtime_metrics(
                 module_id.strip().lower(),
                 str(payload.get("module_name") or "").strip().lower(),
             }
+            last_ip = payload.get("last_ip", "")
+            if last_ip.strip():
+                lookup_keys.add(last_ip.strip().lower())
             for alias_key in (module_id.strip().lower(), str(payload.get("module_name") or "").strip().lower()):
                 raw_alias = panel_node_aliases.get(alias_key)
                 if not raw_alias:
@@ -824,6 +865,16 @@ def _attach_runtime_metrics(
                 if key in panel_online_map:
                     is_mapped = True
                     break
+
+            if not is_mapped:
+                norm_module_name = _normalize_name(str(payload.get("module_name") or ""))
+                norm_module_id = _normalize_name(module_id)
+                for node_name in panel_online_map:
+                    norm_node = _normalize_name(node_name)
+                    if _fuzzy_names_match(norm_module_name, norm_node) or \
+                       _fuzzy_names_match(norm_module_id, norm_node):
+                        is_mapped = True
+                        break
 
             if is_mapped:
                 resolved_active_users = panel_online
@@ -919,18 +970,7 @@ def _attach_runtime_metrics(
         "error_modules": error_count,
         "stale_modules": stale_count,
         "modules_with_metrics": sum(1 for item in enriched if item.get("runtime_metrics", {}).get("collected_at")),
-        "active_users_total": (
-            remnawave_total_online
-            if remnawave_total_online is not None
-            else (
-                int(resolved_active_users_total)
-                if panel_online_modules_count > 0
-                else max(
-                    int(activity.get("totals", {}).get("active_users_total") or 0),
-                    int(resolved_active_users_total),
-                )
-            )
-        ),
+        "active_users_total": int(resolved_active_users_total),
         "recent_events_total": max(
             int(activity.get("totals", {}).get("recent_events_total") or 0),
             int(resolved_recent_events_total),

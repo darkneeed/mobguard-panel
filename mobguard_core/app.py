@@ -1219,6 +1219,8 @@ async def send_unsure_notify(user: Dict, bundle: DecisionBundle, tag: str, revie
         if admin_scenario_enabled("usage_profile_risk")
         else "admin_review_template"
     )
+    from mobguard_platform.usage_profile import determine_risk_title
+    risk_title = determine_risk_title(usage_profile, bundle)
     msg = render_runtime_template(
         scenario_template,
         {
@@ -1231,20 +1233,15 @@ async def send_unsure_notify(user: Dict, bundle: DecisionBundle, tag: str, revie
             "tag": tag,
             "confidence_band": f"{title} / {bundle.verdict} / {bundle.confidence_band}",
             "review_url": review_url,
+            "risk_title": risk_title,
             **build_usage_profile_template_context(usage_profile),
         },
     )
+    msg = msg.replace("РИСК ПРОФИЛЯ ИСПОЛЬЗОВАНИЯ", risk_title)
+    msg = msg.replace("Риск профиля использования", risk_title)
+    msg = msg.replace("риск профиля использования", risk_title)
     if bundle.case_id:
         msg += f"\n<b>Case ID:</b> <code>{bundle.case_id}</code>\n"
-    usage_lines = build_usage_profile_admin_lines(
-        usage_profile,
-        scenario="usage_profile_risk",
-    )
-    if usage_lines:
-        msg += "\n" + "\n".join(usage_lines) + "\n"
-    msg += "\n<b>Основания:</b>\n"
-    for entry in bundle.log:
-        msg += f"  • {escape_html(entry)}\n"
 
     await notify_admin(msg)
 
@@ -2203,8 +2200,7 @@ async def handle_violation(user: Dict, tag: str, bundle: DecisionBundle, warning
     ban_durations = enforcement_value('ban_durations_minutes')
     if not isinstance(ban_durations, list) or not ban_durations:
         ban_durations = ENFORCEMENT_SETTINGS_DEFAULTS['ban_durations_minutes']
-    review_url = platform_store.build_review_url(bundle.case_id) if bundle.case_id else ""
-
+    
     _dbg(
         'IMPORTANT',
         f"[VIOLATION] {uuid} confidence={bundle.confidence_band} punitive={bundle.punitive_eligible} warning_only={warning_only}",
@@ -2258,23 +2254,6 @@ async def handle_violation(user: Dict, tag: str, bundle: DecisionBundle, warning
     if duration < usage_threshold:
         return
 
-    tg_id = user.get('telegramId') or ""
-    common_context = {
-        "username": user.get('username', 'N/A'),
-        "uuid": uuid,
-        "system_id": user.get('id') or "",
-        "telegram_id": tg_id,
-        "ip": ip,
-        "isp": isp,
-        "tag": tag,
-        "confidence_band": bundle.confidence_band,
-        "review_url": review_url,
-        "warnings_before_ban": warnings_before_ban,
-        "warning_count": warning_count,
-        "warnings_left": max(warnings_before_ban - warning_count, 0),
-        "ban_minutes": 0,
-        "ban_text": "",
-    }
     usage_profile = build_usage_profile_snapshot(
         platform_store,
         {
@@ -2286,7 +2265,33 @@ async def handle_violation(user: Dict, tag: str, bundle: DecisionBundle, warning
         panel_user=user,
         anchor_started_at=start_time.isoformat() if start_time else "",
     )
+    from mobguard_platform.usage_profile import determine_risk_title
+    risk_title = determine_risk_title(usage_profile, bundle)
+    
+    common_context = {
+        "username": user.get('username', 'N/A'),
+        "uuid": uuid or "N/A",
+        "system_id": user.get('id') or "",
+        "telegram_id": user.get('telegramId') or "",
+        "ip": ip,
+        "isp": isp,
+        "tag": tag,
+        "confidence_band": bundle.confidence_band,
+        "review_url": platform_store.build_review_url(bundle.case_id) if bundle.case_id else "",
+        "warnings_before_ban": warnings_before_ban,
+        "warning_count": warning_count,
+        "warnings_left": max(warnings_before_ban - warning_count, 0),
+        "ban_minutes": 0,
+        "ban_text": "",
+        "risk_title": risk_title,
+    }
     common_context.update(build_usage_profile_template_context(usage_profile))
+
+    def _replace_risk_title(msg: str) -> str:
+        msg = msg.replace("РИСК ПРОФИЛЯ ИСПОЛЬЗОВАНИЯ", risk_title)
+        msg = msg.replace("Риск профиля использования", risk_title)
+        msg = msg.replace("риск профиля использования", risk_title)
+        return msg
 
     if warning_only:
         if admin_event_notifications_enabled("warning_only") or admin_scenario_enabled("usage_profile_risk"):
@@ -2299,15 +2304,7 @@ async def handle_violation(user: Dict, tag: str, bundle: DecisionBundle, warning
                 template_key,
                 {**common_context, "confidence_band": f"{bundle.confidence_band} / punitive disabled"},
             )
-            usage_lines = build_usage_profile_admin_lines(
-                usage_profile,
-                scenario="usage_profile_risk",
-            )
-            if usage_lines:
-                admin_msg += "\n" + "\n".join(usage_lines) + "\n"
-            admin_msg += "\n<b>Основание:</b>\n"
-            for entry in log:
-                admin_msg += f"  • {escape_html(entry)}\n"
+            admin_msg = _replace_risk_title(admin_msg)
             await notify_admin(admin_msg)
         await db.delete_tracker(tracker_key)
 
@@ -2342,12 +2339,7 @@ async def handle_violation(user: Dict, tag: str, bundle: DecisionBundle, warning
                         "warnings_left": max(warnings_before_ban - warning_count, 0),
                     },
                 )
-                usage_lines = build_usage_profile_admin_lines(
-                    usage_profile,
-                    scenario="violation_continues",
-                )
-                if usage_lines:
-                    admin_msg += "\n" + "\n".join(usage_lines) + "\n"
+                admin_msg = _replace_risk_title(admin_msg)
                 await notify_admin(admin_msg)
             await db.delete_tracker(tracker_key)
             if not DRY_RUN and user.get('telegramId') and user_event_notifications_enabled("warning"):
@@ -2429,19 +2421,7 @@ async def handle_violation(user: Dict, tag: str, bundle: DecisionBundle, warning
                 "<b>ОГРАНИЧЕНИЕ ДОСТУПА</b>",
                 f"{status_icon} <b>ОГРАНИЧЕНИЕ ДОСТУПА</b>",
             )
-            usage_lines = build_usage_profile_admin_lines(
-                usage_profile,
-                scenario=(
-                    "traffic_limit_exceeded"
-                    if restriction_state["restriction_mode"] == TRAFFIC_CAP_RESTRICTION_MODE
-                    else "violation_continues"
-                ),
-            )
-            if usage_lines:
-                admin_msg += "\n" + "\n".join(usage_lines) + "\n"
-            admin_msg += "\n<b>Основание:</b>\n"
-            for entry in log:
-                admin_msg += f"  • {escape_html(entry)}\n"
+            admin_msg = _replace_risk_title(admin_msg)
             if keyboard:
                 await notify_admin(admin_msg, reply_markup=keyboard)
             else:
@@ -2514,15 +2494,7 @@ async def handle_violation(user: Dict, tag: str, bundle: DecisionBundle, warning
                 "warnings_left": max(warnings_before_ban - 1, 0),
             },
         )
-        usage_lines = build_usage_profile_admin_lines(
-            usage_profile,
-            scenario="violation_continues",
-        )
-        if usage_lines:
-            admin_msg += "\n" + "\n".join(usage_lines) + "\n"
-        admin_msg += "\n<b>Основание:</b>\n"
-        for entry in log:
-            admin_msg += f"  • {escape_html(entry)}\n"
+        admin_msg = _replace_risk_title(admin_msg)
         await notify_admin(admin_msg)
 
     if not DRY_RUN and user.get('telegramId') and user_event_notifications_enabled("warning"):

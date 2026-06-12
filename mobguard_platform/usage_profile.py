@@ -1079,3 +1079,39 @@ def build_usage_profile_template_context(snapshot: Mapping[str, Any] | None) -> 
         "usage_profile_geo_country_jump": "yes" if bool(travel_flags.get("geo_country_jump")) else "",
         "usage_profile_geo_impossible_travel": "yes" if bool(travel_flags.get("geo_impossible_travel")) else "",
     }
+
+
+def determine_risk_title(usage_profile: Mapping[str, Any] | None, bundle: Any | None = None) -> str:
+    profile = usage_profile if isinstance(usage_profile, Mapping) else {}
+    soft_reasons = profile.get("soft_reasons") or []
+
+    # 1. ПРЕВЫШЕНИЕ ТРАФИКА
+    if "traffic_burst" in soft_reasons:
+        return "ПРЕВЫШЕНИЕ ТРАФИКА"
+
+    # 2. ПРЕВЫШЕНИЕ КОЛИЧЕСТВА УСТРОЙСТВ
+    limit = profile.get("hwid_device_limit")
+    count = profile.get("hwid_device_count_exact")
+    is_device_limit_exceeded = False
+    try:
+        if limit is not None and count is not None and int(count) > int(limit):
+            is_device_limit_exceeded = True
+    except (TypeError, ValueError):
+        pass
+
+    if "device_rotation" in soft_reasons or "device_os_mismatch" in soft_reasons or is_device_limit_exceeded:
+        return "ПРЕВЫШЕНИЕ КОЛИЧЕСТВА УСТРОЙСТВ"
+
+    # 3. НЕВЕРНЫЙ ТИП ПОДКЛЮЧЕНИЯ
+    has_home_verdict = False
+    if bundle is not None:
+        confidence = str(getattr(bundle, "confidence_band", "")).upper()
+        verdict = str(getattr(bundle, "verdict", "")).upper()
+        if "HOME" in confidence or "HOME" in verdict:
+            has_home_verdict = True
+
+    if has_home_verdict or "provider_fanout" in soft_reasons:
+        return "НЕВЕРНЫЙ ТИП ПОДКЛЮЧЕНИЯ"
+
+    return "РИСК ПРОФИЛЯ ИСПОЛЬЗОВАНИЯ"
+

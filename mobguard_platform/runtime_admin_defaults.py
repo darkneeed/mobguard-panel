@@ -309,7 +309,7 @@ ENFORCEMENT_TEMPLATE_DEFAULTS = {
     "admin_usage_profile_risk_template": (
         "📶 <b>#mobguard</b>\n"
         "➖➖➖➖➖➖➖➖➖\n"
-        "🧭 <b>РИСК ПРОФИЛЯ ИСПОЛЬЗОВАНИЯ</b>\n"
+        "🧭 <b>{{risk_title}}</b>\n"
         "<b>Пользователь:</b> {{username}}\n"
         "<b>Системный ID:</b> {{system_id}}\n"
         "<b>Telegram ID:</b> {{telegram_id}}\n"

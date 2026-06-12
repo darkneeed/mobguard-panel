@@ -373,6 +373,8 @@ async def _notify_review_case(
         if admin_event_enabled(raw_settings, "usage_profile_risk", has_admin_bot=has_admin_bot)
         else "admin_review_template"
     )
+    from mobguard_platform.usage_profile import determine_risk_title
+    risk_title = determine_risk_title(usage_profile, bundle)
     message = render_telegram_template(
         raw_settings,
         template_key,
@@ -386,19 +388,15 @@ async def _notify_review_case(
             "tag": tag,
             "confidence_band": f"{title} / {bundle.verdict} / {bundle.confidence_band}",
             "review_url": detail.get("review_url") or "",
+            "risk_title": risk_title,
             **build_usage_profile_template_context(usage_profile),
         },
     )
+    message = message.replace("РИСК ПРОФИЛЯ ИСПОЛЬЗОВАНИЯ", risk_title)
+    message = message.replace("Риск профиля использования", risk_title)
+    message = message.replace("риск профиля использования", risk_title)
     if bundle.case_id:
         message += f"\n<b>Case ID:</b> <code>{int(bundle.case_id)}</code>\n"
-    usage_lines = build_usage_profile_admin_lines(usage_profile, scenario="usage_profile_risk")
-    if usage_lines:
-        message += "\n" + "\n".join(usage_lines) + "\n"
-    compact_reasons = _compact_admin_reason_lines(getattr(bundle, "log", []) or [])
-    if compact_reasons:
-        message += "\n<b>Ключевые основания:</b>\n"
-        for entry in compact_reasons:
-            message += f"  • {entry}\n"
     dedupe_key = (
         f"review-case:{int(bundle.case_id)}"
         if bundle.case_id not in (None, "")
@@ -431,6 +429,8 @@ async def _notify_enforcement(
         _identity_payload(user),
         panel_user=dict(user),
     )
+    from mobguard_platform.usage_profile import determine_risk_title
+    risk_title = determine_risk_title(usage_profile, bundle)
     common_context = {
         "username": user.get("username", "N/A"),
         "uuid": user.get("uuid") or "N/A",
@@ -454,6 +454,7 @@ async def _notify_enforcement(
         if int(enforcement.get("ban_minutes") or 0) > 0
         else "",
         "confidence_band": bundle.confidence_band,
+        "risk_title": risk_title,
         **build_usage_profile_template_context(usage_profile),
     }
     admin_message = ""
@@ -481,12 +482,9 @@ async def _notify_enforcement(
         user_message = render_telegram_template(raw_settings, "user_ban_template", common_context)
 
     if admin_message:
-        compact_reasons = _compact_admin_reason_lines(getattr(bundle, "log", []) or [])
-        if compact_reasons:
-            admin_message += "\n<b>Ключевые основания:</b>\n"
-            for entry in compact_reasons:
-                admin_message += f"  • {entry}\n"
-    if admin_message:
+        admin_message = admin_message.replace("РИСК ПРОФИЛЯ ИСПОЛЬЗОВАНИЯ", risk_title)
+        admin_message = admin_message.replace("Риск профиля использования", risk_title)
+        admin_message = admin_message.replace("риск профиля использования", risk_title)
         if enforcement_type == "warning" and is_warning_only and bundle.case_id not in (None, ""):
             admin_dedupe_key = f"enforcement-warning-case:{int(bundle.case_id)}"
         else:

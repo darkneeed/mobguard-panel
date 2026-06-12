@@ -423,6 +423,7 @@ class RemnawaveClient:
                 {
                     "uuid": str(row.get("uuid") or "").strip(),
                     "name": str(row.get("name") or "").strip(),
+                    "address": str(row.get("address") or "").strip(),
                     "users_online": users_online,
                 }
             )
