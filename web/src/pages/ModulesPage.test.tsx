@@ -17,6 +17,12 @@ vi.mock("../api/client", () => ({
   }
 }));
 
+vi.mock("../features/settings/api/client", () => ({
+  settingsApi: {
+    getRemnawaveInbounds: vi.fn().mockResolvedValue({ available: false, inbounds: [] })
+  }
+}));
+
 describe("ModulesPage", () => {
   const ownerSession = {
     telegram_id: 1,
@@ -88,6 +94,7 @@ describe("ModulesPage", () => {
     const dialog = await screen.findByRole("dialog");
     await userEvent.type(within(dialog).getByLabelText("Display name"), "Node Alpha");
     await userEvent.type(within(dialog).getByLabelText("INBOUND tags"), "DEFAULT-INBOUND");
+    await userEvent.keyboard("{Enter}");
     await userEvent.click(within(dialog).getByRole("button", { name: "Create module" }));
 
     await waitFor(() => {

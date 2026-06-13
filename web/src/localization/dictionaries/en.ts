@@ -862,6 +862,10 @@ export const enDictionary: TranslationDictionary = {
   telegram: {
     eyebrow: "Telegram",
     title: "Bot runtime settings and message delivery",
+    tabs: {
+      settings: "Settings",
+      templates: "Templates",
+    },
     saveSettings: "Save telegram settings",
     saveEnv: "Save .env settings",
     saveTemplates: "Save message templates",
@@ -880,8 +884,8 @@ export const enDictionary: TranslationDictionary = {
     userNotificationsTitle: "User notifications",
     userNotificationsDescription: "Per-event delivery controls for user-facing bot messages.",
     templatesTitle: "Message templates",
-    userTemplates: "User templates",
-    adminTemplates: "Admin templates",
+    userTemplates: "User messages",
+    adminTemplates: "Moderator messages",
     envTitle: "Telegram .env",
     envDescription: "Bot tokens and usernames are edited separately from live runtime settings.",
     envCount: "{present} of {total} configured",

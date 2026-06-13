@@ -246,6 +246,7 @@ export function TelegramPage() {
   );
   const [templatesError, setTemplatesError] = useState("");
   const [templatesSaved, setTemplatesSaved] = useState("");
+  const [activeTab, setActiveTab] = useState<"settings" | "templates">("settings");
 
   useEffect(() => {
     let cancelled = false;
@@ -516,201 +517,248 @@ export function TelegramPage() {
           <h1>{t("telegram.title")}</h1>
         </div>
         <div className="action-row">
-          <span
-            className={runtimeDirty ? "tag review-only" : "tag severity-low"}
-          >
-            {runtimeDirty ? t("common.unsavedChanges") : t("common.saved")}
-          </span>
-          <button onClick={saveRuntime} disabled={!data || !runtimeDirty || runtimeSaving}>
-            {runtimeSaving && (
-              <Loader2 size={14} className="spinner" style={{ marginRight: "6px" }} />
-            )}
-            {t("telegram.saveSettings")}
-          </button>
+          {activeTab === "settings" ? (
+            <>
+              <span
+                className={runtimeDirty ? "tag review-only" : "tag severity-low"}
+              >
+                {runtimeDirty ? t("common.unsavedChanges") : t("common.saved")}
+              </span>
+              <button onClick={saveRuntime} disabled={!data || !runtimeDirty || runtimeSaving}>
+                {runtimeSaving && (
+                  <Loader2 size={14} className="spinner" style={{ marginRight: "6px" }} />
+                )}
+                {t("telegram.saveSettings")}
+              </button>
+            </>
+          ) : (
+            <>
+              <span
+                className={templatesDirty ? "tag review-only" : "tag severity-low"}
+              >
+                {templatesDirty ? t("common.unsavedChanges") : t("common.saved")}
+              </span>
+              <button onClick={saveTemplates} disabled={!data || !templatesDirty || templatesSaving}>
+                {templatesSaving && (
+                  <Loader2 size={14} className="spinner" style={{ marginRight: "6px" }} />
+                )}
+                {t("telegram.saveTemplates")}
+              </button>
+            </>
+          )}
         </div>
       </div>
-      {error ? <div className="error-box">{error}</div> : null}
-      {saved ? <div className="ok-box">{saved}</div> : null}
+
+      <div className="section-tabs" style={{ padding: "0 0 1.25rem 0", position: "static", backdropFilter: "none", zIndex: "auto" }}>
+        <button
+          type="button"
+          className={`section-tab ${activeTab === "settings" ? "active" : ""}`}
+          onClick={() => setActiveTab("settings")}
+          style={{ cursor: "pointer" }}
+        >
+          {t("telegram.tabs.settings")}
+        </button>
+        <button
+          type="button"
+          className={`section-tab ${activeTab === "templates" ? "active" : ""}`}
+          onClick={() => setActiveTab("templates")}
+          style={{ cursor: "pointer" }}
+        >
+          {t("telegram.tabs.templates")}
+        </button>
+      </div>
+
+      {activeTab === "settings" ? (
+        <>
+          {error ? <div className="error-box">{error}</div> : null}
+          {saved ? <div className="ok-box">{saved}</div> : null}
+        </>
+      ) : (
+        <>
+          {templatesError ? <div className="error-box">{templatesError}</div> : null}
+          {templatesSaved ? <div className="ok-box">{templatesSaved}</div> : null}
+        </>
+      )}
+
       {!data ? <div className="panel">{t("common.loading")}</div> : null}
 
       {data ? (
-        <>
-          <div className="stats-grid">
-            <div className="stat-card">
-              <span>{t("telegram.cards.adminBot")}</span>
-              <strong>
-                {data.capabilities.admin_bot_enabled
-                  ? t("common.on")
-                  : t("common.off")}
-              </strong>
+        activeTab === "settings" ? (
+          <>
+            <div className="stats-grid">
+              <div className="stat-card">
+                <span>{t("telegram.cards.adminBot")}</span>
+                <strong>
+                  {data.capabilities.admin_bot_enabled
+                    ? t("common.on")
+                    : t("common.off")}
+                </strong>
+              </div>
+              <div className="stat-card">
+                <span>{t("telegram.cards.userBot")}</span>
+                <strong>
+                  {data.capabilities.user_bot_enabled
+                    ? t("common.on")
+                    : t("common.off")}
+                </strong>
+              </div>
+              <div className="stat-card">
+                <span>{t("telegram.cards.envFile")}</span>
+                <strong>
+                  {data.env_file_writable
+                    ? t("common.writable")
+                    : t("common.readOnly")}
+                </strong>
+              </div>
             </div>
-            <div className="stat-card">
-              <span>{t("telegram.cards.userBot")}</span>
-              <strong>
-                {data.capabilities.user_bot_enabled
-                  ? t("common.on")
-                  : t("common.off")}
-              </strong>
-            </div>
-            <div className="stat-card">
-              <span>{t("telegram.cards.envFile")}</span>
-              <strong>
-                {data.env_file_writable
-                  ? t("common.writable")
-                  : t("common.readOnly")}
-              </strong>
-            </div>
-          </div>
 
-          <div className="panel">
-            <div className="panel-heading">
-              <h2>{t("telegram.deliveryTitle")}</h2>
-              <p className="muted">{t("telegram.deliveryDescription")}</p>
+            <div className="panel">
+              <div className="panel-heading">
+                <h2>{t("telegram.deliveryTitle")}</h2>
+                <p className="muted">{t("telegram.deliveryDescription")}</p>
+              </div>
+              <div className="form-grid">
+                {TELEGRAM_FIELDS.filter(
+                  (field) => field.section === "delivery",
+                ).map(renderTelegramField)}
+              </div>
             </div>
-            <div className="form-grid">
-              {TELEGRAM_FIELDS.filter(
-                (field) => field.section === "delivery",
-              ).map(renderTelegramField)}
-            </div>
-          </div>
 
-          <div className="panel">
-            <div className="panel-heading">
-              <h2>{t("telegram.adminNotificationsTitle")}</h2>
-              <p className="muted">
-                {t("telegram.adminNotificationsDescription")}
-              </p>
+            <div className="panel">
+              <div className="panel-heading">
+                <h2>{t("telegram.adminNotificationsTitle")}</h2>
+                <p className="muted">
+                  {t("telegram.adminNotificationsDescription")}
+                </p>
+              </div>
+              <div className="form-grid">
+                {TELEGRAM_FIELDS.filter((field) => field.section === "admin").map(
+                  renderTelegramField,
+                )}
+              </div>
             </div>
-            <div className="form-grid">
-              {TELEGRAM_FIELDS.filter((field) => field.section === "admin").map(
-                renderTelegramField,
-              )}
-            </div>
-          </div>
 
-          <div className="panel">
-            <div className="panel-heading">
-              <h2>{t("telegram.userNotificationsTitle")}</h2>
-              <p className="muted">
-                {t("telegram.userNotificationsDescription")}
-              </p>
+            <div className="panel">
+              <div className="panel-heading">
+                <h2>{t("telegram.userNotificationsTitle")}</h2>
+                <p className="muted">
+                  {t("telegram.userNotificationsDescription")}
+                </p>
+              </div>
+              <div className="form-grid">
+                {TELEGRAM_FIELDS.filter((field) => field.section === "user").map(
+                  renderTelegramField,
+                )}
+              </div>
             </div>
-            <div className="form-grid">
-              {TELEGRAM_FIELDS.filter((field) => field.section === "user").map(
-                renderTelegramField,
-              )}
-            </div>
-          </div>
 
-          <div className="panel">
-            <div className="panel-heading panel-heading-row">
-              <div>
-                <h2>{t("telegram.envTitle")}</h2>
-                <p className="muted">{t("telegram.envDescription")}</p>
-              </div>
-              <div className="action-row">
-                <span className="tag severity-low">
-                  {t("telegram.envCount", {
-                    present: envPresentCount,
-                    total: envFieldCount,
-                  })}
-                </span>
-                <span
-                  className={envDirty ? "tag review-only" : "tag severity-low"}
-                >
-                  {envDirty ? t("common.unsavedChanges") : t("common.saved")}
-                </span>
-                <button
-                  disabled={!envDirty || !data.env_file_writable || envSaving}
-                  onClick={saveEnv}
-                >
-                  {envSaving && (
-                    <Loader2 size={14} className="spinner" style={{ marginRight: "6px" }} />
-                  )}
-                  {t("telegram.saveEnv")}
-                </button>
-              </div>
-            </div>
-            <div className="settings-group-stack">
-              <div className="settings-file-row">
-                <span className="muted">{t("common.envFile")}</span>
-                <strong>{data.env_file_path}</strong>
-              </div>
-              {envError ? <div className="error-box">{envError}</div> : null}
-              {envSaved ? <div className="ok-box">{envSaved}</div> : null}
-              <div className="env-accordion">
-                {Object.values(data.env).map(renderEnvField)}
-              </div>
-            </div>
-          </div>
-
-          <div className="panel">
-            <div className="panel-heading panel-heading-row">
-              <div>
-                <h2>{t("telegram.templatesTitle")}</h2>
-              </div>
-              <div className="action-row">
-                <span
-                  className={
-                    templatesDirty ? "tag review-only" : "tag severity-low"
-                  }
-                >
-                  {templatesDirty
-                    ? t("common.unsavedChanges")
-                    : t("common.saved")}
-                </span>
-                <button disabled={!templatesDirty || templatesSaving} onClick={saveTemplates}>
-                  {templatesSaving && (
-                    <Loader2 size={14} className="spinner" style={{ marginRight: "6px" }} />
-                  )}
-                  {t("telegram.saveTemplates")}
-                </button>
-              </div>
-            </div>
-            {templatesError ? (
-              <div className="error-box">{templatesError}</div>
-            ) : null}
-            {templatesSaved ? (
-              <div className="ok-box">{templatesSaved}</div>
-            ) : null}
-            <div className="detail-grid">
-              {(["user", "admin"] as const).map((audience) => (
-                <div className="settings-group" key={audience}>
-                  <h3>
-                    {audience === "user"
-                      ? t("telegram.userTemplates")
-                      : t("telegram.adminTemplates")}
-                  </h3>
-                  <div className="settings-group-fields">
-                    {TEMPLATE_FIELDS.filter(
-                      (field) => field.audience === audience,
-                    ).map((field) => {
-                      const meta = templateMeta(field.key);
-                      return (
-                        <div className="rule-field" key={field.key}>
-                          <FieldLabel
-                            label={meta.label}
-                            description={meta.description}
-                          />
-                           <AutoResizingTextarea
-                             className="note-box code-editor-box"
-                             value={templates[field.key] || ""}
-                             onChange={(value) =>
-                               setTemplates((prev) => ({
-                                 ...prev,
-                                 [field.key]: value,
-                               }))
-                             }
-                           />
-                        </div>
-                      );
-                    })}
-                  </div>
+            <div className="panel">
+              <div className="panel-heading panel-heading-row">
+                <div>
+                  <h2>{t("telegram.envTitle")}</h2>
+                  <p className="muted">{t("telegram.envDescription")}</p>
                 </div>
-              ))}
+                <div className="action-row">
+                  <span className="tag severity-low">
+                    {t("telegram.envCount", {
+                      present: envPresentCount,
+                      total: envFieldCount,
+                    })}
+                  </span>
+                  <span
+                    className={envDirty ? "tag review-only" : "tag severity-low"}
+                  >
+                    {envDirty ? t("common.unsavedChanges") : t("common.saved")}
+                  </span>
+                  <button
+                    disabled={!envDirty || !data.env_file_writable || envSaving}
+                    onClick={saveEnv}
+                  >
+                    {envSaving && (
+                      <Loader2 size={14} className="spinner" style={{ marginRight: "6px" }} />
+                    )}
+                    {t("telegram.saveEnv")}
+                  </button>
+                </div>
+              </div>
+              <div className="settings-group-stack">
+                <div className="settings-file-row">
+                  <span className="muted">{t("common.envFile")}</span>
+                  <strong>{data.env_file_path}</strong>
+                </div>
+                {envError ? <div className="error-box">{envError}</div> : null}
+                {envSaved ? <div className="ok-box">{envSaved}</div> : null}
+                <div className="env-accordion">
+                  {Object.values(data.env).map(renderEnvField)}
+                </div>
+              </div>
             </div>
-          </div>
-        </>
+          </>
+        ) : (
+          <>
+            <div className="panel">
+              <div className="panel-heading">
+                <h2>{t("telegram.userTemplates")}</h2>
+              </div>
+              <div className="settings-group-stack" style={{ gap: "1.5rem", flexWrap: "nowrap", display: "flex", flexDirection: "column" }}>
+                {TEMPLATE_FIELDS.filter(
+                  (field) => field.audience === "user",
+                ).map((field) => {
+                  const meta = templateMeta(field.key);
+                  return (
+                    <div className="rule-field" key={field.key}>
+                      <FieldLabel
+                        label={meta.label}
+                        description={meta.description}
+                      />
+                      <AutoResizingTextarea
+                        className="note-box code-editor-box"
+                        value={templates[field.key] || ""}
+                        onChange={(value) =>
+                          setTemplates((prev) => ({
+                            ...prev,
+                            [field.key]: value,
+                          }))
+                        }
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="panel">
+              <div className="panel-heading">
+                <h2>{t("telegram.adminTemplates")}</h2>
+              </div>
+              <div className="settings-group-stack" style={{ gap: "1.5rem", flexWrap: "nowrap", display: "flex", flexDirection: "column" }}>
+                {TEMPLATE_FIELDS.filter(
+                  (field) => field.audience === "admin",
+                ).map((field) => {
+                  const meta = templateMeta(field.key);
+                  return (
+                    <div className="rule-field" key={field.key}>
+                      <FieldLabel
+                        label={meta.label}
+                        description={meta.description}
+                      />
+                      <AutoResizingTextarea
+                        className="note-box code-editor-box"
+                        value={templates[field.key] || ""}
+                        onChange={(value) =>
+                          setTemplates((prev) => ({
+                            ...prev,
+                            [field.key]: value,
+                          }))
+                        }
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </>
+        )
       ) : null}
     </section>
   );

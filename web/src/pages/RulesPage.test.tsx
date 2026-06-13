@@ -2,10 +2,20 @@ import { cleanup, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { api } from "../api/client";
+import { api, Session } from "../api/client";
 import { RULE_LIST_FIELDS, RULE_SETTING_FIELDS } from "../rulesMeta";
 import { renderWithProviders } from "../test/renderWithProviders";
 import { RulesPage } from "./RulesPage";
+
+const ADMIN_SESSION: Session = {
+  telegram_id: 1,
+  expires_at: "2099-01-01T00:00:00Z",
+  permissions: [
+    "rules.read",
+    "rules.write",
+    "overview.read",
+  ],
+};
 
 vi.mock("../api/client", () => ({
   api: {
@@ -69,12 +79,12 @@ describe("RulesPage retention settings", () => {
       }
     });
 
-    renderWithProviders(<RulesPage />, {
+    renderWithProviders(<RulesPage session={ADMIN_SESSION} />, {
       route: "/system/retention",
       path: "/system/:section"
     });
 
-    expect(await screen.findByText("Database retention")).toBeInTheDocument();
+    expect(await screen.findByText("Retention")).toBeInTheDocument();
 
     const cleanupField = screen.getByText("DB cleanup interval (minutes)").closest(".rule-field");
     expect(cleanupField).not.toBeNull();
@@ -118,7 +128,7 @@ describe("RulesPage retention settings", () => {
       },
     });
 
-    renderWithProviders(<RulesPage />, {
+    renderWithProviders(<RulesPage session={ADMIN_SESSION} />, {
       route: "/system/general",
       path: "/system/:section",
     });
@@ -199,7 +209,7 @@ describe("RulesPage retention settings", () => {
       },
     });
 
-    renderWithProviders(<RulesPage />, {
+    renderWithProviders(<RulesPage session={ADMIN_SESSION} />, {
       route: "/system/general",
       path: "/system/:section",
     });

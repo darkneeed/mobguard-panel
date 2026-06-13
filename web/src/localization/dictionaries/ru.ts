@@ -922,6 +922,10 @@ export const ruDictionary: TranslationDictionary = {
   telegram: {
     eyebrow: "Telegram",
     title: "Настройки runtime-ботов и доставки сообщений",
+    tabs: {
+      settings: "Настройки",
+      templates: "Шаблоны",
+    },
     saveSettings: "Сохранить настройки Telegram",
     saveEnv: "Сохранить .env настройки",
     saveTemplates: "Сохранить шаблоны сообщений",
@@ -944,8 +948,8 @@ export const ruDictionary: TranslationDictionary = {
     userNotificationsDescription:
       "Настройки доставки по типам событий для пользовательского бота.",
     templatesTitle: "Шаблоны сообщений",
-    userTemplates: "Пользовательские шаблоны",
-    adminTemplates: "Админские шаблоны",
+    userTemplates: "Сообщения пользователям",
+    adminTemplates: "Сообщения модераторам",
     envTitle: "Telegram .env",
     envDescription:
       "Токены и usernames ботов редактируются отдельно от live runtime-настроек.",
