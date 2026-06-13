@@ -946,7 +946,7 @@ export const ruDictionary: TranslationDictionary = {
     templatesTitle: "Шаблоны сообщений",
     templatesHintLabel: "Подсказка по шаблонам сообщений",
     templatesHint:
-      "Многострочный текст сохраняется.\n\nПлейсхолдеры: {{username}}, {{warning_count}}, {{warnings_left}}, {{ban_text}}, {{review_url}}, {{usage_profile_summary}}.",
+      "Поддерживается многострочный текст и HTML-теги (<b>, <code>, <i>).\n\nОсновные плейсхолдеры:\n• {{username}}, {{uuid}}, {{system_id}}, {{telegram_id}}\n• {{ip}}, {{isp}}, {{tag}}, {{confidence_band}}, {{review_url}}\n• {{risk_title}}, {{warning_count}}, {{warnings_left}}, {{ban_minutes}}, {{ban_text}}\n\nПлейсхолдеры профиля использования:\n• {{usage_profile_summary}} (статистика по IP, провайдерам, нодам, ГЕО)\n• {{usage_profile_soft_reasons}} (активные флаги нарушений на русском)\n• {{usage_profile_ip_count}}, {{usage_profile_provider_count}}, {{usage_profile_node_count}}, {{usage_profile_device_count}}, {{usage_profile_os_count}}, {{usage_profile_country_count}}\n• {{usage_profile_top_ips}}, {{usage_profile_top_providers}}, {{usage_profile_countries}}\n• {{usage_profile_ongoing_duration_text}}, {{usage_profile_geo_country_jump}}, {{usage_profile_geo_impossible_travel}}\n• {{usage_profile_event_count}}, {{usage_profile_exact_device_count}}, {{usage_profile_hwid_device_limit}}, {{usage_profile_hwid_device_count_exact}}\n• {{usage_profile_device_labels}}, {{usage_profile_nodes}}, {{usage_profile_traffic_burst_bytes}}, {{usage_profile_traffic_burst_window}}.",
     userTemplates: "Пользовательские шаблоны",
     adminTemplates: "Админские шаблоны",
     envTitle: "Telegram .env",

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 
 import { api, EnvFieldState } from "../api/client";
 import { Loader2 } from "lucide-react";
@@ -186,6 +186,36 @@ function normalizeTemplateDraft(
       field.key,
       String(payload.settings[field.key] ?? ""),
     ]),
+  );
+}
+
+function AutoResizingTextarea({
+  value,
+  onChange,
+  className,
+}: {
+  value: string;
+  onChange: (val: string) => void;
+  className?: string;
+}) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (el) {
+      el.style.height = "auto";
+      el.style.height = `${el.scrollHeight}px`;
+    }
+  }, [value]);
+
+  return (
+    <textarea
+      ref={ref}
+      className={className}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      style={{ overflowY: "hidden", resize: "none" }}
+    />
   );
 }
 
@@ -662,16 +692,16 @@ export function TelegramPage() {
                             label={meta.label}
                             description={meta.description}
                           />
-                          <textarea
-                            className="note-box tall code-editor-box"
-                            value={templates[field.key] || ""}
-                            onChange={(event) =>
-                              setTemplates((prev) => ({
-                                ...prev,
-                                [field.key]: event.target.value,
-                              }))
-                            }
-                          />
+                           <AutoResizingTextarea
+                             className="note-box code-editor-box"
+                             value={templates[field.key] || ""}
+                             onChange={(value) =>
+                               setTemplates((prev) => ({
+                                 ...prev,
+                                 [field.key]: value,
+                               }))
+                             }
+                           />
                         </div>
                       );
                     })}

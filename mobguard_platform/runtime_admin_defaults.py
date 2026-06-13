@@ -258,6 +258,7 @@ ENFORCEMENT_TEMPLATE_DEFAULTS = {
         "<b>Конфиг:</b> {{tag}}\n"
         "<b>Причина:</b> {{confidence_band}} / наказания отключены\n"
         "<b>Профиль использования:</b> {{usage_profile_summary}}\n"
+        "<b>Флаги:</b> {{usage_profile_soft_reasons}}\n"
         "<b>Ссылка на кейс:</b> <code>{{review_url}}</code>\n"
     ),
     "admin_warning_template": (
@@ -273,6 +274,7 @@ ENFORCEMENT_TEMPLATE_DEFAULTS = {
         "<b>Конфиг:</b> {{tag}}\n"
         "<b>Осталось предупреждений:</b> {{warnings_left}}\n"
         "<b>Профиль использования:</b> {{usage_profile_summary}}\n"
+        "<b>Флаги:</b> {{usage_profile_soft_reasons}}\n"
         "<b>Ссылка на кейс:</b> <code>{{review_url}}</code>\n"
     ),
     "admin_ban_template": (
@@ -289,6 +291,7 @@ ENFORCEMENT_TEMPLATE_DEFAULTS = {
         "<b>Кол-во предупреждений:</b> {{warning_count}}\n"
         "<b>Ограничение:</b> {{ban_minutes}} мин ({{ban_text}})\n"
         "<b>Профиль использования:</b> {{usage_profile_summary}}\n"
+        "<b>Флаги:</b> {{usage_profile_soft_reasons}}\n"
         "<b>Ссылка на кейс:</b> <code>{{review_url}}</code>\n"
     ),
     "admin_review_template": (
@@ -304,6 +307,7 @@ ENFORCEMENT_TEMPLATE_DEFAULTS = {
         "<b>Конфиг:</b> {{tag}}\n"
         "<b>Вердикт:</b> {{confidence_band}}\n"
         "<b>Профиль использования:</b> {{usage_profile_summary}}\n"
+        "<b>Флаги:</b> {{usage_profile_soft_reasons}}\n"
         "<b>Ссылка на кейс:</b> <code>{{review_url}}</code>\n"
     ),
     "admin_usage_profile_risk_template": (
@@ -318,6 +322,7 @@ ENFORCEMENT_TEMPLATE_DEFAULTS = {
         "<b>Провайдер:</b> {{isp}}\n"
         "<b>Конфиг:</b> {{tag}}\n"
         "<b>Профиль использования:</b> {{usage_profile_summary}}\n"
+        "<b>Флаги:</b> {{usage_profile_soft_reasons}}\n"
         "<b>Ссылка на кейс:</b> <code>{{review_url}}</code>\n"
     ),
     "admin_violation_continues_template": (
@@ -333,6 +338,7 @@ ENFORCEMENT_TEMPLATE_DEFAULTS = {
         "<b>Конфиг:</b> {{tag}}\n"
         "<b>Продолжительность:</b> {{usage_profile_ongoing_duration_text}}\n"
         "<b>Профиль использования:</b> {{usage_profile_summary}}\n"
+        "<b>Флаги:</b> {{usage_profile_soft_reasons}}\n"
         "<b>Ссылка на кейс:</b> <code>{{review_url}}</code>\n"
     ),
     "admin_traffic_limit_exceeded_template": (
@@ -347,6 +353,7 @@ ENFORCEMENT_TEMPLATE_DEFAULTS = {
         "<b>Провайдер:</b> {{isp}}\n"
         "<b>Конфиг:</b> {{tag}}\n"
         "<b>Профиль использования:</b> {{usage_profile_summary}}\n"
+        "<b>Флаги:</b> {{usage_profile_soft_reasons}}\n"
         "<b>Ссылка на кейс:</b> <code>{{review_url}}</code>\n"
     ),
 }

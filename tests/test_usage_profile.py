@@ -143,6 +143,23 @@ class UsageProfileTests(unittest.TestCase):
             app_version="1.0.0",
         )
         self._record_event(
+            "2026-04-11T10:30:00",
+            "2.2.2.2",
+            "Provider DE",
+            "node-b",
+            "Node B",
+            country="DE",
+            region="Berlin",
+            city="Berlin",
+            loc="52.5200,13.4050",
+            device_id="ios-1",
+            device_label="iPhone 15",
+            os_family="iOS",
+            os_version="17.4",
+            app_name="Happ",
+            app_version="1.0.0",
+        )
+        self._record_event(
             "2026-04-11T12:00:00",
             "2.2.2.2",
             "Provider DE",
@@ -295,6 +312,7 @@ class UsageProfileTests(unittest.TestCase):
         self.assertIn("трафик", snapshot["usage_profile_summary"])
 
     def test_snapshot_can_be_device_scoped_to_avoid_cross_device_travel_noise(self):
+        # device ios-1 has a country jump (RU -> DE)
         self._record_event(
             "2026-04-11T10:00:00",
             "1.1.1.1",
@@ -319,6 +337,21 @@ class UsageProfileTests(unittest.TestCase):
             region="Berlin",
             city="Berlin",
             loc="52.5200,13.4050",
+            device_id="ios-1",
+            device_label="iPhone 15",
+            os_family="iOS",
+        )
+        # device and-1 has only one connection in DE
+        self._record_event(
+            "2026-04-11T11:00:00",
+            "2.2.2.3",
+            "Provider DE",
+            "node-b",
+            "Node B",
+            country="DE",
+            region="Berlin",
+            city="Berlin",
+            loc="52.5200,13.4050",
             device_id="and-1",
             device_label="Pixel 8",
             os_family="Android",
@@ -328,16 +361,22 @@ class UsageProfileTests(unittest.TestCase):
             self.store,
             {"uuid": "uuid-1", "username": "alice", "system_id": 42, "telegram_id": "1001"},
         )
-        device_snapshot = build_usage_profile_snapshot(
+        device_ios_snapshot = build_usage_profile_snapshot(
             self.store,
             {"uuid": "uuid-1", "username": "alice", "system_id": 42, "telegram_id": "1001"},
             device_scope_key="device:ios-1",
         )
+        device_and_snapshot = build_usage_profile_snapshot(
+            self.store,
+            {"uuid": "uuid-1", "username": "alice", "system_id": 42, "telegram_id": "1001"},
+            device_scope_key="device:and-1",
+        )
 
         self.assertTrue(user_snapshot["travel_flags"]["geo_country_jump"])
-        self.assertFalse(device_snapshot["travel_flags"]["geo_country_jump"])
-        self.assertEqual(device_snapshot["ip_count"], 1)
-        self.assertEqual(device_snapshot["device_count"], 1)
+        self.assertTrue(device_ios_snapshot["travel_flags"]["geo_country_jump"])
+        self.assertFalse(device_and_snapshot["travel_flags"]["geo_country_jump"])
+        self.assertEqual(device_ios_snapshot["device_count"], 1)
+        self.assertEqual(device_and_snapshot["device_count"], 1)
 
     def test_multiple_exact_devices_are_context_only_without_hwid_limit_exceeded(self):
         self._record_event(
@@ -427,6 +466,7 @@ class UsageProfileTests(unittest.TestCase):
             region="Moscow",
             city="Moscow",
             loc="55.7558,37.6176",
+            device_id="ios-1",
         )
         self._record_event(
             "2026-04-11T12:00:00",
@@ -438,6 +478,7 @@ class UsageProfileTests(unittest.TestCase):
             region="Berlin",
             city="Berlin",
             loc="52.5200,13.4050",
+            device_id="ios-1",
         )
 
         snapshot = build_usage_profile_snapshot(
@@ -447,6 +488,41 @@ class UsageProfileTests(unittest.TestCase):
 
         self.assertIn("geo_impossible_travel", snapshot["soft_reasons"])
         self.assertFalse(shared_account_suspected_from_usage_profile(snapshot))
+
+    def test_multiple_devices_different_geos_no_impossible_travel(self):
+        # Record connections from two different devices (different device_id) in different countries
+        self._record_event(
+            "2026-04-11T10:00:00",
+            "1.1.1.1",
+            "Provider RU",
+            "node-a",
+            "Node A",
+            country="RU",
+            region="Moscow",
+            city="Moscow",
+            loc="55.7558,37.6176",
+            device_id="device-ru",
+        )
+        self._record_event(
+            "2026-04-11T10:05:00",
+            "2.2.2.2",
+            "Provider DE",
+            "node-b",
+            "Node B",
+            country="DE",
+            region="Berlin",
+            city="Berlin",
+            loc="52.5200,13.4050",
+            device_id="device-de",
+        )
+
+        snapshot = build_usage_profile_snapshot(
+            self.store,
+            {"uuid": "uuid-1", "username": "alice", "system_id": 42, "telegram_id": "1001"},
+        )
+
+        # Should not flag geo_impossible_travel because they are different devices
+        self.assertNotIn("geo_impossible_travel", snapshot["soft_reasons"])
 
     def test_shared_account_suspected_when_cross_node_and_provider_fanout_overlap(self):
         self._record_event(

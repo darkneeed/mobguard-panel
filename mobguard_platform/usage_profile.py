@@ -830,60 +830,69 @@ def build_usage_profile_snapshot(
 
     country_jumps: list[dict[str, Any]] = []
     impossible_travel: list[dict[str, Any]] = []
-    last_geo = None
+    geo_by_device: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for item in geo_observations:
-        if last_geo is not None:
-            delta_hours = (item["created_at"] - last_geo["created_at"]).total_seconds() / 3600.0
-            if (
-                item["country"]
-                and last_geo["country"]
-                and item["country"] != last_geo["country"]
-                and delta_hours <= GEO_COUNTRY_JUMP_WINDOW_HOURS
-            ):
-                country_jumps.append(
-                    {
-                        "from_country": last_geo["country"],
-                        "to_country": item["country"],
-                        "from_time": last_geo["created_at_text"],
-                        "to_time": item["created_at_text"],
-                        "hours": round(max(delta_hours, 0.0), 2),
-                    }
-                )
-            if (
-                last_geo.get("latitude") is not None
-                and last_geo.get("longitude") is not None
-                and item.get("latitude") is not None
-                and item.get("longitude") is not None
-                and delta_hours > 0
-            ):
-                distance_km = _haversine_km(
-                    float(last_geo["latitude"]),
-                    float(last_geo["longitude"]),
-                    float(item["latitude"]),
-                    float(item["longitude"]),
-                )
-                speed_kmh = distance_km / delta_hours if delta_hours > 0 else 0.0
+        dev_id = ""
+        if item.get("device") and isinstance(item["device"], dict):
+            dev_id = _clean_text(item["device"].get("device_id"))
+        if dev_id:
+            geo_by_device[dev_id].append(item)
+
+    for dev_id, dev_geos in geo_by_device.items():
+        last_geo = None
+        for item in dev_geos:
+            if last_geo is not None:
+                delta_hours = (item["created_at"] - last_geo["created_at"]).total_seconds() / 3600.0
                 if (
-                    distance_km >= IMPOSSIBLE_TRAVEL_MIN_DISTANCE_KM
-                    and delta_hours <= IMPOSSIBLE_TRAVEL_MAX_WINDOW_HOURS
-                    and speed_kmh >= IMPOSSIBLE_TRAVEL_MIN_SPEED_KMH
+                    item["country"]
+                    and last_geo["country"]
+                    and item["country"] != last_geo["country"]
+                    and delta_hours <= GEO_COUNTRY_JUMP_WINDOW_HOURS
                 ):
-                    impossible_travel.append(
+                    country_jumps.append(
                         {
-                            "from_location": _format_location(
-                                last_geo["country"],
-                                last_geo["region"],
-                                last_geo["city"],
-                            ),
-                            "to_location": _format_location(item["country"], item["region"], item["city"]),
+                            "from_country": last_geo["country"],
+                            "to_country": item["country"],
                             "from_time": last_geo["created_at_text"],
                             "to_time": item["created_at_text"],
-                            "distance_km": round(distance_km, 1),
-                            "hours": round(delta_hours, 2),
-                            "speed_kmh": round(speed_kmh, 1),
+                            "hours": round(max(delta_hours, 0.0), 2),
                         }
                     )
-        last_geo = item
+                if (
+                    last_geo.get("latitude") is not None
+                    and last_geo.get("longitude") is not None
+                    and item.get("latitude") is not None
+                    and item.get("longitude") is not None
+                    and delta_hours > 0
+                ):
+                    distance_km = _haversine_km(
+                        float(last_geo["latitude"]),
+                        float(last_geo["longitude"]),
+                        float(item["latitude"]),
+                        float(item["longitude"]),
+                    )
+                    speed_kmh = distance_km / delta_hours if delta_hours > 0 else 0.0
+                    if (
+                        distance_km >= IMPOSSIBLE_TRAVEL_MIN_DISTANCE_KM
+                        and delta_hours <= IMPOSSIBLE_TRAVEL_MAX_WINDOW_HOURS
+                        and speed_kmh >= IMPOSSIBLE_TRAVEL_MIN_SPEED_KMH
+                    ):
+                        impossible_travel.append(
+                            {
+                                "from_location": _format_location(
+                                    last_geo["country"],
+                                    last_geo["region"],
+                                    last_geo["city"],
+                                ),
+                                "to_location": _format_location(item["country"], item["region"], item["city"]),
+                                "from_time": last_geo["created_at_text"],
+                                "to_time": item["created_at_text"],
+                                "distance_km": round(distance_km, 1),
+                                "hours": round(delta_hours, 2),
+                                "speed_kmh": round(speed_kmh, 1),
+                            }
+                        )
+            last_geo = item
 
     burst = _traffic_series_burst(traffic_stats_payload)
     if burst is None and observations:
@@ -1003,8 +1012,6 @@ def build_usage_profile_snapshot(
         summary_parts.append("страны " + ", ".join(geo_summary["countries"][:3]))
     if burst and _clean_text(burst.get("bytes_text")):
         summary_parts.append("трафик " + _clean_text(burst.get("bytes_text")))
-    if soft_reasons:
-        summary_parts.append("флаги " + ", ".join(soft_reasons))
     usage_profile_summary = "; ".join(summary_parts)
 
     return {
@@ -1062,6 +1069,21 @@ def build_usage_profile_template_context(snapshot: Mapping[str, Any] | None) -> 
     top_ips = profile.get("top_ips") if isinstance(profile.get("top_ips"), list) else []
     top_providers = profile.get("top_providers") if isinstance(profile.get("top_providers"), list) else []
 
+    device_labels = profile.get("device_labels") or []
+    nodes = profile.get("nodes") or []
+    burst = profile.get("traffic_burst") or {}
+
+    FLAG_TRANSLATIONS = {
+        "geo_country_jump": "смена страны",
+        "geo_impossible_travel": "невозможное перемещение",
+        "device_rotation": "ротация устройств",
+        "device_os_mismatch": "несоответствие ОС",
+        "cross_node_fanout": "смена узлов",
+        "provider_fanout": "смена провайдеров",
+        "traffic_burst": "всплеск трафика",
+    }
+    soft_reasons = profile.get("soft_reasons") or []
+
     return {
         "usage_profile_summary": _clean_text(profile.get("usage_profile_summary")),
         "usage_profile_ip_count": int(profile.get("ip_count") or 0) or "",
@@ -1075,11 +1097,21 @@ def build_usage_profile_template_context(snapshot: Mapping[str, Any] | None) -> 
             str(item.get("provider")) for item in top_providers if item.get("provider")
         ),
         "usage_profile_countries": ", ".join(str(value) for value in geo_summary.get("countries") or []),
-        "usage_profile_soft_reasons": ", ".join(str(value) for value in profile.get("soft_reasons") or []),
+        "usage_profile_soft_reasons": ", ".join(FLAG_TRANSLATIONS.get(str(value), str(value)) for value in soft_reasons),
         "usage_profile_ongoing_duration_seconds": int(profile.get("ongoing_duration_seconds") or 0) or "",
         "usage_profile_ongoing_duration_text": _clean_text(profile.get("ongoing_duration_text")),
         "usage_profile_geo_country_jump": "yes" if bool(travel_flags.get("geo_country_jump")) else "",
         "usage_profile_geo_impossible_travel": "yes" if bool(travel_flags.get("geo_impossible_travel")) else "",
+
+        # New tags for maximum customization
+        "usage_profile_event_count": int(profile.get("event_count") or 0) or "",
+        "usage_profile_exact_device_count": int(profile.get("exact_device_count") or 0) or "",
+        "usage_profile_hwid_device_limit": int(profile.get("hwid_device_limit") or 0) or "",
+        "usage_profile_hwid_device_count_exact": int(profile.get("hwid_device_count_exact") or 0) or "",
+        "usage_profile_device_labels": ", ".join(str(val) for val in device_labels),
+        "usage_profile_nodes": ", ".join(str(val) for val in nodes),
+        "usage_profile_traffic_burst_bytes": _clean_text(burst.get("bytes_text")),
+        "usage_profile_traffic_burst_window": int(burst.get("window_minutes") or 0) or "",
     }
 
 
