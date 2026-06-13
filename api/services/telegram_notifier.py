@@ -368,13 +368,21 @@ async def _notify_review_case(
         "manual_review_mixed_home": "MIXED ASN HOME КЕЙС",
         "provider_conflict": "КОНФЛИКТ ПРОВАЙДЕРА",
     }.get(review_reason, "ТРЕБУЕТСЯ РУЧНАЯ ПРОВЕРКА")
-    template_key = (
-        "admin_usage_profile_risk_template"
-        if admin_event_enabled(raw_settings, "usage_profile_risk", has_admin_bot=has_admin_bot)
-        else "admin_review_template"
-    )
     from mobguard_platform.usage_profile import determine_risk_title
     risk_title = determine_risk_title(usage_profile, bundle)
+
+    if admin_event_enabled(raw_settings, "usage_profile_risk", has_admin_bot=has_admin_bot):
+        if "УСТРОЙСТВ" in risk_title:
+            template_key = "admin_usage_profile_devices_template"
+        elif "ПОДКЛЮЧЕНИЯ" in risk_title:
+            template_key = "admin_usage_profile_connection_template"
+        elif "ТРАФИКА" in risk_title:
+            template_key = "admin_usage_profile_traffic_template"
+        else:
+            template_key = "admin_usage_profile_devices_template"
+    else:
+        template_key = "admin_review_template"
+
     message = render_telegram_template(
         raw_settings,
         template_key,
@@ -389,14 +397,10 @@ async def _notify_review_case(
             "confidence_band": f"{title} / {bundle.verdict} / {bundle.confidence_band}",
             "review_url": detail.get("review_url") or "",
             "risk_title": risk_title,
+            "case_id": int(bundle.case_id) if bundle.case_id else "",
             **build_usage_profile_template_context(usage_profile),
         },
     )
-    message = message.replace("РИСК ПРОФИЛЯ ИСПОЛЬЗОВАНИЯ", risk_title)
-    message = message.replace("Риск профиля использования", risk_title)
-    message = message.replace("риск профиля использования", risk_title)
-    if bundle.case_id:
-        message += f"\n<b>Case ID:</b> <code>{int(bundle.case_id)}</code>\n"
     dedupe_key = (
         f"review-case:{int(bundle.case_id)}"
         if bundle.case_id not in (None, "")
@@ -440,6 +444,7 @@ async def _notify_enforcement(
         "isp": bundle.isp,
         "tag": tag,
         "review_url": container.store.build_review_url(int(bundle.case_id)) if bundle.case_id else "",
+        "case_id": int(bundle.case_id) if bundle.case_id else "",
         "warning_count": int(enforcement.get("warning_count") or 0),
         "warnings_before_ban": int(
             raw_settings.get("warnings_before_ban", ENFORCEMENT_SETTINGS_DEFAULTS["warnings_before_ban"])
@@ -482,9 +487,6 @@ async def _notify_enforcement(
         user_message = render_telegram_template(raw_settings, "user_ban_template", common_context)
 
     if admin_message:
-        admin_message = admin_message.replace("РИСК ПРОФИЛЯ ИСПОЛЬЗОВАНИЯ", risk_title)
-        admin_message = admin_message.replace("Риск профиля использования", risk_title)
-        admin_message = admin_message.replace("риск профиля использования", risk_title)
         if enforcement_type == "warning" and is_warning_only and bundle.case_id not in (None, ""):
             admin_dedupe_key = f"enforcement-warning-case:{int(bundle.case_id)}"
         else:

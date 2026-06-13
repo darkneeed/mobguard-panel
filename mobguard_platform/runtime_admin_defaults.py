@@ -259,6 +259,7 @@ ENFORCEMENT_TEMPLATE_DEFAULTS = {
         "<b>Причина:</b> {{confidence_band}} / наказания отключены\n"
         "<b>Профиль использования:</b> {{usage_profile_summary}}\n"
         "<b>Флаги:</b> {{usage_profile_soft_reasons}}\n"
+        "<b>Case ID:</b> <code>{{case_id}}</code>\n"
         "<b>Ссылка на кейс:</b> <code>{{review_url}}</code>\n"
     ),
     "admin_warning_template": (
@@ -275,6 +276,7 @@ ENFORCEMENT_TEMPLATE_DEFAULTS = {
         "<b>Осталось предупреждений:</b> {{warnings_left}}\n"
         "<b>Профиль использования:</b> {{usage_profile_summary}}\n"
         "<b>Флаги:</b> {{usage_profile_soft_reasons}}\n"
+        "<b>Case ID:</b> <code>{{case_id}}</code>\n"
         "<b>Ссылка на кейс:</b> <code>{{review_url}}</code>\n"
     ),
     "admin_ban_template": (
@@ -292,6 +294,7 @@ ENFORCEMENT_TEMPLATE_DEFAULTS = {
         "<b>Ограничение:</b> {{ban_minutes}} мин ({{ban_text}})\n"
         "<b>Профиль использования:</b> {{usage_profile_summary}}\n"
         "<b>Флаги:</b> {{usage_profile_soft_reasons}}\n"
+        "<b>Case ID:</b> <code>{{case_id}}</code>\n"
         "<b>Ссылка на кейс:</b> <code>{{review_url}}</code>\n"
     ),
     "admin_review_template": (
@@ -308,12 +311,13 @@ ENFORCEMENT_TEMPLATE_DEFAULTS = {
         "<b>Вердикт:</b> {{confidence_band}}\n"
         "<b>Профиль использования:</b> {{usage_profile_summary}}\n"
         "<b>Флаги:</b> {{usage_profile_soft_reasons}}\n"
+        "<b>Case ID:</b> <code>{{case_id}}</code>\n"
         "<b>Ссылка на кейс:</b> <code>{{review_url}}</code>\n"
     ),
-    "admin_usage_profile_risk_template": (
+    "admin_usage_profile_traffic_template": (
         "📶 <b>#mobguard</b>\n"
         "➖➖➖➖➖➖➖➖➖\n"
-        "🧭 <b>{{risk_title}}</b>\n"
+        "📊 <b>ПРЕВЫШЕНИЕ ТРАФИКА</b>\n"
         "<b>Пользователь:</b> {{username}}\n"
         "<b>Системный ID:</b> {{system_id}}\n"
         "<b>Telegram ID:</b> {{telegram_id}}\n"
@@ -323,6 +327,39 @@ ENFORCEMENT_TEMPLATE_DEFAULTS = {
         "<b>Конфиг:</b> {{tag}}\n"
         "<b>Профиль использования:</b> {{usage_profile_summary}}\n"
         "<b>Флаги:</b> {{usage_profile_soft_reasons}}\n"
+        "<b>Case ID:</b> <code>{{case_id}}</code>\n"
+        "<b>Ссылка на кейс:</b> <code>{{review_url}}</code>\n"
+    ),
+    "admin_usage_profile_devices_template": (
+        "📶 <b>#mobguard</b>\n"
+        "➖➖➖➖➖➖➖➖➖\n"
+        "📱 <b>ПРЕВЫШЕНИЕ КОЛИЧЕСТВА УСТРОЙСТВ</b>\n"
+        "<b>Пользователь:</b> {{username}}\n"
+        "<b>Системный ID:</b> {{system_id}}\n"
+        "<b>Telegram ID:</b> {{telegram_id}}\n"
+        "<b>UUID:</b> {{uuid}}\n"
+        "<b>IP-адрес:</b> <code>{{ip}}</code>\n"
+        "<b>Провайдер:</b> {{isp}}\n"
+        "<b>Конфиг:</b> {{tag}}\n"
+        "<b>Профиль использования:</b> {{usage_profile_summary}}\n"
+        "<b>Флаги:</b> {{usage_profile_soft_reasons}}\n"
+        "<b>Case ID:</b> <code>{{case_id}}</code>\n"
+        "<b>Ссылка на кейс:</b> <code>{{review_url}}</code>\n"
+    ),
+    "admin_usage_profile_connection_template": (
+        "📶 <b>#mobguard</b>\n"
+        "➖➖➖➖➖➖➖➖➖\n"
+        "🧭 <b>НЕВЕРНЫЙ ТИП ПОДКЛЮЧЕНИЯ</b>\n"
+        "<b>Пользователь:</b> {{username}}\n"
+        "<b>Системный ID:</b> {{system_id}}\n"
+        "<b>Telegram ID:</b> {{telegram_id}}\n"
+        "<b>UUID:</b> {{uuid}}\n"
+        "<b>IP-адрес:</b> <code>{{ip}}</code>\n"
+        "<b>Провайдер:</b> {{isp}}\n"
+        "<b>Конфиг:</b> {{tag}}\n"
+        "<b>Профиль использования:</b> {{usage_profile_summary}}\n"
+        "<b>Флаги:</b> {{usage_profile_soft_reasons}}\n"
+        "<b>Case ID:</b> <code>{{case_id}}</code>\n"
         "<b>Ссылка на кейс:</b> <code>{{review_url}}</code>\n"
     ),
     "admin_violation_continues_template": (
@@ -339,6 +376,7 @@ ENFORCEMENT_TEMPLATE_DEFAULTS = {
         "<b>Продолжительность:</b> {{usage_profile_ongoing_duration_text}}\n"
         "<b>Профиль использования:</b> {{usage_profile_summary}}\n"
         "<b>Флаги:</b> {{usage_profile_soft_reasons}}\n"
+        "<b>Case ID:</b> <code>{{case_id}}</code>\n"
         "<b>Ссылка на кейс:</b> <code>{{review_url}}</code>\n"
     ),
     "admin_traffic_limit_exceeded_template": (
@@ -354,6 +392,7 @@ ENFORCEMENT_TEMPLATE_DEFAULTS = {
         "<b>Конфиг:</b> {{tag}}\n"
         "<b>Профиль использования:</b> {{usage_profile_summary}}\n"
         "<b>Флаги:</b> {{usage_profile_soft_reasons}}\n"
+        "<b>Case ID:</b> <code>{{case_id}}</code>\n"
         "<b>Ссылка на кейс:</b> <code>{{review_url}}</code>\n"
     ),
 }

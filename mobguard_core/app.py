@@ -1214,13 +1214,21 @@ async def send_unsure_notify(user: Dict, bundle: DecisionBundle, tag: str, revie
         "manual_review_mixed_home": "MIXED ASN HOME КЕЙС",
     }.get(review_reason, "ТРЕБУЕТСЯ РУЧНАЯ ПРОВЕРКА")
 
-    scenario_template = (
-        "admin_usage_profile_risk_template"
-        if admin_scenario_enabled("usage_profile_risk")
-        else "admin_review_template"
-    )
     from mobguard_platform.usage_profile import determine_risk_title
     risk_title = determine_risk_title(usage_profile, bundle)
+
+    if admin_scenario_enabled("usage_profile_risk"):
+        if "УСТРОЙСТВ" in risk_title:
+            scenario_template = "admin_usage_profile_devices_template"
+        elif "ПОДКЛЮЧЕНИЯ" in risk_title:
+            scenario_template = "admin_usage_profile_connection_template"
+        elif "ТРАФИКА" in risk_title:
+            scenario_template = "admin_usage_profile_traffic_template"
+        else:
+            scenario_template = "admin_usage_profile_devices_template"
+    else:
+        scenario_template = "admin_review_template"
+
     msg = render_runtime_template(
         scenario_template,
         {
@@ -1234,14 +1242,10 @@ async def send_unsure_notify(user: Dict, bundle: DecisionBundle, tag: str, revie
             "confidence_band": f"{title} / {bundle.verdict} / {bundle.confidence_band}",
             "review_url": review_url,
             "risk_title": risk_title,
+            "case_id": bundle.case_id or "",
             **build_usage_profile_template_context(usage_profile),
         },
     )
-    msg = msg.replace("РИСК ПРОФИЛЯ ИСПОЛЬЗОВАНИЯ", risk_title)
-    msg = msg.replace("Риск профиля использования", risk_title)
-    msg = msg.replace("риск профиля использования", risk_title)
-    if bundle.case_id:
-        msg += f"\n<b>Case ID:</b> <code>{bundle.case_id}</code>\n"
 
     await notify_admin(msg)
 
@@ -2278,6 +2282,7 @@ async def handle_violation(user: Dict, tag: str, bundle: DecisionBundle, warning
         "tag": tag,
         "confidence_band": bundle.confidence_band,
         "review_url": platform_store.build_review_url(bundle.case_id) if bundle.case_id else "",
+        "case_id": bundle.case_id or "",
         "warnings_before_ban": warnings_before_ban,
         "warning_count": warning_count,
         "warnings_left": max(warnings_before_ban - warning_count, 0),
@@ -2287,24 +2292,23 @@ async def handle_violation(user: Dict, tag: str, bundle: DecisionBundle, warning
     }
     common_context.update(build_usage_profile_template_context(usage_profile))
 
-    def _replace_risk_title(msg: str) -> str:
-        msg = msg.replace("РИСК ПРОФИЛЯ ИСПОЛЬЗОВАНИЯ", risk_title)
-        msg = msg.replace("Риск профиля использования", risk_title)
-        msg = msg.replace("риск профиля использования", risk_title)
-        return msg
-
     if warning_only:
         if admin_event_notifications_enabled("warning_only") or admin_scenario_enabled("usage_profile_risk"):
-            template_key = (
-                "admin_usage_profile_risk_template"
-                if admin_scenario_enabled("usage_profile_risk")
-                else "admin_warning_only_template"
-            )
+            if admin_scenario_enabled("usage_profile_risk"):
+                if "УСТРОЙСТВ" in risk_title:
+                    template_key = "admin_usage_profile_devices_template"
+                elif "ПОДКЛЮЧЕНИЯ" in risk_title:
+                    template_key = "admin_usage_profile_connection_template"
+                elif "ТРАФИКА" in risk_title:
+                    template_key = "admin_usage_profile_traffic_template"
+                else:
+                    template_key = "admin_usage_profile_devices_template"
+            else:
+                template_key = "admin_warning_only_template"
             admin_msg = render_runtime_template(
                 template_key,
                 {**common_context, "confidence_band": f"{bundle.confidence_band} / punitive disabled"},
             )
-            admin_msg = _replace_risk_title(admin_msg)
             await notify_admin(admin_msg)
         await db.delete_tracker(tracker_key)
 
@@ -2339,7 +2343,6 @@ async def handle_violation(user: Dict, tag: str, bundle: DecisionBundle, warning
                         "warnings_left": max(warnings_before_ban - warning_count, 0),
                     },
                 )
-                admin_msg = _replace_risk_title(admin_msg)
                 await notify_admin(admin_msg)
             await db.delete_tracker(tracker_key)
             if not DRY_RUN and user.get('telegramId') and user_event_notifications_enabled("warning"):
@@ -2421,7 +2424,6 @@ async def handle_violation(user: Dict, tag: str, bundle: DecisionBundle, warning
                 "<b>ОГРАНИЧЕНИЕ ДОСТУПА</b>",
                 f"{status_icon} <b>ОГРАНИЧЕНИЕ ДОСТУПА</b>",
             )
-            admin_msg = _replace_risk_title(admin_msg)
             if keyboard:
                 await notify_admin(admin_msg, reply_markup=keyboard)
             else:

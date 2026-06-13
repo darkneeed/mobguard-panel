@@ -79,7 +79,9 @@ describe("TelegramPage", () => {
         admin_warning_template: "",
         admin_ban_template: "",
         admin_review_template: "",
-        admin_usage_profile_risk_template: "",
+        admin_usage_profile_traffic_template: "",
+        admin_usage_profile_devices_template: "",
+        admin_usage_profile_connection_template: "",
         admin_violation_continues_template: "",
         admin_traffic_limit_exceeded_template: ""
       }

@@ -59,7 +59,9 @@ type TemplateFieldKey =
   | "admin_warning_template"
   | "admin_ban_template"
   | "admin_review_template"
-  | "admin_usage_profile_risk_template"
+  | "admin_usage_profile_traffic_template"
+  | "admin_usage_profile_devices_template"
+  | "admin_usage_profile_connection_template"
   | "admin_violation_continues_template"
   | "admin_traffic_limit_exceeded_template";
 
@@ -162,7 +164,9 @@ const TEMPLATE_FIELDS: TemplateField[] = [
   { key: "admin_warning_template", audience: "admin" },
   { key: "admin_ban_template", audience: "admin" },
   { key: "admin_review_template", audience: "admin" },
-  { key: "admin_usage_profile_risk_template", audience: "admin" },
+  { key: "admin_usage_profile_traffic_template", audience: "admin" },
+  { key: "admin_usage_profile_devices_template", audience: "admin" },
+  { key: "admin_usage_profile_connection_template", audience: "admin" },
   { key: "admin_violation_continues_template", audience: "admin" },
   { key: "admin_traffic_limit_exceeded_template", audience: "admin" },
 ];
@@ -642,12 +646,8 @@ export function TelegramPage() {
 
           <div className="panel">
             <div className="panel-heading panel-heading-row">
-              <div className="action-row">
+              <div>
                 <h2>{t("telegram.templatesTitle")}</h2>
-                <InfoTooltip
-                  label={t("telegram.templatesHintLabel")}
-                  content={t("telegram.templatesHint")}
-                />
               </div>
               <div className="action-row">
                 <span
