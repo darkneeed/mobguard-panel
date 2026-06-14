@@ -220,8 +220,8 @@ describe("OverviewPage", () => {
     renderWithProviders(<OverviewPage session={session} />, { route: "/overview" });
 
     expect(await screen.findByText("Node A")).toBeInTheDocument();
-    expect(screen.getByText("С ограничениями")).toBeInTheDocument();
-    expect(screen.getAllByText("В норме").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("Проводные").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("Мобильные").length).toBeGreaterThanOrEqual(1);
     expect(api.getOverview).toHaveBeenCalledTimes(1);
     expect(api.getModules).toHaveBeenCalledTimes(1);
   });

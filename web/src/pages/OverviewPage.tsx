@@ -339,14 +339,14 @@ export function OverviewPage({ session: _session }: { session?: Session }) {
         </div>
         <div className="stat-card">
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%" }}>
-            <span>С ограничениями</span>
+            <span>Проводные</span>
             <ShieldAlert size={16} style={{ color: "var(--danger)" }} />
           </div>
           <strong>{violatingNow}</strong>
         </div>
         <div className="stat-card">
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%" }}>
-            <span>В норме</span>
+            <span>Мобильные</span>
             <Shield size={16} style={{ color: "var(--success)" }} />
           </div>
           <strong>{compliantNow}</strong>
@@ -469,11 +469,11 @@ export function OverviewPage({ session: _session }: { session?: Session }) {
               <strong>{enforcement?.active_total ?? "—"}</strong>
             </div>
             <div className="module-ops-chip">
-              <span>Нарушают правила</span>
+              <span>Проводные</span>
               <strong>{violatingNow}</strong>
             </div>
             <div className="module-ops-chip">
-              <span>В норме</span>
+              <span>Мобильные</span>
               <strong>{compliantNow}</strong>
             </div>
             <div className="module-ops-chip">
@@ -536,8 +536,8 @@ export function OverviewPage({ session: _session }: { session?: Session }) {
                     <PieChart>
                       <Pie
                         data={[
-                          { name: "В норме", value: compliantNow },
-                          { name: "С ограничениями", value: violatingNow }
+                          { name: "Мобильные", value: compliantNow },
+                          { name: "Проводные", value: violatingNow }
                         ]}
                         dataKey="value"
                         innerRadius={20}
@@ -553,12 +553,12 @@ export function OverviewPage({ session: _session }: { session?: Session }) {
                 <div style={{ display: "flex", flexDirection: "column", gap: "0.3rem", fontSize: "0.8rem" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
                     <span style={{ display: "inline-block", width: "8px", height: "8px", borderRadius: "50%", background: "var(--success, #10b981)" }} />
-                    <span style={{ color: "var(--muted)" }}>В норме:</span>
+                    <span style={{ color: "var(--muted)" }}>Мобильные:</span>
                     <strong>{compliantNow} ({Math.round(compliantNow / (compliantNow + violatingNow || 1) * 100)}%)</strong>
                   </div>
                   <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
                     <span style={{ display: "inline-block", width: "8px", height: "8px", borderRadius: "50%", background: "var(--danger, #ef4444)" }} />
-                    <span style={{ color: "var(--muted)" }}>Ограничены:</span>
+                    <span style={{ color: "var(--muted)" }}>Проводные:</span>
                     <strong>{violatingNow} ({Math.round(violatingNow / (compliantNow + violatingNow || 1) * 100)}%)</strong>
                   </div>
                 </div>
