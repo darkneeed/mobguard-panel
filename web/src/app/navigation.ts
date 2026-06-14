@@ -19,6 +19,7 @@ export const primaryNavigation: NavigationGroup[] = [
       { to: "/overview", labelKey: "layout.nav.overview", permission: "overview.read" },
       { to: "/modules", labelKey: "layout.nav.modules", permission: "modules.read" },
       { to: "/queue", labelKey: "layout.nav.queue", permission: "reviews.read" },
+      { to: "/violations", labelKey: "layout.nav.violations", permission: "reviews.read" },
       { to: "/decisions", labelKey: "layout.nav.decisions", permission: "data.read" },
       { to: "/quality/metrics", labelKey: "layout.nav.quality", permission: "quality.read" }
     ]

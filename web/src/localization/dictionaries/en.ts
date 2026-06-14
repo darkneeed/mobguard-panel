@@ -71,7 +71,8 @@ export const enDictionary: TranslationDictionary = {
     nav: {
       overview: "Overview",
       modules: "Modules",
-      queue: "Queue",
+      queue: "Review",
+      violations: "Violations",
       decisions: "Decisions",
       console: "Console",
       rules: "Rules",
@@ -285,6 +286,10 @@ export const enDictionary: TranslationDictionary = {
     eyebrow: "Review Queue",
     title: "Disputed decisions and manual moderation",
     description: "Explicit filters, bulk resolution, and a denser operator workflow for live queue handling.",
+    violationsTitle: "Violations Queue",
+    violationsDescription: "Cases with traffic bursts, device limit excess, or ongoing violations",
+    reviewTitle: "Manual Moderation",
+    reviewDescription: "Cases requiring connection type check (mobile network / home network)",
     countSummary: "{count} cases · page {page}",
     lastUpdated: "Updated {value}",
     searchPlaceholder: "Quick search by IP / username / ISP / UUID / IDs",
@@ -1893,52 +1898,64 @@ export const enDictionary: TranslationDictionary = {
     telegramTemplateFields: {
       user_warning_only_template: {
         label: "Warning-only message",
-        description: "User-facing message when the case is warning-only and does not escalate.\n\nTags:\n• {{username}}, {{uuid}}, {{system_id}}, {{telegram_id}}\n• {{ip}}, {{isp}}, {{tag}}"
+        description:
+          "User message when the case is warning-only and does not escalate.\n\nAvailable tags:\n• {{username}} — username\n• {{uuid}} — subscription UUID\n• {{system_id}} — system Email/ID\n• {{telegram_id}} — Telegram ID\n• {{ip}} — IP address\n• {{isp}} — provider\n• {{tag}} — config/inbound",
       },
       user_warning_template: {
         label: "Warning message",
-        description: "User-facing message for standard warnings before an access restriction.\n\nTags:\n• {{username}}, {{uuid}}, {{system_id}}, {{telegram_id}}\n• {{ip}}, {{isp}}, {{tag}}"
+        description:
+          "User message for standard warnings before an access restriction.\n\nAvailable tags:\n• {{username}}, {{uuid}}, {{system_id}}, {{telegram_id}}\n• {{ip}}, {{isp}}, {{tag}}\n• {{warning_count}} — warning number\n• {{warnings_before_ban}} — total warnings before block\n• {{warnings_left}} — warnings left",
       },
       user_ban_template: {
         label: "Access restriction message",
-        description: "User-facing message sent when an access restriction is applied.\n\nTags:\n• {{username}}, {{uuid}}, {{system_id}}, {{telegram_id}}\n• {{ip}}, {{isp}}, {{tag}}, {{ban_minutes}}, {{ban_text}}"
+        description:
+          "User message sent when access restriction is applied.\n\nAvailable tags:\n• {{username}}, {{uuid}}, {{system_id}}, {{telegram_id}}\n• {{ip}}, {{isp}}, {{tag}}\n• {{ban_minutes}} — duration in minutes\n• {{ban_text}} — text description (e.g. '1 hour')",
       },
       admin_warning_only_template: {
         label: "Warning-only message",
-        description: "Admin notification text for warning-only cases.\n\nTags:\n• {{username}}, {{uuid}}, {{system_id}}, {{telegram_id}}, {{case_id}}\n• {{ip}}, {{isp}}, {{tag}}, {{confidence_band}}, {{review_url}}\n• {{usage_profile_summary}}, {{usage_profile_soft_reasons}}"
+        description:
+          "Moderator notification text for warning-only cases (no penalty is applied).\n\nAvailable tags:\n• {{username}}, {{uuid}}, {{system_id}}, {{telegram_id}}\n• {{ip}}, {{isp}}, {{tag}}\n• {{confidence_band}} — system verdict\n• {{case_id}}, {{review_url}} — case ID and link\n• {{usage_profile_summary}} — usage summary\n• {{usage_profile_soft_reasons}} — translated flags",
       },
       admin_warning_template: {
         label: "Warning message",
-        description: "Admin notification text for warning events.\n\nTags:\n• {{username}}, {{uuid}}, {{system_id}}, {{telegram_id}}, {{case_id}}\n• {{ip}}, {{isp}}, {{tag}}, {{review_url}}, {{confidence_band}}\n• {{warning_count}}, {{warnings_before_ban}}, {{warnings_left}}\n• {{usage_profile_summary}}, {{usage_profile_soft_reasons}}"
+        description:
+          "Moderator notification text when issuing a warning.\n\nAvailable tags:\n• {{username}}, {{uuid}}, {{system_id}}, {{telegram_id}}\n• {{ip}}, {{isp}}, {{tag}}, {{confidence_band}}\n• {{warning_count}}, {{warnings_before_ban}}, {{warnings_left}}\n• {{case_id}}, {{review_url}}\n• {{usage_profile_summary}}, {{usage_profile_soft_reasons}}",
       },
       admin_ban_template: {
         label: "Access restriction message",
-        description: "Admin notification text for access restriction events.\n\nTags:\n• {{username}}, {{uuid}}, {{system_id}}, {{telegram_id}}, {{case_id}}\n• {{ip}}, {{isp}}, {{tag}}, {{review_url}}, {{confidence_band}}\n• {{warning_count}}, {{ban_minutes}}, {{ban_text}}\n• {{usage_profile_summary}}, {{usage_profile_soft_reasons}}"
+        description:
+          "Moderator notification text on access restriction.\n\nAvailable tags:\n• {{username}}, {{uuid}}, {{system_id}}, {{telegram_id}}\n• {{ip}}, {{isp}}, {{tag}}, {{confidence_band}}\n• {{warning_count}}, {{ban_minutes}}, {{ban_text}}\n• {{case_id}}, {{review_url}}\n• {{usage_profile_summary}}, {{usage_profile_soft_reasons}}",
       },
       admin_review_template: {
         label: "Review message",
-        description: "Admin notification text for review/manual moderation cases.\n\nTags:\n• {{username}}, {{uuid}}, {{system_id}}, {{telegram_id}}, {{case_id}}\n• {{ip}}, {{isp}}, {{tag}}, {{confidence_band}}, {{review_url}}\n• {{usage_profile_summary}}, {{usage_profile_soft_reasons}}"
+        description:
+          "Moderator notification text for review / manual moderation cases.\n\nAvailable tags:\n• {{username}}, {{uuid}}, {{system_id}}, {{telegram_id}}\n• {{ip}}, {{isp}}, {{tag}}, {{confidence_band}}\n• {{case_id}}, {{review_url}}\n• {{usage_profile_summary}}, {{usage_profile_soft_reasons}}",
       },
       admin_usage_profile_traffic_template: {
-        label: "Traffic limit exceeded",
-        description: "Admin notification for traffic burst or limit exceeded.\n\nTags:\n• {{username}}, {{uuid}}, {{system_id}}, {{telegram_id}}, {{case_id}}\n• {{ip}}, {{isp}}, {{tag}}, {{review_url}}\n• {{usage_profile_summary}}, {{usage_profile_soft_reasons}}\n• {{usage_profile_traffic_burst_bytes}} (burst volume)\n• {{usage_profile_traffic_burst_window}} (check window)\n• {{usage_profile_ip_count}}, {{usage_profile_provider_count}}, {{usage_profile_node_count}}"
+        label: "⚡ Traffic limit exceeded",
+        description:
+          "Moderator notification for traffic burst / limit exceeded.\n\nAvailable tags:\n• {{username}}, {{uuid}}, {{system_id}}, {{telegram_id}}\n• {{ip}}, {{isp}}, {{tag}}\n• {{case_id}}, {{review_url}}\n— Traffic:\n• {{usage_profile_traffic_burst_bytes}} — volume per interval\n• {{usage_profile_traffic_burst_window}} — check window (min)\n— Network:\n• {{usage_profile_ip_count}} — IP count\n• {{usage_profile_provider_count}} — ISP count\n• {{usage_profile_node_count}} — node count\n• {{usage_profile_top_ips}} — top IPs\n• {{usage_profile_top_providers}} — top ISPs\n• {{usage_profile_nodes}} — node list",
       },
       admin_usage_profile_devices_template: {
-        label: "Device limit exceeded",
-        description: "Admin notification for device limit exceeded.\n\nTags:\n• {{username}}, {{uuid}}, {{system_id}}, {{telegram_id}}, {{case_id}}\n• {{ip}}, {{isp}}, {{tag}}, {{review_url}}\n• {{usage_profile_summary}}, {{usage_profile_soft_reasons}}\n• {{usage_profile_hwid_device_limit}} (purchased limit)\n• {{usage_profile_hwid_device_count_exact}} (active count)\n• {{usage_profile_device_labels}} (device label models)"
+        label: "📱 Device limit exceeded",
+        description:
+          "Moderator notification for active device limit exceeded.\n\nAvailable tags:\n• {{username}}, {{uuid}}, {{system_id}}, {{telegram_id}}\n• {{ip}}, {{isp}}, {{tag}}\n• {{case_id}}, {{review_url}}\n— Devices:\n• {{usage_profile_hwid_device_limit}} — purchased limit\n• {{usage_profile_hwid_device_count_exact}} — active count\n• {{usage_profile_device_labels}} — device label models\n• {{usage_profile_exact_device_count}} — unique keys\n— Network:\n• {{usage_profile_ip_count}}, {{usage_profile_nodes}}\n• {{usage_profile_soft_reasons}} — flags",
       },
       admin_usage_profile_connection_template: {
-        label: "Wrong connection type",
-        description: "Admin notification for wrong connection type (non-mobile network or multiple providers).\n\nTags:\n• {{username}}, {{uuid}}, {{system_id}}, {{telegram_id}}, {{case_id}}\n• {{ip}}, {{isp}}, {{tag}}, {{review_url}}\n• {{usage_profile_summary}}, {{usage_profile_soft_reasons}}\n• {{usage_profile_provider_count}} (ISP count)\n• {{usage_profile_top_providers}} (top ISPs)\n• {{usage_profile_ip_count}} (IP count)"
+        label: "🌐 Wrong connection type",
+        description:
+          "Moderator notification for wrong connection type (non-mobile network or multiple ISPs).\n\nAvailable tags:\n• {{username}}, {{uuid}}, {{system_id}}, {{telegram_id}}\n• {{ip}}, {{isp}}, {{tag}}, {{confidence_band}}\n• {{case_id}}, {{review_url}}\n— Network:\n• {{usage_profile_ip_count}} — IP count\n• {{usage_profile_provider_count}} — ISP count\n• {{usage_profile_top_providers}} — ISP list\n• {{usage_profile_top_ips}} — top IPs\n• {{usage_profile_nodes}} — node list\n• {{usage_profile_soft_reasons}} — flags",
       },
       admin_violation_continues_template: {
-        label: "Violation-continues message",
-        description: "Admin notification text when suspicious behaviour keeps going.\n\nTags:\n• {{username}}, {{uuid}}, {{system_id}}, {{telegram_id}}, {{case_id}}\n• {{ip}}, {{isp}}, {{tag}}, {{review_url}}\n• {{usage_profile_summary}}, {{usage_profile_soft_reasons}}\n• {{usage_profile_ongoing_duration_text}} (violation duration)"
+        label: "🔁 Violation continues",
+        description:
+          "Moderator notification on continuing violation (repeated after interval).\n\nAvailable tags:\n• {{username}}, {{uuid}}, {{system_id}}, {{telegram_id}}\n• {{ip}}, {{isp}}, {{tag}}\n• {{case_id}}, {{review_url}}\n— Time:\n• {{usage_profile_ongoing_duration_text}} — duration text\n• {{usage_profile_ongoing_duration_seconds}} — seconds\n— Network:\n• {{usage_profile_ip_count}}/{{usage_profile_provider_count}} — IPs/ISPs\n• {{usage_profile_top_ips}} — list of IPs with ISPs\n• {{usage_profile_nodes}} — node list\n• {{usage_profile_soft_reasons}} — flags",
       },
       admin_traffic_limit_exceeded_template: {
-        label: "Traffic-limit-exceeded message",
-        description: "Admin notification text when traffic-cap restriction is used.\n\nTags:\n• {{username}}, {{uuid}}, {{system_id}}, {{telegram_id}}, {{case_id}}\n• {{ip}}, {{isp}}, {{tag}}, {{review_url}}\n• {{usage_profile_summary}}, {{usage_profile_soft_reasons}}"
-      }
+        label: "🚫 Traffic limit violator",
+        description:
+          "Moderator notification when traffic restriction (TRAFFIC_CAP mode) is applied.\n\nAvailable tags:\n• {{username}}, {{uuid}}, {{system_id}}, {{telegram_id}}\n• {{ip}}, {{isp}}, {{tag}}\n• {{ban_minutes}}, {{ban_text}}\n• {{case_id}}, {{review_url}}\n— Time:\n• {{usage_profile_ongoing_duration_text}}\n— Network:\n• {{usage_profile_ip_count}}/{{usage_profile_provider_count}}\n• {{usage_profile_top_ips}}, {{usage_profile_nodes}}\n— Devices:\n• {{usage_profile_hwid_device_count_exact}}\n• {{usage_profile_device_labels}}\n• {{usage_profile_soft_reasons}} — flags",
+      },
     }
   }
 };

@@ -1591,6 +1591,26 @@ class ReviewAdminRepository(SQLiteRepository):
         if filters.get("review_reason"):
             clauses.append("review_reason = ?")
             params.append(filters["review_reason"])
+        if filters.get("queue_type") == "violations":
+            clauses.append(
+                """(
+                    (hwid_device_count_exact IS NOT NULL AND hwid_device_limit IS NOT NULL AND hwid_device_count_exact > hwid_device_limit) OR
+                    usage_profile_soft_reasons_json LIKE '%device_rotation%' OR
+                    usage_profile_soft_reasons_json LIKE '%device_os_mismatch%' OR
+                    usage_profile_soft_reasons_json LIKE '%traffic_burst%' OR
+                    (usage_profile_ongoing_duration_seconds IS NOT NULL AND usage_profile_ongoing_duration_seconds > 0)
+                )"""
+            )
+        elif filters.get("queue_type") == "review":
+            clauses.append(
+                """NOT (
+                    (hwid_device_count_exact IS NOT NULL AND hwid_device_limit IS NOT NULL AND hwid_device_count_exact > hwid_device_limit) OR
+                    usage_profile_soft_reasons_json LIKE '%device_rotation%' OR
+                    usage_profile_soft_reasons_json LIKE '%device_os_mismatch%' OR
+                    usage_profile_soft_reasons_json LIKE '%traffic_burst%' OR
+                    (usage_profile_ongoing_duration_seconds IS NOT NULL AND usage_profile_ongoing_duration_seconds > 0)
+                )"""
+            )
         if filters.get("severity"):
             severity = str(filters["severity"])
             if severity == "critical":

@@ -161,7 +161,38 @@ function formatInventoryChipLabel(
   return duration ? `${ip} ×${hitCount} · ${duration}` : `${ip} ×${hitCount}`;
 }
 
-export function ReviewQueuePage({ session }: { session?: Session }) {
+function getViolationType(item: any): "devices" | "connection" | "traffic" | "continues" | "generic" {
+  let softReasons: string[] = [];
+  try {
+    if (item.usage_profile_soft_reasons_json) {
+      softReasons = JSON.parse(item.usage_profile_soft_reasons_json);
+    }
+  } catch (e) {}
+
+  const limit = item.hwid_device_limit;
+  const count = item.hwid_device_count_exact;
+  const isDeviceLimitExceeded = limit !== undefined && count !== undefined && count > limit;
+  const isDeviceViolation = softReasons.includes("device_rotation") || softReasons.includes("device_os_mismatch") || isDeviceLimitExceeded;
+
+  const isTrafficViolation = softReasons.includes("traffic_burst") || (item.review_reason === "traffic_limit_exceeded");
+  const isConnectionViolation = item.verdict?.toUpperCase() === "HOME" || softReasons.includes("provider_fanout");
+  const hasOngoing = Boolean(item.usage_profile_ongoing_duration_seconds && item.usage_profile_ongoing_duration_seconds > 0);
+
+  if (isDeviceViolation) return "devices";
+  if (isTrafficViolation) return "traffic";
+  if (isConnectionViolation) return "connection";
+  if (hasOngoing) return "continues";
+  
+  return "generic";
+}
+
+export function ReviewQueuePage({
+  session,
+  isViolationsQueue = false,
+}: {
+  session?: Session;
+  isViolationsQueue?: boolean;
+}) {
   const { t, language } = useI18n();
   const { pushToast } = useToast();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -207,8 +238,12 @@ export function ReviewQueuePage({ session }: { session?: Session }) {
   }, [filters.q]);
 
   const effectiveFilters = useMemo(
-    () => ({ ...filters, q: debouncedQuery }),
-    [filters, debouncedQuery],
+    () => ({
+      ...filters,
+      q: debouncedQuery,
+      queue_type: isViolationsQueue ? "violations" : "review",
+    }),
+    [filters, debouncedQuery, isViolationsQueue],
   );
   const requestFilters = useMemo(
     () => ({ ...effectiveFilters, view: "compact" }),
@@ -496,8 +531,16 @@ export function ReviewQueuePage({ session }: { session?: Session }) {
     <section className="page">
       <div className="page-header page-header-stack">
         <div>
-          <h1>{t("reviewQueue.title")}</h1>
-          <p className="page-lede">{t("reviewQueue.description")}</p>
+          <h1>
+            {isViolationsQueue
+              ? t("reviewQueue.violationsTitle")
+              : t("reviewQueue.reviewTitle")}
+          </h1>
+          <p className="page-lede">
+            {isViolationsQueue
+              ? t("reviewQueue.violationsDescription")
+              : t("reviewQueue.reviewDescription")}
+          </p>
         </div>
         <div className="dashboard-meta">
           <div className="chip">
@@ -1191,23 +1234,92 @@ export function ReviewQueuePage({ session }: { session?: Session }) {
                       ) : null}
                     </div>
 
-                    {/* Verdict & Score */}
-                    <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap", background: "var(--surface-soft)", padding: "0.6rem 0.85rem", borderRadius: "10px" }}>
-                      <span style={{ fontSize: "0.75rem", color: "var(--muted)", fontWeight: 600, textTransform: "uppercase" }}>Решение:</span>
-                      <span className={`status-badge ${item.verdict?.toUpperCase() === "HOME" ? "punitive" : "status-resolved"}`} style={{ fontWeight: 700, padding: "2px 8px", borderRadius: "6px" }}>
-                        {item.verdict}
-                      </span>
-                      <span className={`tag ${item.confidence_band?.startsWith("PROBABLE_") ? "severity-high" : ""}`} style={{ padding: "2px 8px", borderRadius: "6px" }}>{item.confidence_band}</span>
-                    </div>
+                    {(() => {
+                      const violationType = getViolationType(item);
 
-                    {/* Provider & ASN Box */}
-                    <div style={{ background: "rgba(255, 255, 255, 0.03)", border: "1px solid var(--line)", borderRadius: "12px", padding: "0.75rem 1rem", display: "flex", flexDirection: "column", gap: "0.2rem" }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.72rem", color: "var(--muted)", textTransform: "uppercase", fontWeight: 600 }}>
-                        <span>Провайдер</span>
-                        <span>ASN {item.asn ?? "?"}</span>
-                      </div>
-                      <strong style={{ fontSize: "0.85rem", color: "var(--ink)", wordBreak: "break-all" }}>{providerDisplay}</strong>
-                    </div>
+                      if (violationType === "devices") {
+                        return (
+                          <>
+                            {/* Devices Custom Card Content */}
+                            <div style={{ background: "rgba(239, 68, 68, 0.08)", border: "1px solid rgba(239, 68, 68, 0.2)", borderRadius: "12px", padding: "0.75rem 1rem", display: "flex", flexDirection: "column", gap: "0.4rem" }}>
+                              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.72rem", color: "var(--muted)", textTransform: "uppercase", fontWeight: 600 }}>
+                                <span style={{ color: "var(--danger)" }}>📱 Лимит устройств превышен</span>
+                                <span>Куплено: {item.hwid_device_limit}</span>
+                              </div>
+                              <div style={{ fontSize: "1.05rem", fontWeight: 700, color: "var(--ink)" }}>
+                                Используется: <span style={{ color: "var(--danger)" }}>{item.hwid_device_count_exact}</span> устр.
+                              </div>
+                              {item.usage_profile_summary && (
+                                <div style={{ fontSize: "0.78rem", color: "var(--muted)", borderTop: "1px solid rgba(239, 68, 68, 0.15)", paddingTop: "0.4rem", marginTop: "0.2rem" }}>
+                                  {item.usage_profile_summary}
+                                </div>
+                              )}
+                            </div>
+                          </>
+                        );
+                      }
+
+                      if (violationType === "traffic") {
+                        return (
+                          <>
+                            {/* Traffic Custom Card Content */}
+                            <div style={{ background: "rgba(245, 158, 11, 0.08)", border: "1px solid rgba(245, 158, 11, 0.2)", borderRadius: "12px", padding: "0.75rem 1rem", display: "flex", flexDirection: "column", gap: "0.4rem" }}>
+                              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.72rem", color: "var(--muted)", textTransform: "uppercase", fontWeight: 600 }}>
+                                <span style={{ color: "var(--warning)" }}>⚡ Всплеск трафика</span>
+                              </div>
+                              <div style={{ fontSize: "0.82rem", color: "var(--ink)", fontWeight: 500 }}>
+                                {item.usage_profile_summary || "Зафиксировано превышение по объёму потребляемого трафика."}
+                              </div>
+                            </div>
+                          </>
+                        );
+                      }
+
+                      if (violationType === "continues") {
+                        return (
+                          <>
+                            {/* Violation Continues Custom Card Content */}
+                            <div style={{ background: "rgba(59, 130, 246, 0.08)", border: "1px solid rgba(59, 130, 246, 0.2)", borderRadius: "12px", padding: "0.75rem 1rem", display: "flex", flexDirection: "column", gap: "0.4rem" }}>
+                              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.72rem", color: "var(--muted)", textTransform: "uppercase", fontWeight: 600 }}>
+                                <span style={{ color: "var(--accent)" }}>🔁 Нарушение продолжается</span>
+                                <span>Повторов: {item.repeat_count}</span>
+                              </div>
+                              <div style={{ fontSize: "0.92rem", fontWeight: 700, color: "var(--ink)" }}>
+                                Активно: <span style={{ color: "var(--accent)" }}>{item.usage_profile_ongoing_duration_text || "продолжается"}</span>
+                              </div>
+                              {item.last_repeat_at && (
+                                <div style={{ fontSize: "0.72rem", color: "var(--muted)", borderTop: "1px solid rgba(59, 130, 246, 0.15)", paddingTop: "0.4rem", marginTop: "0.2rem" }}>
+                                  Последняя активность: {formatInventoryDate(item.last_repeat_at)}
+                                </div>
+                              )}
+                            </div>
+                          </>
+                        );
+                      }
+
+                      // Default "connection" or generic style (original layout)
+                      return (
+                        <>
+                          {/* Verdict & Score */}
+                          <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap", background: "var(--surface-soft)", padding: "0.6rem 0.85rem", borderRadius: "10px" }}>
+                            <span style={{ fontSize: "0.75rem", color: "var(--muted)", fontWeight: 600, textTransform: "uppercase" }}>Решение:</span>
+                            <span className={`status-badge ${item.verdict?.toUpperCase() === "HOME" ? "punitive" : "status-resolved"}`} style={{ fontWeight: 700, padding: "2px 8px", borderRadius: "6px" }}>
+                              {item.verdict}
+                            </span>
+                            <span className={`tag ${item.confidence_band?.startsWith("PROBABLE_") ? "severity-high" : ""}`} style={{ padding: "2px 8px", borderRadius: "6px" }}>{item.confidence_band}</span>
+                          </div>
+
+                          {/* Provider & ASN Box */}
+                          <div style={{ background: "rgba(255, 255, 255, 0.03)", border: "1px solid var(--line)", borderRadius: "12px", padding: "0.75rem 1rem", display: "flex", flexDirection: "column", gap: "0.2rem" }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.72rem", color: "var(--muted)", textTransform: "uppercase", fontWeight: 600 }}>
+                              <span>Провайдер</span>
+                              <span>ASN {item.asn ?? "?"}</span>
+                            </div>
+                            <strong style={{ fontSize: "0.85rem", color: "var(--ink)", wordBreak: "break-all" }}>{providerDisplay}</strong>
+                          </div>
+                        </>
+                      );
+                    })()}
 
                     {/* Flags */}
                     <div className="queue-card-flags" style={{ gap: "0.4rem" }}>

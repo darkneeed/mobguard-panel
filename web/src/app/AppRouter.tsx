@@ -205,6 +205,14 @@ export function AppRouter({
           }
         />
         <Route
+          path="/violations"
+          element={
+            <PermissionRoute session={session} permission="reviews.read">
+              <ReviewQueuePage session={session} isViolationsQueue={true} />
+            </PermissionRoute>
+          }
+        />
+        <Route
           path="/decisions"
           element={
             <PermissionRoute session={session} permission="data.read">

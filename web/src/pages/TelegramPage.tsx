@@ -197,15 +197,17 @@ function AutoResizingTextarea({
   value,
   onChange,
   className,
+  textareaRef,
 }: {
   value: string;
   onChange: (val: string) => void;
   className?: string;
+  textareaRef?: (el: HTMLTextAreaElement | null) => void;
 }) {
-  const ref = useRef<HTMLTextAreaElement>(null);
+  const localRef = useRef<HTMLTextAreaElement | null>(null);
 
   useEffect(() => {
-    const el = ref.current;
+    const el = localRef.current;
     if (el) {
       el.style.height = "auto";
       el.style.height = `${el.scrollHeight}px`;
@@ -214,7 +216,10 @@ function AutoResizingTextarea({
 
   return (
     <textarea
-      ref={ref}
+      ref={(el) => {
+        localRef.current = el;
+        if (textareaRef) textareaRef(el);
+      }}
       className={className}
       value={value}
       onChange={(e) => onChange(e.target.value)}
@@ -247,6 +252,39 @@ export function TelegramPage() {
   const [templatesError, setTemplatesError] = useState("");
   const [templatesSaved, setTemplatesSaved] = useState("");
   const [activeTab, setActiveTab] = useState<"settings" | "templates">("settings");
+
+  const textareaRefs = useRef<Record<string, HTMLTextAreaElement | null>>({});
+
+  const insertTag = (fieldKey: TemplateFieldKey, tag: string) => {
+    const el = textareaRefs.current[fieldKey];
+    const text = templates[fieldKey] || "";
+
+    if (!el) {
+      setTemplates((prev) => ({
+        ...prev,
+        [fieldKey]: text + tag,
+      }));
+      return;
+    }
+
+    const start = el.selectionStart;
+    const end = el.selectionEnd;
+    const newText = text.substring(0, start) + tag + text.substring(end);
+
+    setTemplates((prev) => ({
+      ...prev,
+      [fieldKey]: newText,
+    }));
+
+    // Фокусируемся и переносим курсор
+    setTimeout(() => {
+      el.focus();
+      const newCursorPos = start + tag.length;
+      el.setSelectionRange(newCursorPos, newCursorPos);
+      el.style.height = "auto";
+      el.style.height = `${el.scrollHeight}px`;
+    }, 0);
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -705,6 +743,13 @@ export function TelegramPage() {
                   (field) => field.audience === "user",
                 ).map((field) => {
                   const meta = templateMeta(field.key);
+                  const tags = Array.from(
+                    new Set(
+                      [...(meta.description || "").matchAll(/\{\{([^}]+)\}\}/g)].map(
+                        (m) => `{{${m[1]}}}`,
+                      ),
+                    ),
+                  );
                   return (
                     <div className="rule-field" key={field.key}>
                       <FieldLabel
@@ -720,7 +765,43 @@ export function TelegramPage() {
                             [field.key]: value,
                           }))
                         }
+                        textareaRef={(el) => {
+                          textareaRefs.current[field.key] = el;
+                        }}
                       />
+                      {tags.length > 0 && (
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: "0.4rem", marginTop: "0.5rem" }}>
+                          {tags.map((tag) => (
+                            <button
+                              key={tag}
+                              type="button"
+                              onClick={() => insertTag(field.key, tag)}
+                              style={{
+                                padding: "0.2rem 0.5rem",
+                                fontSize: "0.78rem",
+                                fontFamily: "var(--font-mono, monospace)",
+                                borderRadius: "6px",
+                                border: "1px solid var(--line)",
+                                background: "var(--surface-soft)",
+                                cursor: "pointer",
+                                color: "var(--accent)",
+                                transition: "all 0.15s ease",
+                              }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.background = "var(--accent-soft)";
+                                e.currentTarget.style.borderColor = "var(--accent)";
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.background = "var(--surface-soft)";
+                                e.currentTarget.style.borderColor = "var(--line)";
+                              }}
+                              title="Нажмите, чтобы вставить этот тег"
+                            >
+                              {tag}
+                            </button>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   );
                 })}
@@ -736,6 +817,13 @@ export function TelegramPage() {
                   (field) => field.audience === "admin",
                 ).map((field) => {
                   const meta = templateMeta(field.key);
+                  const tags = Array.from(
+                    new Set(
+                      [...(meta.description || "").matchAll(/\{\{([^}]+)\}\}/g)].map(
+                        (m) => `{{${m[1]}}}`,
+                      ),
+                    ),
+                  );
                   return (
                     <div className="rule-field" key={field.key}>
                       <FieldLabel
@@ -751,7 +839,43 @@ export function TelegramPage() {
                             [field.key]: value,
                           }))
                         }
+                        textareaRef={(el) => {
+                          textareaRefs.current[field.key] = el;
+                        }}
                       />
+                      {tags.length > 0 && (
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: "0.4rem", marginTop: "0.5rem" }}>
+                          {tags.map((tag) => (
+                            <button
+                              key={tag}
+                              type="button"
+                              onClick={() => insertTag(field.key, tag)}
+                              style={{
+                                padding: "0.2rem 0.5rem",
+                                fontSize: "0.78rem",
+                                fontFamily: "var(--font-mono, monospace)",
+                                borderRadius: "6px",
+                                border: "1px solid var(--line)",
+                                background: "var(--surface-soft)",
+                                cursor: "pointer",
+                                color: "var(--accent)",
+                                transition: "all 0.15s ease",
+                              }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.background = "var(--accent-soft)";
+                                e.currentTarget.style.borderColor = "var(--accent)";
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.background = "var(--surface-soft)";
+                                e.currentTarget.style.borderColor = "var(--line)";
+                              }}
+                              title="Нажмите, чтобы вставить этот тег"
+                            >
+                              {tag}
+                            </button>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   );
                 })}

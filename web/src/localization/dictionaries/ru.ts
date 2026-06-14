@@ -73,7 +73,8 @@ export const ruDictionary: TranslationDictionary = {
     nav: {
       overview: "Обзор",
       modules: "Модули",
-      queue: "Очередь",
+      queue: "Ревью",
+      violations: "Нарушения",
       decisions: "Решения",
       console: "Консоль",
       rules: "Правила",
@@ -302,6 +303,10 @@ export const ruDictionary: TranslationDictionary = {
     title: "Ручная модерация",
     description:
       "Кейсы, по которым не получилось принять автоматическое решение",
+    violationsTitle: "Нарушения",
+    violationsDescription: "Кейсы с превышением трафика, количества устройств или продолжающимися нарушениями",
+    reviewTitle: "Ручная модерация",
+    reviewDescription: "Кейсы, требующие проверки типа подключения (мобильный интернет / домашняя сеть)",
     countSummary: "Кейсов: {count} · {page} страница",
     lastUpdated: "Обновлено {value}",
     searchPlaceholder:
@@ -2083,63 +2088,64 @@ export const ruDictionary: TranslationDictionary = {
       user_warning_only_template: {
         label: "Сообщение без эскалации",
         description:
-          "Пользовательское сообщение, когда кейс warning-only и не эскалируется.\n\nТеги:\n• {{username}}, {{uuid}}, {{system_id}}, {{telegram_id}}\n• {{ip}}, {{isp}}, {{tag}}",
+          "Пользовательское сообщение, когда кейс warning-only и не эскалируется.\n\nДоступные теги:\n• {{username}} — имя пользователя\n• {{uuid}} — UUID подписки\n• {{system_id}} — системный Email/ID\n• {{telegram_id}} — Telegram ID\n• {{ip}} — IP-адрес\n• {{isp}} — провайдер\n• {{tag}} — конфиг/inbound",
       },
       user_warning_template: {
         label: "Сообщение о предупреждении",
         description:
-          "Пользовательское сообщение для обычных предупреждений перед ограничением доступа.\n\nТеги:\n• {{username}}, {{uuid}}, {{system_id}}, {{telegram_id}}\n• {{ip}}, {{isp}}, {{tag}}",
+          "Пользовательское сообщение для обычных предупреждений перед ограничением доступа.\n\nДоступные теги:\n• {{username}}, {{uuid}}, {{system_id}}, {{telegram_id}}\n• {{ip}}, {{isp}}, {{tag}}\n• {{warning_count}} — номер предупреждения\n• {{warnings_before_ban}} — всего предупреждений до блокировки\n• {{warnings_left}} — осталось предупреждений",
       },
       user_ban_template: {
         label: "Сообщение об ограничении доступа",
         description:
-          "Пользовательское сообщение, отправляемое при ограничении доступа.\n\nТеги:\n• {{username}}, {{uuid}}, {{system_id}}, {{telegram_id}}\n• {{ip}}, {{isp}}, {{tag}}, {{ban_minutes}}, {{ban_text}}",
+          "Пользовательское сообщение, отправляемое при ограничении доступа.\n\nДоступные теги:\n• {{username}}, {{uuid}}, {{system_id}}, {{telegram_id}}\n• {{ip}}, {{isp}}, {{tag}}\n• {{ban_minutes}} — длительность в минутах\n• {{ban_text}} — текстовое описание (например: «1 час»)",
       },
       admin_warning_only_template: {
         label: "Сообщение без эскалации",
         description:
-          "Текст админского уведомления по warning-only кейсам.\n\nТеги:\n• {{username}}, {{uuid}}, {{system_id}}, {{telegram_id}}, {{case_id}}\n• {{ip}}, {{isp}}, {{tag}}, {{confidence_band}}, {{review_url}}\n• {{usage_profile_summary}}, {{usage_profile_soft_reasons}}",
+          "Текст уведомления модератору по warning-only кейсам (наказание не применяется).\n\nДоступные теги:\n• {{username}}, {{uuid}}, {{system_id}}, {{telegram_id}}\n• {{ip}}, {{isp}}, {{tag}}\n• {{confidence_band}} — вердикт системы\n• {{case_id}}, {{review_url}} — ID кейса и ссылка\n• {{usage_profile_summary}} — краткий профиль\n• {{usage_profile_soft_reasons}} — переведённые флаги",
       },
       admin_warning_template: {
         label: "Сообщение о предупреждении",
         description:
-          "Текст админского уведомления по предупреждениям.\n\nТеги:\n• {{username}}, {{uuid}}, {{system_id}}, {{telegram_id}}, {{case_id}}\n• {{ip}}, {{isp}}, {{tag}}, {{review_url}}, {{confidence_band}}\n• {{warning_count}}, {{warnings_before_ban}}, {{warnings_left}}\n• {{usage_profile_summary}}, {{usage_profile_soft_reasons}}",
+          "Текст уведомления модератору при выдаче предупреждения.\n\nДоступные теги:\n• {{username}}, {{uuid}}, {{system_id}}, {{telegram_id}}\n• {{ip}}, {{isp}}, {{tag}}, {{confidence_band}}\n• {{warning_count}}, {{warnings_before_ban}}, {{warnings_left}}\n• {{case_id}}, {{review_url}}\n• {{usage_profile_summary}}, {{usage_profile_soft_reasons}}",
       },
       admin_ban_template: {
         label: "Сообщение об ограничении доступа",
         description:
-          "Текст админского уведомления по ограничениям доступа.\n\nТеги:\n• {{username}}, {{uuid}}, {{system_id}}, {{telegram_id}}, {{case_id}}\n• {{ip}}, {{isp}}, {{tag}}, {{review_url}}, {{confidence_band}}\n• {{warning_count}}, {{ban_minutes}}, {{ban_text}}\n• {{usage_profile_summary}}, {{usage_profile_soft_reasons}}",
+          "Текст уведомления модератору при ограничении доступа.\n\nДоступные теги:\n• {{username}}, {{uuid}}, {{system_id}}, {{telegram_id}}\n• {{ip}}, {{isp}}, {{tag}}, {{confidence_band}}\n• {{warning_count}}, {{ban_minutes}}, {{ban_text}}\n• {{case_id}}, {{review_url}}\n• {{usage_profile_summary}}, {{usage_profile_soft_reasons}}",
       },
       admin_review_template: {
         label: "Сообщение для ревью",
         description:
-          "Текст админского уведомления для кейсов ревью / ручной модерации.\n\nТеги:\n• {{username}}, {{uuid}}, {{system_id}}, {{telegram_id}}, {{case_id}}\n• {{ip}}, {{isp}}, {{tag}}, {{confidence_band}}, {{review_url}}\n• {{usage_profile_summary}}, {{usage_profile_soft_reasons}}",
+          "Текст уведомления модератору для кейсов ревью / ручной модерации.\n\nДоступные теги:\n• {{username}}, {{uuid}}, {{system_id}}, {{telegram_id}}\n• {{ip}}, {{isp}}, {{tag}}, {{confidence_band}}\n• {{case_id}}, {{review_url}}\n• {{usage_profile_summary}}, {{usage_profile_soft_reasons}}",
       },
       admin_usage_profile_traffic_template: {
-        label: "Превышение трафика",
+        label: "⚡ Превышение трафика",
         description:
-          "Уведомление при превышении трафика / всплеске трафика.\n\nТеги:\n• {{username}}, {{uuid}}, {{system_id}}, {{telegram_id}}, {{case_id}}\n• {{ip}}, {{isp}}, {{tag}}, {{review_url}}\n• {{usage_profile_summary}}, {{usage_profile_soft_reasons}}\n• {{usage_profile_traffic_burst_bytes}} (объем всплеска)\n• {{usage_profile_traffic_burst_window}} (окно проверки)\n• {{usage_profile_ip_count}}, {{usage_profile_provider_count}}, {{usage_profile_node_count}}",
+          "Уведомление модератору при превышении трафика / всплеске трафика.\n\nДоступные теги:\n• {{username}}, {{uuid}}, {{system_id}}, {{telegram_id}}\n• {{ip}}, {{isp}}, {{tag}}\n• {{case_id}}, {{review_url}}\n— Трафик:\n• {{usage_profile_traffic_burst_bytes}} — объём за интервал\n• {{usage_profile_traffic_burst_window}} — окно проверки (мин)\n— Сеть:\n• {{usage_profile_ip_count}} — кол-во IP\n• {{usage_profile_provider_count}} — кол-во провайдеров\n• {{usage_profile_node_count}} — кол-во нод\n• {{usage_profile_top_ips}} — топ IP\n• {{usage_profile_top_providers}} — топ провайдеры\n• {{usage_profile_nodes}} — список нод",
       },
       admin_usage_profile_devices_template: {
-        label: "Превышение кол-ва устройств",
+        label: "📱 Превышение кол-ва устройств",
         description:
-          "Уведомление при превышении лимита активных устройств.\n\nТеги:\n• {{username}}, {{uuid}}, {{system_id}}, {{telegram_id}}, {{case_id}}\n• {{ip}}, {{isp}}, {{tag}}, {{review_url}}\n• {{usage_profile_summary}}, {{usage_profile_soft_reasons}}\n• {{usage_profile_hwid_device_limit}} (куплено устройств)\n• {{usage_profile_hwid_device_count_exact}} (используется)\n• {{usage_profile_device_labels}} (модели устройств)",
+          "Уведомление модератору при превышении лимита активных устройств.\n\nДоступные теги:\n• {{username}}, {{uuid}}, {{system_id}}, {{telegram_id}}\n• {{ip}}, {{isp}}, {{tag}}\n• {{case_id}}, {{review_url}}\n— Устройства:\n• {{usage_profile_hwid_device_limit}} — куплено устройств (лимит)\n• {{usage_profile_hwid_device_count_exact}} — используется\n• {{usage_profile_device_labels}} — модели устройств\n• {{usage_profile_exact_device_count}} — уникальных ключей\n— Сеть:\n• {{usage_profile_ip_count}}, {{usage_profile_nodes}}\n• {{usage_profile_soft_reasons}} — флаги",
       },
       admin_usage_profile_connection_template: {
-        label: "Неверный тип подключения",
+        label: "🌐 Неверный тип подключения",
         description:
-          "Уведомление при использовании не-мобильной сети или наличии веера провайдеров.\n\nТеги:\n• {{username}}, {{uuid}}, {{system_id}}, {{telegram_id}}, {{case_id}}\n• {{ip}}, {{isp}}, {{tag}}, {{review_url}}\n• {{usage_profile_summary}}, {{usage_profile_soft_reasons}}\n• {{usage_profile_provider_count}} (кол-во провайдеров)\n• {{usage_profile_top_providers}} (топ провайдеров)\n• {{usage_profile_ip_count}} (кол-во IP)",
+          "Уведомление модератору при использовании не-мобильной сети или веере провайдеров.\n\nДоступные теги:\n• {{username}}, {{uuid}}, {{system_id}}, {{telegram_id}}\n• {{ip}}, {{isp}}, {{tag}}, {{confidence_band}}\n• {{case_id}}, {{review_url}}\n— Сеть:\n• {{usage_profile_ip_count}} — кол-во IP\n• {{usage_profile_provider_count}} — кол-во провайдеров\n• {{usage_profile_top_providers}} — список провайдеров\n• {{usage_profile_top_ips}} — топ IP\n• {{usage_profile_nodes}} — список нод\n• {{usage_profile_soft_reasons}} — флаги",
       },
       admin_violation_continues_template: {
-        label: "Сообщение о продолжающемся нарушении",
+        label: "🔁 Нарушение продолжается",
         description:
-          "Текст админского уведомления при продолжающемся нарушении.\n\nТеги:\n• {{username}}, {{uuid}}, {{system_id}}, {{telegram_id}}, {{case_id}}\n• {{ip}}, {{isp}}, {{tag}}, {{review_url}}\n• {{usage_profile_summary}}, {{usage_profile_soft_reasons}}\n• {{usage_profile_ongoing_duration_text}} (длительность нарушения)",
+          "Уведомление модератору при продолжающемся нарушении (повтор через интервал).\n\nДоступные теги:\n• {{username}}, {{uuid}}, {{system_id}}, {{telegram_id}}\n• {{ip}}, {{isp}}, {{tag}}\n• {{case_id}}, {{review_url}}\n— Время:\n• {{usage_profile_ongoing_duration_text}} — текст длительности\n• {{usage_profile_ongoing_duration_seconds}} — секунды\n— Сеть:\n• {{usage_profile_ip_count}}/{{usage_profile_provider_count}} — IP/провайдеры\n• {{usage_profile_top_ips}} — список IP с провайдерами\n• {{usage_profile_nodes}} — список нод\n• {{usage_profile_soft_reasons}} — флаги",
       },
       admin_traffic_limit_exceeded_template: {
-        label: "Сообщение о превышении лимита трафика",
+        label: "🚫 Нарушитель лимита трафика",
         description:
-          "Текст админского уведомления при применении ограничения по трафику.\n\nТеги:\n• {{username}}, {{uuid}}, {{system_id}}, {{telegram_id}}, {{case_id}}\n• {{ip}}, {{isp}}, {{tag}}, {{review_url}}\n• {{usage_profile_summary}}, {{usage_profile_soft_reasons}}",
+          "Уведомление модератору при применении ограничения по трафику (TRAFFIC_CAP режим).\n\nДоступные теги:\n• {{username}}, {{uuid}}, {{system_id}}, {{telegram_id}}\n• {{ip}}, {{isp}}, {{tag}}\n• {{ban_minutes}}, {{ban_text}}\n• {{case_id}}, {{review_url}}\n— Время:\n• {{usage_profile_ongoing_duration_text}}\n— Сеть:\n• {{usage_profile_ip_count}}/{{usage_profile_provider_count}}\n• {{usage_profile_top_ips}}, {{usage_profile_nodes}}\n— Устройства:\n• {{usage_profile_hwid_device_count_exact}}\n• {{usage_profile_device_labels}}\n• {{usage_profile_soft_reasons}} — флаги",
       },
     },
+
   },
 };

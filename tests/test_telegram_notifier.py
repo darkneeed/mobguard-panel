@@ -115,7 +115,7 @@ class TelegramNotifierFlowTests(unittest.TestCase):
         text, kwargs = self.notifier.admin_calls[0]
         self.assertIn("Case ID", text)
         self.assertIn("alice", text)
-        self.assertIn("НЕВЕРНЫЙ ТИП ПОДКЛЮЧЕНИЯ", text)
+        self.assertIn("Неверный тип подключения", text)
         self.assertEqual(str(kwargs.get("dedupe_key") or ""), f"review-case:{bundle.case_id}")
         self.assertEqual(self.notifier.user_calls, [])
 
@@ -190,7 +190,7 @@ class TelegramNotifierFlowTests(unittest.TestCase):
         self.assertEqual(len(self.notifier.admin_calls), 1)
         text, kwargs = self.notifier.admin_calls[0]
         self.assertEqual(str(kwargs.get("dedupe_key") or ""), f"review-case:{bundle.case_id}")
-        self.assertIn("НЕВЕРНЫЙ ТИП ПОДКЛЮЧЕНИЯ", text)
+        self.assertIn("Неверный тип подключения", text)
         self.assertNotIn("Starting analysis for IP", text)
         self.assertNotIn("Querying IPInfo API", text)
 

@@ -226,8 +226,12 @@ class AILearningSuggestionsTests(unittest.TestCase):
 
     def test_generate_suggestions_cooldown_force(self):
         from fastapi import HTTPException
-        # Set cooldown active
-        self.store.set_metadata_value("last_ai_suggestions_timestamp", "2026-06-12T01:00:00")
+        from datetime import datetime, timedelta
+        # Set cooldown active (1 hour ago, which is less than 12 hours limit)
+        self.store.set_metadata_value(
+            "last_ai_suggestions_timestamp",
+            (datetime.utcnow() - timedelta(hours=1)).isoformat()
+        )
         
         # Calling with force=False should raise HTTPException with "Cooldown in effect"
         with self.assertRaises(HTTPException) as ctx:
