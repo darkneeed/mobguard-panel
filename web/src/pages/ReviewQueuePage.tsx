@@ -634,91 +634,6 @@ export function ReviewQueuePage({
             </select>
           </label>
         </div>
-        <div className="queue-bulkbar">
-          <div className="queue-bulkbar-meta">
-            <button
-              className="ghost small-button"
-              onClick={() =>
-                setSelectedIds(
-                  allSelected ? [] : list.items.map((item) => item.id),
-                )
-              }
-            >
-              {allSelected
-                ? t("reviewQueue.selection.clearPage")
-                : t("reviewQueue.selection.selectPage")}
-            </button>
-            <span className="chip">
-              {t("reviewQueue.selection.selectedCount", {
-                count: selectedIds.length,
-              })}
-            </span>
-          </div>
-          <div className="queue-bulk-actions">
-            {canReadData ? (
-              <Link
-                to="/data/console"
-                className="button-link ghost small-button"
-                onMouseEnter={() => prefetchRouteModule("/data/console")}
-                onFocus={() => prefetchRouteModule("/data/console")}
-              >
-                {t("reviewQueue.actions.openEvents")}
-              </Link>
-            ) : null}
-            {canRecheck ? (
-              <button
-                className="ghost small-button"
-                disabled={resolvingId !== null || rechecking || visibleQueueIds.length === 0}
-                onClick={recheckVisible}
-              >
-                {rechecking && (
-                  <Loader2 size={12} className="spinner" style={{ marginRight: "4px" }} />
-                )}
-                {t("reviewQueue.actions.recheckVisible")}
-              </button>
-            ) : null}
-            <button
-              className="small-button"
-              style={{ background: "var(--success)", color: "#fff", border: "1px solid var(--success)" }}
-              disabled={
-                !canResolve || selectedIds.length === 0 || resolvingId !== null
-              }
-              onClick={() => resolveSelected("MOBILE")}
-            >
-              {resolvingId === -1 && resolvingAction === "MOBILE" && (
-                <Loader2 size={12} className="spinner" style={{ marginRight: "4px" }} />
-              )}
-              {t("reviewQueue.actions.bulkMobile")}
-            </button>
-            <button
-              className="small-button"
-              style={{ background: "var(--danger)", color: "#fff", border: "1px solid var(--danger)" }}
-              disabled={
-                !canResolve || selectedIds.length === 0 || resolvingId !== null
-              }
-              onClick={() => resolveSelected("HOME")}
-            >
-              {resolvingId === -1 && resolvingAction === "HOME" && (
-                <Loader2 size={12} className="spinner" style={{ marginRight: "4px" }} />
-              )}
-              {t("reviewQueue.actions.bulkHome")}
-            </button>
-            <button
-              className="ghost small-button"
-              disabled={
-                !canResolve || selectedIds.length === 0 || resolvingId !== null
-              }
-              onClick={() => resolveSelected("SKIP")}
-            >
-              {resolvingId === -1 && resolvingAction === "SKIP" && (
-                <Loader2 size={12} className="spinner" style={{ marginRight: "4px" }} />
-              )}
-              {t("reviewQueue.actions.bulkSkip")}
-            </button>
-          </div>
-        </div>
-      </div>
-
       {filtersOpen ? (
         <div className="panel reveal-panel filter-drawer queue-filters-shell" style={{ border: "1px solid var(--line)", background: "var(--bg-panel-glass, rgba(30, 30, 40, 0.45))", backdropFilter: "blur(16px)", padding: "1.25rem", borderRadius: "var(--radius-lg)" }}>
           <div className="queue-presets" style={{ borderBottom: "1px solid var(--line)", paddingBottom: "0.85rem", display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
@@ -1103,6 +1018,91 @@ export function ReviewQueuePage({
           </div>
         </div>
       ) : null}
+        <div className="queue-bulkbar">
+          <div className="queue-bulkbar-meta">
+            <button
+              className="ghost small-button"
+              onClick={() =>
+                setSelectedIds(
+                  allSelected ? [] : list.items.map((item) => item.id),
+                )
+              }
+            >
+              {allSelected
+                ? t("reviewQueue.selection.clearPage")
+                : t("reviewQueue.selection.selectPage")}
+            </button>
+            <span className="chip">
+              {t("reviewQueue.selection.selectedCount", {
+                count: selectedIds.length,
+              })}
+            </span>
+          </div>
+          <div className="queue-bulk-actions">
+            {canReadData ? (
+              <Link
+                to="/data/console"
+                className="button-link ghost small-button"
+                onMouseEnter={() => prefetchRouteModule("/data/console")}
+                onFocus={() => prefetchRouteModule("/data/console")}
+              >
+                {t("reviewQueue.actions.openEvents")}
+              </Link>
+            ) : null}
+            {canRecheck ? (
+              <button
+                className="ghost small-button"
+                disabled={resolvingId !== null || rechecking || visibleQueueIds.length === 0}
+                onClick={recheckVisible}
+              >
+                {rechecking && (
+                  <Loader2 size={12} className="spinner" style={{ marginRight: "4px" }} />
+                )}
+                {t("reviewQueue.actions.recheckVisible")}
+              </button>
+            ) : null}
+            <button
+              className="small-button"
+              style={{ background: "var(--success)", color: "#fff", border: "1px solid var(--success)" }}
+              disabled={
+                !canResolve || selectedIds.length === 0 || resolvingId !== null
+              }
+              onClick={() => resolveSelected("MOBILE")}
+            >
+              {resolvingId === -1 && resolvingAction === "MOBILE" && (
+                <Loader2 size={12} className="spinner" style={{ marginRight: "4px" }} />
+              )}
+              {t("reviewQueue.actions.bulkMobile")}
+            </button>
+            <button
+              className="small-button"
+              style={{ background: "var(--danger)", color: "#fff", border: "1px solid var(--danger)" }}
+              disabled={
+                !canResolve || selectedIds.length === 0 || resolvingId !== null
+              }
+              onClick={() => resolveSelected("HOME")}
+            >
+              {resolvingId === -1 && resolvingAction === "HOME" && (
+                <Loader2 size={12} className="spinner" style={{ marginRight: "4px" }} />
+              )}
+              {t("reviewQueue.actions.bulkHome")}
+            </button>
+            <button
+              className="ghost small-button"
+              disabled={
+                !canResolve || selectedIds.length === 0 || resolvingId !== null
+              }
+              onClick={() => resolveSelected("SKIP")}
+            >
+              {resolvingId === -1 && resolvingAction === "SKIP" && (
+                <Loader2 size={12} className="spinner" style={{ marginRight: "4px" }} />
+              )}
+              {t("reviewQueue.actions.bulkSkip")}
+            </button>
+          </div>
+        </div>
+      </div>
+
 
       {error ? <div className="error-box">{error}</div> : null}
 

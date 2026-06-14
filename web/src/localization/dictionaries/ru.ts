@@ -522,7 +522,7 @@ export const ruDictionary: TranslationDictionary = {
     empty: "Модули ещё не созданы",
     create: "Создать модуль",
     save: "Сохранить изменения",
-    open: "Открыть детали",
+    open: "Открыть",
     restart: "Перезапустить модуль",
     createTitle: "Создание карточки модуля",
     createDescription:

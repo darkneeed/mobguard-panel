@@ -500,7 +500,7 @@ export const enDictionary: TranslationDictionary = {
     empty: "No modules created yet",
     create: "Create module",
     save: "Save changes",
-    open: "Open details",
+    open: "Open",
     restart: "Restart module",
     createTitle: "Create module card",
     createDescription: "Set the display name and per-module INBOUND tags. The panel will generate module_id and API token after save.",

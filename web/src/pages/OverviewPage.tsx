@@ -332,7 +332,7 @@ export function OverviewPage({ session: _session }: { session?: Session }) {
         </div>
         <div className="stat-card">
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%" }}>
-            <span>Онлайн на модулях</span>
+            <span>Онлайн</span>
             <Users size={16} style={{ color: "var(--muted)" }} />
           </div>
           <strong>{modulesOnline}</strong>

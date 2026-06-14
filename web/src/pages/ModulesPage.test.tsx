@@ -183,7 +183,7 @@ describe("ModulesPage", () => {
     await screen.findByText("Node Alpha");
     expect(api.getModuleDetail).not.toHaveBeenCalled();
 
-    await userEvent.click(screen.getAllByRole("button", { name: "Open details" })[0]);
+    await userEvent.click(screen.getAllByRole("button", { name: "Open" })[0]);
 
     await waitFor(() => {
       expect(api.getModuleDetail).toHaveBeenCalledWith("module-abc123");
