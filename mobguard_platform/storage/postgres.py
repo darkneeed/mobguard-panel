@@ -397,6 +397,10 @@ class PostgresStorage:
                 result.append(char)
                 index += 1
                 continue
+            if char == "%":
+                result.append("%%")
+                index += 1
+                continue
             if char == "?" and not in_single and not in_double:
                 result.append("%s")
                 index += 1

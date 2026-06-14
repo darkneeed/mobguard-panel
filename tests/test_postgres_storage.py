@@ -60,6 +60,14 @@ class PostgresStorageTests(unittest.TestCase):
         self.assertIsNotNone(cursor)
         self.assertIsNone(cursor.fetchone())
 
+    def test_translate_query_escapes_percent_signs(self):
+        sql, _, _ = self.storage.translate_query(
+            self.conn,
+            "SELECT * FROM review_cases WHERE usage_profile_soft_reasons_json LIKE '%traffic_burst%'",
+            (),
+        )
+        self.assertIn("LIKE '%%traffic_burst%%'", sql)
+
 
 if __name__ == "__main__":
     unittest.main()
