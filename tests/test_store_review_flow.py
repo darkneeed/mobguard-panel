@@ -1405,6 +1405,71 @@ class StoreReviewFlowTests(unittest.TestCase):
             else:
                 os.environ["IPINFO_TOKEN"] = previous
 
+    def test_list_review_cases_queue_type_filtering(self):
+        user = {"uuid": "uuid-1", "username": "alice", "telegramId": "1001", "id": 42}
+        
+        # 1. Connection-only case (no violation) -> should go to "review" queue
+        bundle_connection = DecisionBundle(
+            ip="10.10.10.1",
+            verdict="UNSURE",
+            confidence_band="UNSURE",
+            score=0,
+            asn=123,
+            isp="ISP-A",
+        )
+        event_conn = self.store.record_analysis_event(user, "10.10.10.1", "TAG", bundle_connection)
+        case_conn = self.store.ensure_review_case(user, "10.10.10.1", "TAG", bundle_connection, event_conn, "unsure")
+        
+        # 2. Traffic violation case (with connection review reason) -> should go to "violations" queue
+        bundle_traffic = DecisionBundle(
+            ip="10.10.10.2",
+            verdict="UNSURE",
+            confidence_band="UNSURE",
+            score=0,
+            asn=123,
+            isp="ISP-A",
+        )
+        event_traffic = self.store.record_analysis_event(user, "10.10.10.2", "TAG", bundle_traffic)
+        case_traffic = self.store.ensure_review_case(user, "10.10.10.2", "TAG", bundle_traffic, event_traffic, "unsure")
+        with self.store._connect() as conn:
+            conn.execute(
+                "UPDATE review_cases SET usage_profile_soft_reasons_json = ? WHERE id = ?",
+                (json.dumps(["traffic_burst"]), case_traffic.id),
+            )
+            conn.commit()
+
+        # 3. Device violation case -> should go to "violations" queue
+        bundle_device = DecisionBundle(
+            ip="10.10.10.3",
+            verdict="UNSURE",
+            confidence_band="UNSURE",
+            score=0,
+            asn=123,
+            isp="ISP-A",
+        )
+        event_device = self.store.record_analysis_event(user, "10.10.10.3", "TAG", bundle_device)
+        case_device = self.store.ensure_review_case(user, "10.10.10.3", "TAG", bundle_device, event_device, "unsure")
+        with self.store._connect() as conn:
+            conn.execute(
+                "UPDATE review_cases SET hwid_device_count_exact = 3, hwid_device_limit = 2 WHERE id = ?",
+                (case_device.id,),
+            )
+            conn.commit()
+
+        # Query "review" queue
+        review_queue = self.store.list_review_cases({"status": "OPEN", "queue_type": "review"})
+        review_ids = [c["id"] for c in review_queue["items"]]
+        self.assertIn(case_conn.id, review_ids)
+        self.assertNotIn(case_traffic.id, review_ids)
+        self.assertNotIn(case_device.id, review_ids)
+
+        # Query "violations" queue
+        violations_queue = self.store.list_review_cases({"status": "OPEN", "queue_type": "violations"})
+        violations_ids = [c["id"] for c in violations_queue["items"]]
+        self.assertNotIn(case_conn.id, violations_ids)
+        self.assertIn(case_traffic.id, violations_ids)
+        self.assertIn(case_device.id, violations_ids)
+
     def test_health_snapshot_uses_embedded_runtime_when_heartbeat_is_missing(self):
         previous = os.environ.get("IPINFO_TOKEN")
         os.environ["IPINFO_TOKEN"] = "test-token"

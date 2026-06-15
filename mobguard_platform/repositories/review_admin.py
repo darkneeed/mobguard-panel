@@ -1591,21 +1591,21 @@ class ReviewAdminRepository(SQLiteRepository):
         if filters.get("review_reason"):
             clauses.append("review_reason = ?")
             params.append(filters["review_reason"])
+        is_violation_sql = """(
+            (hwid_device_count_exact IS NOT NULL AND hwid_device_limit IS NOT NULL AND hwid_device_count_exact > hwid_device_limit) OR
+            usage_profile_soft_reasons_json LIKE '%device_rotation%' OR
+            usage_profile_soft_reasons_json LIKE '%device_os_mismatch%' OR
+            usage_profile_soft_reasons_json LIKE '%traffic_burst%' OR
+            usage_profile_soft_reasons_json LIKE '%traffic_limit_exceeded%' OR
+            review_reason = 'traffic_limit_exceeded' OR
+            (usage_profile_ongoing_duration_seconds IS NOT NULL AND usage_profile_ongoing_duration_seconds > 0)
+        )"""
+
         if filters.get("queue_type") == "violations":
-            clauses.append(
-                """(
-                    review_reason IS NULL OR review_reason NOT IN ('provider_conflict', 'unsure', 'probable_home', 'home_requires_review', 'manual_review_mixed_home')
-                ) AND (
-                    (hwid_device_count_exact IS NOT NULL AND hwid_device_limit IS NOT NULL AND hwid_device_count_exact > hwid_device_limit) OR
-                    usage_profile_soft_reasons_json LIKE '%device_rotation%' OR
-                    usage_profile_soft_reasons_json LIKE '%device_os_mismatch%' OR
-                    usage_profile_soft_reasons_json LIKE '%traffic_burst%' OR
-                    (usage_profile_ongoing_duration_seconds IS NOT NULL AND usage_profile_ongoing_duration_seconds > 0)
-                )"""
-            )
+            clauses.append(is_violation_sql)
         elif filters.get("queue_type") == "review":
             clauses.append(
-                """review_reason IN ('provider_conflict', 'unsure', 'probable_home', 'home_requires_review', 'manual_review_mixed_home')"""
+                f"review_reason IN ('provider_conflict', 'unsure', 'probable_home', 'home_requires_review', 'manual_review_mixed_home') AND NOT {is_violation_sql}"
             )
         if filters.get("severity"):
             severity = str(filters["severity"])
