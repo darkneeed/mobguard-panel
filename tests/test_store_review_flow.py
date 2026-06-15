@@ -1016,7 +1016,7 @@ class StoreReviewFlowTests(unittest.TestCase):
         self.assertIn("traffic_burst_confirmed", detail["hard_flags"])
         self.assertIn("traffic_burst", detail["usage_profile_soft_reasons"])
 
-    def test_event_count_traffic_burst_stays_soft_only(self):
+    def test_event_count_does_not_trigger_traffic_burst(self):
         user = {"uuid": "uuid-1", "username": "alice", "telegramId": "1001", "id": 42}
         bundle = DecisionBundle(
             ip="10.10.10.85",
@@ -1034,7 +1034,7 @@ class StoreReviewFlowTests(unittest.TestCase):
 
         detail = self.store.get_review_case(case.id)
 
-        self.assertIn("traffic_burst", detail["usage_profile_soft_reasons"])
+        self.assertNotIn("traffic_burst", detail["usage_profile_soft_reasons"])
         self.assertNotIn("traffic_burst_confirmed", detail["hard_flags"])
 
     def test_quality_metrics_use_persisted_provider_summary_without_bundle_decode(self):

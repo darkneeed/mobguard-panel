@@ -929,28 +929,6 @@ def build_usage_profile_snapshot(
         burst_min_bytes=burst_min_bytes,
         burst_window_minutes=burst_window_minutes,
     )
-    if burst is None and observations:
-        left = 0
-        timestamps = [item["created_at"] for item in observations]
-        best_window = {"count": 0, "start": timestamps[0], "end": timestamps[0]}
-        for right, current in enumerate(timestamps):
-            while left < right and (current - timestamps[left]).total_seconds() > burst_window_minutes * 60:
-                left += 1
-            count = right - left + 1
-            if count > best_window["count"]:
-                best_window = {
-                    "count": count,
-                    "start": timestamps[left],
-                    "end": current,
-                }
-        if best_window["count"] >= BURST_EVENT_THRESHOLD:
-            burst = {
-                "source": "event_count",
-                "event_count": int(best_window["count"]),
-                "window_minutes": burst_window_minutes,
-                "started_at": best_window["start"].replace(microsecond=0).isoformat(),
-                "ended_at": best_window["end"].replace(microsecond=0).isoformat(),
-            }
 
     soft_reasons: list[str] = []
     if country_jumps:
