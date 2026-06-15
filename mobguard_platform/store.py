@@ -100,6 +100,8 @@ EDITABLE_SETTINGS_KEYS = {
     "ip_history_retention_days": int,
     "orphan_analysis_events_retention_days": int,
     "resolved_review_retention_days": int,
+    "traffic_burst_min_bytes": int,
+    "traffic_burst_window_minutes": int,
 }
 
 DEFAULT_SETTINGS = {
@@ -129,6 +131,8 @@ DEFAULT_SETTINGS = {
     "ip_history_retention_days": 30,
     "orphan_analysis_events_retention_days": 30,
     "resolved_review_retention_days": 90,
+    "traffic_burst_min_bytes": 10737418240,
+    "traffic_burst_window_minutes": 60,
 }
 
 

@@ -477,14 +477,29 @@ async def _notify_enforcement(
                 user_event = "warning"
         if bool(enforcement.get("warning_only")):
             user_event = "warning_only"
-            user_message = render_telegram_template(raw_settings, "user_warning_only_template", common_context)
+            user_template_key = "user_warning_only_template"
+            if "УСТРОЙСТВ" in risk_title:
+                user_template_key = "user_warning_only_devices_template"
+            elif "ТРАФИКА" in risk_title:
+                user_template_key = "user_warning_only_traffic_template"
+            user_message = render_telegram_template(raw_settings, user_template_key, common_context)
         else:
-            user_message = render_telegram_template(raw_settings, "user_warning_template", common_context)
+            user_template_key = "user_warning_template"
+            if "УСТРОЙСТВ" in risk_title:
+                user_template_key = "user_warning_devices_template"
+            elif "ТРАФИКА" in risk_title:
+                user_template_key = "user_warning_traffic_template"
+            user_message = render_telegram_template(raw_settings, user_template_key, common_context)
     elif enforcement_type == "ban":
         if admin_event_enabled(raw_settings, "ban", has_admin_bot=has_admin_bot):
             admin_message = render_telegram_template(raw_settings, "admin_ban_template", common_context)
         user_event = "ban"
-        user_message = render_telegram_template(raw_settings, "user_ban_template", common_context)
+        user_template_key = "user_ban_template"
+        if "УСТРОЙСТВ" in risk_title:
+            user_template_key = "user_ban_devices_template"
+        elif "ТРАФИКА" in risk_title:
+            user_template_key = "user_ban_traffic_template"
+        user_message = render_telegram_template(raw_settings, user_template_key, common_context)
 
     if admin_message:
         if enforcement_type == "warning" and is_warning_only and bundle.case_id not in (None, ""):

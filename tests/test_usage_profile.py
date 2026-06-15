@@ -42,6 +42,8 @@ class UsageProfileTests(unittest.TestCase):
                 "threshold_probable_home": 30,
                 "threshold_probable_mobile": 50,
                 "review_ui_base_url": "https://mobguard.example.com",
+                "traffic_burst_min_bytes": 512 * 1024 * 1024,
+                "traffic_burst_window_minutes": 30,
             }
         }
         
@@ -593,6 +595,50 @@ class UsageProfileTests(unittest.TestCase):
             "traffic_limit_bytes": 0
         }
         self.assertEqual(determine_risk_title(profile_connection), "НЕВЕРНЫЙ ТИП ПОДКЛЮЧЕНИЯ")
+
+    def test_snapshot_respects_custom_traffic_burst_settings(self):
+        custom_config = {
+            "settings": {
+                "traffic_burst_min_bytes": 2 * 1024 * 1024 * 1024,
+                "traffic_burst_window_minutes": 15,
+            }
+        }
+        store = PlatformStore(self.db_path, custom_config, self.config_path, storage=self.storage)
+        store.init_schema()
+        store.sync_runtime_config(custom_config)
+
+        # 1. Below custom threshold (1.5 GB in 10 mins) -> no burst
+        snapshot_no_burst = build_usage_profile_snapshot(
+            store,
+            {"uuid": "uuid-1", "username": "alice", "system_id": 42, "telegram_id": "1001"},
+            panel_user={
+                "uuid": "uuid-1",
+                "usageProfileTrafficStats": {
+                    "series": [
+                        {"timestamp": "2026-04-22T10:00:00", "node-a": 800 * 1024 * 1024},
+                        {"timestamp": "2026-04-22T10:10:00", "node-a": 700 * 1024 * 1024},
+                    ]
+                },
+            },
+        )
+        self.assertNotIn("traffic_burst", snapshot_no_burst.get("soft_reasons", []))
+
+        # 2. Above custom threshold (2.5 GB in 10 mins) -> burst
+        snapshot_burst = build_usage_profile_snapshot(
+            store,
+            {"uuid": "uuid-1", "username": "alice", "system_id": 42, "telegram_id": "1001"},
+            panel_user={
+                "uuid": "uuid-1",
+                "usageProfileTrafficStats": {
+                    "series": [
+                        {"timestamp": "2026-04-22T10:00:00", "node-a": 1500 * 1024 * 1024},
+                        {"timestamp": "2026-04-22T10:10:00", "node-a": 1000 * 1024 * 1024},
+                    ]
+                },
+            },
+        )
+        self.assertIn("traffic_burst", snapshot_burst.get("soft_reasons", []))
+        self.assertEqual(snapshot_burst["traffic_burst"]["window_minutes"], 15)
 
 
 if __name__ == "__main__":

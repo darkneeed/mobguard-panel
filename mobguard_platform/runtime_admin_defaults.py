@@ -16,6 +16,8 @@ ENFORCEMENT_SETTINGS_DEFAULTS = {
     "warnings_before_ban": 3,
     "ban_durations_minutes": [15, 60, 1440, 20160],
     "warning_only_mode": False,
+    "traffic_burst_min_bytes": 10737418240,
+    "traffic_burst_window_minutes": 60,
     "manual_review_mixed_home_enabled": False,
     "manual_ban_approval_enabled": False,
     "dry_run": False,
@@ -246,6 +248,45 @@ ENFORCEMENT_TEMPLATE_DEFAULTS = {
         "Полный доступ восстановится автоматически по истечении срока ограничения."
     ),
 
+    "user_warning_only_devices_template": (
+        "⚠️ <b>Предупреждение: Лимит устройств</b>\n\n"
+        "Система обнаружила превышение лимита одновременно подключенных устройств на вашем аккаунте.\n"
+        "Доступ сейчас не ограничивается, но кейс отправлен на модерацию.\n\n"
+        "📱 Пожалуйста, соблюдайте лимит устройств: <b>{{usage_profile_hwid_device_limit}}</b> (подключено: <b>{{usage_profile_hwid_device_count_exact}}</b>).\n"
+    ),
+    "user_warning_only_traffic_template": (
+        "⚠️ <b>Предупреждение: Высокий трафик</b>\n\n"
+        "Система обнаружила всплеск трафика или превышение лимита на вашем аккаунте.\n"
+        "Доступ сейчас не ограничивается, но кейс отправлен на модерацию.\n\n"
+        "📊 Использовано за интервал: <b>{{usage_profile_traffic_burst_bytes}}</b> за <b>{{usage_profile_traffic_burst_window}} мин</b>.\n"
+    ),
+    "user_warning_devices_template": (
+        "⚠️ <b>Предупреждение: Превышение лимита устройств</b>\n\n"
+        "Система выявила превышение лимита одновременно подключенных устройств на вашем аккаунте.\n"
+        "Это нарушает правила использования, <b>доступ к части серверов может быть ограничен.</b>\n\n"
+        "📱 Пожалуйста, отключите лишние устройства. Лимит: <b>{{usage_profile_hwid_device_limit}}</b> (подключено: <b>{{usage_profile_hwid_device_count_exact}}</b>).\n"
+    ),
+    "user_warning_traffic_template": (
+        "⚠️ <b>Предупреждение: Превышение трафика</b>\n\n"
+        "Система выявила критический всплеск трафика на вашем аккаунте.\n"
+        "Это нарушает правила использования, <b>доступ к части серверов может быть ограничен.</b>\n\n"
+        "📊 Использовано: <b>{{usage_profile_traffic_burst_bytes}}</b> за <b>{{usage_profile_traffic_burst_window}} мин</b>.\n"
+    ),
+    "user_ban_devices_template": (
+        "⛔️ <b>Доступ ограничен: Превышение лимита устройств</b>\n\n"
+        "Вы не отреагировали на предупреждение и продолжили превышать лимит подключенных устройств.\n\n"
+        "⏳ <b>Ограничение на {{ban_text}}.</b>\n"
+        "Лимит: <b>{{usage_profile_hwid_device_limit}}</b> (подключено: <b>{{usage_profile_hwid_device_count_exact}}</b>).\n"
+        "Полный доступ восстановится автоматически по истечении срока ограничения."
+    ),
+    "user_ban_traffic_template": (
+        "⛔️ <b>Доступ ограничен: Превышение трафика</b>\n\n"
+        "Вы не отреагировали на предупреждение и продолжили использовать трафик в объёмах, нарушающих лимиты.\n\n"
+        "⏳ <b>Ограничение на {{ban_text}}.</b>\n"
+        "Использовано: <b>{{usage_profile_traffic_burst_bytes}}</b> за <b>{{usage_profile_traffic_burst_window}} мин</b>.\n"
+        "Полный доступ восстановится автоматически по истечении срока ограничения."
+    ),
+
     # ─── ADMIN TEMPLATES ────────────────────────────────────────────────────────
 
     "admin_warning_only_template": (
@@ -254,6 +295,7 @@ ENFORCEMENT_TEMPLATE_DEFAULTS = {
         "🆔 ID: {{telegram_id}}\n"
         "📱 Username: @{{username}}\n"
         "🔑 UUID: <code>{{uuid}}</code>\n\n"
+        "🚨 <b>Нарушение:</b> {{risk_title}}\n"
         "🔍 <b>Причина:</b> {{confidence_band}}\n"
         "📊 Профиль: {{usage_profile_summary}}\n"
         "🚩 Флаги: {{usage_profile_soft_reasons}}\n\n"
@@ -266,6 +308,7 @@ ENFORCEMENT_TEMPLATE_DEFAULTS = {
         "🆔 ID: {{telegram_id}}\n"
         "📱 Username: @{{username}}\n"
         "🔑 UUID: <code>{{uuid}}</code>\n\n"
+        "🚨 <b>Нарушение:</b> {{risk_title}}\n"
         "🔍 <b>Вердикт:</b> {{confidence_band}}\n"
         "📊 Профиль: {{usage_profile_summary}}\n"
         "🚩 Флаги: {{usage_profile_soft_reasons}}\n\n"
@@ -278,6 +321,7 @@ ENFORCEMENT_TEMPLATE_DEFAULTS = {
         "🆔 ID: {{telegram_id}}\n"
         "📱 Username: @{{username}}\n"
         "🔑 UUID: <code>{{uuid}}</code>\n\n"
+        "🚨 <b>Нарушение:</b> {{risk_title}}\n"
         "⏳ <b>Ограничение:</b> {{ban_text}} ({{ban_minutes}} мин)\n"
         "🔍 <b>Вердикт:</b> {{confidence_band}}\n"
         "📊 Профиль: {{usage_profile_summary}}\n"
@@ -291,6 +335,7 @@ ENFORCEMENT_TEMPLATE_DEFAULTS = {
         "🆔 ID: {{telegram_id}}\n"
         "📱 Username: @{{username}}\n"
         "🔑 UUID: <code>{{uuid}}</code>\n\n"
+        "🚨 <b>Нарушение:</b> {{risk_title}}\n"
         "🔍 <b>Вердикт:</b> {{confidence_band}}\n"
         "📊 Профиль: {{usage_profile_summary}}\n"
         "🚩 Флаги: {{usage_profile_soft_reasons}}\n\n"

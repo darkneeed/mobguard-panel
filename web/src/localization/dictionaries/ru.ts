@@ -2100,6 +2100,36 @@ export const ruDictionary: TranslationDictionary = {
         description:
           "Пользовательское сообщение, отправляемое при ограничении доступа.\n\nДоступные теги:\n• {{username}}, {{uuid}}, {{system_id}}, {{telegram_id}}\n• {{ip}}, {{isp}}, {{tag}}\n• {{ban_minutes}} — длительность в минутах\n• {{ban_text}} — текстовое описание (например: «1 час»)",
       },
+      user_warning_only_devices_template: {
+        label: "Сообщение без эскалации (Превышение лимита устройств)",
+        description:
+          "Пользовательское сообщение, когда превышен лимит устройств, кейс warning-only и не эскалируется.\n\nДоступные теги:\n• {{username}}, {{uuid}}, {{system_id}}, {{telegram_id}}\n• {{ip}}, {{isp}}, {{tag}}\n• {{usage_profile_hwid_device_limit}} — лимит устройств\n• {{usage_profile_hwid_device_count_exact}} — подключено устройств",
+      },
+      user_warning_only_traffic_template: {
+        label: "Сообщение без эскалации (Превышение лимита трафика)",
+        description:
+          "Пользовательское сообщение, когда превышен лимит трафика, кейс warning-only и не эскалируется.\n\nДоступные теги:\n• {{username}}, {{uuid}}, {{system_id}}, {{telegram_id}}\n• {{ip}}, {{isp}}, {{tag}}\n• {{usage_profile_traffic_burst_bytes}} — объём трафика\n• {{usage_profile_traffic_burst_window}} — окно (мин)",
+      },
+      user_warning_devices_template: {
+        label: "Сообщение о предупреждении (Превышение лимита устройств)",
+        description:
+          "Пользовательское сообщение о предупреждении перед ограничением доступа при превышении лимита устройств.\n\nДоступные теги:\n• {{username}}, {{uuid}}, {{system_id}}, {{telegram_id}}\n• {{ip}}, {{isp}}, {{tag}}\n• {{warning_count}}, {{warnings_before_ban}}, {{warnings_left}}\n• {{usage_profile_hwid_device_limit}} — лимит устройств\n• {{usage_profile_hwid_device_count_exact}} — подключено устройств",
+      },
+      user_warning_traffic_template: {
+        label: "Сообщение о предупреждении (Превышение лимита трафика)",
+        description:
+          "Пользовательское сообщение о предупреждении перед ограничением доступа при превышении лимита трафика.\n\nДоступные теги:\n• {{username}}, {{uuid}}, {{system_id}}, {{telegram_id}}\n• {{ip}}, {{isp}}, {{tag}}\n• {{warning_count}}, {{warnings_before_ban}}, {{warnings_left}}\n• {{usage_profile_traffic_burst_bytes}} — объём трафика\n• {{usage_profile_traffic_burst_window}} — окно (мин)",
+      },
+      user_ban_devices_template: {
+        label: "Сообщение об ограничении доступа (Превышение лимита устройств)",
+        description:
+          "Пользовательское сообщение, отправляемое при ограничении доступа за превышение лимита устройств.\n\nДоступные теги:\n• {{username}}, {{uuid}}, {{system_id}}, {{telegram_id}}\n• {{ip}}, {{isp}}, {{tag}}\n• {{ban_minutes}}, {{ban_text}}\n• {{usage_profile_hwid_device_limit}} — лимит устройств\n• {{usage_profile_hwid_device_count_exact}} — подключено устройств",
+      },
+      user_ban_traffic_template: {
+        label: "Сообщение об ограничении доступа (Превышение лимита трафика)",
+        description:
+          "Пользовательское сообщение, отправляемое при ограничении доступа за превышение лимита трафика.\n\nДоступные теги:\n• {{username}}, {{uuid}}, {{system_id}}, {{telegram_id}}\n• {{ip}}, {{isp}}, {{tag}}\n• {{ban_minutes}}, {{ban_text}}\n• {{usage_profile_traffic_burst_bytes}} — объём трафика\n• {{usage_profile_traffic_burst_window}} — окно (мин)",
+      },
       admin_warning_only_template: {
         label: "Сообщение без эскалации",
         description:

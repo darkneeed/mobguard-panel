@@ -55,6 +55,12 @@ type TemplateFieldKey =
   | "user_warning_only_template"
   | "user_warning_template"
   | "user_ban_template"
+  | "user_warning_only_devices_template"
+  | "user_warning_only_traffic_template"
+  | "user_warning_devices_template"
+  | "user_warning_traffic_template"
+  | "user_ban_devices_template"
+  | "user_ban_traffic_template"
   | "admin_warning_only_template"
   | "admin_warning_template"
   | "admin_ban_template"
@@ -160,6 +166,12 @@ const TEMPLATE_FIELDS: TemplateField[] = [
   { key: "user_warning_only_template", audience: "user" },
   { key: "user_warning_template", audience: "user" },
   { key: "user_ban_template", audience: "user" },
+  { key: "user_warning_only_devices_template", audience: "user" },
+  { key: "user_warning_only_traffic_template", audience: "user" },
+  { key: "user_warning_devices_template", audience: "user" },
+  { key: "user_warning_traffic_template", audience: "user" },
+  { key: "user_ban_devices_template", audience: "user" },
+  { key: "user_ban_traffic_template", audience: "user" },
   { key: "admin_warning_only_template", audience: "admin" },
   { key: "admin_warning_template", audience: "admin" },
   { key: "admin_ban_template", audience: "admin" },

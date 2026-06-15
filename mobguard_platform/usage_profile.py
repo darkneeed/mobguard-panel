@@ -438,7 +438,11 @@ def _panel_hwid_count(panel_user: Mapping[str, Any] | None, devices: list[dict[s
     return None
 
 
-def _traffic_series_burst(payload: Mapping[str, Any] | None) -> Optional[dict[str, Any]]:
+def _traffic_series_burst(
+    payload: Mapping[str, Any] | None,
+    burst_min_bytes: int = TRAFFIC_BURST_MIN_BYTES,
+    burst_window_minutes: int = BURST_WINDOW_MINUTES,
+) -> Optional[dict[str, Any]]:
     if not isinstance(payload, Mapping):
         return None
     raw_series = payload.get("series")
@@ -491,7 +495,7 @@ def _traffic_series_burst(payload: Mapping[str, Any] | None) -> Optional[dict[st
 
     for right, (current_ts, current_bytes) in enumerate(points):
         current_sum += current_bytes
-        while left < right and (current_ts - points[left][0]).total_seconds() > BURST_WINDOW_MINUTES * 60:
+        while left < right and (current_ts - points[left][0]).total_seconds() > burst_window_minutes * 60:
             current_sum -= points[left][1]
             left += 1
         point_count = right - left + 1
@@ -504,14 +508,14 @@ def _traffic_series_burst(payload: Mapping[str, Any] | None) -> Optional[dict[st
                 "peak_bytes": max(bytes_value for _, bytes_value in points[left : right + 1]),
             }
 
-    if best["bytes"] < TRAFFIC_BURST_MIN_BYTES or best["point_count"] < TRAFFIC_BURST_MIN_POINTS:
+    if best["bytes"] < burst_min_bytes or best["point_count"] < TRAFFIC_BURST_MIN_POINTS:
         return None
 
     return {
         "source": "traffic_bytes",
         "bytes": int(best["bytes"]),
         "bytes_text": _format_bytes(best["bytes"]),
-        "window_minutes": BURST_WINDOW_MINUTES,
+        "window_minutes": burst_window_minutes,
         "started_at": best["start"].replace(microsecond=0).isoformat(),
         "ended_at": best["end"].replace(microsecond=0).isoformat(),
         "point_count": int(best["point_count"]),
@@ -681,6 +685,30 @@ def build_usage_profile_snapshot(
     observations: list[dict[str, Any]] = []
     open_cases: list[dict[str, Any]] = []
     traffic_stats_payload = _traffic_stats_payload(panel_user)
+
+    try:
+        live_rules = store.get_live_rules()
+        settings = live_rules.get("settings", {})
+    except Exception:
+        settings = {}
+
+    burst_min_bytes = settings.get("traffic_burst_min_bytes")
+    if burst_min_bytes is None:
+        burst_min_bytes = TRAFFIC_BURST_MIN_BYTES
+    else:
+        try:
+            burst_min_bytes = int(burst_min_bytes)
+        except (TypeError, ValueError):
+            burst_min_bytes = TRAFFIC_BURST_MIN_BYTES
+
+    burst_window_minutes = settings.get("traffic_burst_window_minutes")
+    if burst_window_minutes is None:
+        burst_window_minutes = BURST_WINDOW_MINUTES
+    else:
+        try:
+            burst_window_minutes = int(burst_window_minutes)
+        except (TypeError, ValueError):
+            burst_window_minutes = BURST_WINDOW_MINUTES
 
     with _store_connect(store) as conn:
         analysis_select = _analysis_event_select(conn, store)
@@ -894,13 +922,17 @@ def build_usage_profile_snapshot(
                         )
             last_geo = item
 
-    burst = _traffic_series_burst(traffic_stats_payload)
+    burst = _traffic_series_burst(
+        traffic_stats_payload,
+        burst_min_bytes=burst_min_bytes,
+        burst_window_minutes=burst_window_minutes,
+    )
     if burst is None and observations:
         left = 0
         timestamps = [item["created_at"] for item in observations]
         best_window = {"count": 0, "start": timestamps[0], "end": timestamps[0]}
         for right, current in enumerate(timestamps):
-            while left < right and (current - timestamps[left]).total_seconds() > BURST_WINDOW_MINUTES * 60:
+            while left < right and (current - timestamps[left]).total_seconds() > burst_window_minutes * 60:
                 left += 1
             count = right - left + 1
             if count > best_window["count"]:
@@ -913,7 +945,7 @@ def build_usage_profile_snapshot(
             burst = {
                 "source": "event_count",
                 "event_count": int(best_window["count"]),
-                "window_minutes": BURST_WINDOW_MINUTES,
+                "window_minutes": burst_window_minutes,
                 "started_at": best_window["start"].replace(microsecond=0).isoformat(),
                 "ended_at": best_window["end"].replace(microsecond=0).isoformat(),
             }

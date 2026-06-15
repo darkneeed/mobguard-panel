@@ -6,6 +6,7 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 
+from unittest.mock import patch
 from api.services.telegram_notifier import emit_ingest_notifications
 from mobguard_platform import AnalysisStore, DecisionBundle, PlatformStore
 
@@ -193,6 +194,45 @@ class TelegramNotifierFlowTests(unittest.TestCase):
         self.assertIn("Неверный тип подключения", text)
         self.assertNotIn("Starting analysis for IP", text)
         self.assertNotIn("Querying IPInfo API", text)
+
+    def test_user_notifications_route_to_specialized_templates(self):
+        user = {"uuid": "uuid-1", "username": "alice", "telegramId": "1001", "id": 42}
+        bundle = DecisionBundle(
+            ip="10.10.10.23",
+            verdict="HOME",
+            confidence_band="PROBABLE_HOME",
+            score=-20,
+            asn=12345,
+            isp="MTS",
+        )
+        bundle.event_id = 9
+        bundle.log.append("Device limit exceeded")
+
+        self.config["settings"]["user_warning_devices_template"] = "Custom Devices Warning Template: {{username}}"
+        self.config["settings"]["user_warning_traffic_template"] = "Custom Traffic Warning: {{username}}"
+        self.config["settings"]["dry_run"] = False
+        self.store.sync_runtime_config(self.config)
+
+        with patch("mobguard_platform.usage_profile.determine_risk_title", return_value="ПРЕВЫШЕНИЕ КОЛИЧЕСТВА УСТРОЙСТВ"):
+            asyncio.run(
+                emit_ingest_notifications(
+                    self.container,
+                    user,
+                    bundle,
+                    "TAG",
+                    None,
+                    {
+                        "type": "warning",
+                        "warning_count": 1,
+                        "warning_only": False,
+                    },
+                )
+            )
+
+        self.assertEqual(len(self.notifier.user_calls), 1)
+        telegram_id, text, kwargs = self.notifier.user_calls[0]
+        self.assertEqual(telegram_id, 1001)
+        self.assertEqual(text, "Custom Devices Warning Template: alice")
 
 
 if __name__ == "__main__":

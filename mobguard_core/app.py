@@ -2313,7 +2313,12 @@ async def handle_violation(user: Dict, tag: str, bundle: DecisionBundle, warning
         await db.delete_tracker(tracker_key)
 
         if not DRY_RUN and user.get('telegramId') and user_event_notifications_enabled("warning_only"):
-            user_msg = render_runtime_template("user_warning_only_template", common_context)
+            user_template_key = "user_warning_only_template"
+            if "УСТРОЙСТВ" in risk_title:
+                user_template_key = "user_warning_only_devices_template"
+            elif "ТРАФИКА" in risk_title:
+                user_template_key = "user_warning_only_traffic_template"
+            user_msg = render_runtime_template(user_template_key, common_context)
             await notify_user(int(user['telegramId']), user_msg)
         return
 
@@ -2346,8 +2351,13 @@ async def handle_violation(user: Dict, tag: str, bundle: DecisionBundle, warning
                 await notify_admin(admin_msg)
             await db.delete_tracker(tracker_key)
             if not DRY_RUN and user.get('telegramId') and user_event_notifications_enabled("warning"):
+                user_template_key = "user_warning_template"
+                if "УСТРОЙСТВ" in risk_title:
+                    user_template_key = "user_warning_devices_template"
+                elif "ТРАФИКА" in risk_title:
+                    user_template_key = "user_warning_traffic_template"
                 user_msg = render_runtime_template(
-                    "user_warning_template",
+                    user_template_key,
                     {
                         **common_context,
                         "warning_count": warning_count,
@@ -2462,8 +2472,13 @@ async def handle_violation(user: Dict, tag: str, bundle: DecisionBundle, warning
                 )
                 return
             if user.get('telegramId') and user_event_notifications_enabled("ban"):
+                user_template_key = "user_ban_template"
+                if "УСТРОЙСТВ" in risk_title:
+                    user_template_key = "user_ban_devices_template"
+                elif "ТРАФИКА" in risk_title:
+                    user_template_key = "user_ban_traffic_template"
                 user_msg = render_runtime_template(
-                    "user_ban_template",
+                    user_template_key,
                     {
                         **common_context,
                         "warning_count": warning_count,
@@ -2496,12 +2511,16 @@ async def handle_violation(user: Dict, tag: str, bundle: DecisionBundle, warning
                 "warnings_left": max(warnings_before_ban - 1, 0),
             },
         )
-        admin_msg = _replace_risk_title(admin_msg)
         await notify_admin(admin_msg)
 
     if not DRY_RUN and user.get('telegramId') and user_event_notifications_enabled("warning"):
+        user_template_key = "user_warning_template"
+        if "УСТРОЙСТВ" in risk_title:
+            user_template_key = "user_warning_devices_template"
+        elif "ТРАФИКА" in risk_title:
+            user_template_key = "user_warning_traffic_template"
         user_msg = render_runtime_template(
-            "user_warning_template",
+            user_template_key,
             {
                 **common_context,
                 "warning_count": 1,
