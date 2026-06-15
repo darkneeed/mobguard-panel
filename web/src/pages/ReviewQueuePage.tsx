@@ -161,6 +161,14 @@ function formatInventoryChipLabel(
   return duration ? `${ip} ×${hitCount} · ${duration}` : `${ip} ×${hitCount}`;
 }
 
+function formatBytes(bytes: number): string {
+  if (bytes === 0) return "0 B";
+  const k = 1024;
+  const sizes = ["B", "KB", "MB", "GB", "TB"];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
+}
+
 function getViolationType(item: any): "devices" | "connection" | "traffic" | "continues" | "generic" {
   let softReasons: string[] = [];
   try {
@@ -1246,42 +1254,124 @@ export function ReviewQueuePage({
 
                     {isViolationsQueue ? (
                       <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
-                        {isDeviceViolation && (
-                          <div style={{ background: "rgba(239, 68, 68, 0.08)", border: "1px solid rgba(239, 68, 68, 0.2)", borderRadius: "12px", padding: "0.75rem 1rem", display: "flex", flexDirection: "column", gap: "0.4rem" }}>
-                            <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.72rem", color: "var(--muted)", textTransform: "uppercase", fontWeight: 600 }}>
-                              <span style={{ color: "var(--danger)" }}>📱 Лимит устройств превышен</span>
-                              {item.hwid_device_limit !== undefined && (
-                                <span>Куплено: {item.hwid_device_limit}</span>
+                        {isDeviceViolation && (() => {
+                          const profileDevices = item.usage_profile?.devices || [];
+                          const limit = item.hwid_device_limit ?? item.usage_profile?.hwid_device_limit ?? 0;
+                          const count = item.hwid_device_count_exact ?? item.usage_profile?.hwid_device_count_exact ?? 0;
+                          
+                          return (
+                            <div style={{ background: "rgba(239, 68, 68, 0.08)", border: "1px solid rgba(239, 68, 68, 0.2)", borderRadius: "12px", padding: "0.75rem 1rem", display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.72rem", color: "var(--muted)", textTransform: "uppercase", fontWeight: 600 }}>
+                                <span style={{ color: "var(--danger)" }}>📱 Лимит устройств превышен</span>
+                              </div>
+                              
+                              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem", borderBottom: "1px solid rgba(239, 68, 68, 0.15)", paddingBottom: "0.5rem" }}>
+                                <div>
+                                  <span style={{ color: "var(--muted)", display: "block", fontSize: "0.68rem", textTransform: "uppercase", fontWeight: 600 }}>Разрешено</span>
+                                  <span style={{ color: "var(--ink)", fontWeight: 600, fontSize: "0.95rem" }}>{limit} устр.</span>
+                                </div>
+                                <div>
+                                  <span style={{ color: "var(--muted)", display: "block", fontSize: "0.68rem", textTransform: "uppercase", fontWeight: 600 }}>Используется</span>
+                                  <span style={{ color: "var(--danger)", fontWeight: 700, fontSize: "0.95rem" }}>{count} устр.</span>
+                                </div>
+                              </div>
+                              
+                              {profileDevices.length > 0 && (
+                                <div style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
+                                  <span style={{ color: "var(--muted)", fontSize: "0.68rem", textTransform: "uppercase", fontWeight: 600 }}>Список устройств:</span>
+                                  <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
+                                    {profileDevices.map((dev: any, idx: number) => {
+                                      const devLabel = dev.label || dev.device_id || `Устройство ${idx + 1}`;
+                                      const devOs = [dev.os_family, dev.os_version].filter(Boolean).join(" ");
+                                      const devApp = [dev.app_name, dev.app_version].filter(Boolean).join(" ");
+                                      return (
+                                        <div key={idx} style={{ fontSize: "0.75rem", color: "var(--ink)", display: "flex", flexDirection: "column", background: "rgba(255, 255, 255, 0.03)", border: "1px solid rgba(255, 255, 255, 0.05)", borderRadius: "6px", padding: "4px 8px" }}>
+                                          <div style={{ fontWeight: 600, color: "var(--ink)" }}>📱 {devLabel}</div>
+                                          {devOs || devApp ? (
+                                            <div style={{ fontSize: "0.68rem", color: "var(--muted)", marginTop: "2px" }}>
+                                              {[devOs, devApp].filter(Boolean).join(" · ")}
+                                            </div>
+                                          ) : null}
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
                               )}
+                              
+                              <div style={{ display: "flex", flexWrap: "wrap", gap: "0.4rem", marginTop: "0.2rem" }}>
+                                {softReasons.includes("device_rotation") && (
+                                  <span className="tag" style={{ background: "rgba(239, 68, 68, 0.15)", color: "var(--danger)", fontSize: "0.68rem", padding: "2px 6px" }}>
+                                    🔄 Ротация устройств
+                                  </span>
+                                )}
+                                {softReasons.includes("device_os_mismatch") && (
+                                  <span className="tag" style={{ background: "rgba(239, 68, 68, 0.15)", color: "var(--danger)", fontSize: "0.68rem", padding: "2px 6px" }}>
+                                    💻 Несоответствие ОС
+                                  </span>
+                                )}
+                              </div>
                             </div>
-                            {item.hwid_device_count_exact !== undefined && (
-                              <div style={{ fontSize: "1rem", fontWeight: 700, color: "var(--ink)" }}>
-                                Используется: <span style={{ color: "var(--danger)" }}>{item.hwid_device_count_exact}</span> устр.
-                              </div>
-                            )}
-                            {softReasons.includes("device_rotation") && (
-                              <div style={{ fontSize: "0.75rem", color: "var(--danger)", display: "flex", alignItems: "center", gap: "0.25rem" }}>
-                                🔄 Ротация устройств
-                              </div>
-                            )}
-                            {softReasons.includes("device_os_mismatch") && (
-                              <div style={{ fontSize: "0.75rem", color: "var(--danger)", display: "flex", alignItems: "center", gap: "0.25rem" }}>
-                                💻 Несоответствие ОС
-                              </div>
-                            )}
-                          </div>
-                        )}
+                          );
+                        })()}
 
-                        {isTrafficViolation && (
-                          <div style={{ background: "rgba(245, 158, 11, 0.08)", border: "1px solid rgba(245, 158, 11, 0.2)", borderRadius: "12px", padding: "0.75rem 1rem", display: "flex", flexDirection: "column", gap: "0.4rem" }}>
-                            <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.72rem", color: "var(--muted)", textTransform: "uppercase", fontWeight: 600 }}>
-                              <span style={{ color: "var(--warning)" }}>⚡ Всплеск трафика</span>
+                        {isTrafficViolation && (() => {
+                          const burst = item.usage_profile?.traffic_burst;
+                          if (!burst) {
+                            return (
+                              <div style={{ background: "rgba(245, 158, 11, 0.08)", border: "1px solid rgba(245, 158, 11, 0.2)", borderRadius: "12px", padding: "0.75rem 1rem", display: "flex", flexDirection: "column", gap: "0.4rem" }}>
+                                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.72rem", color: "var(--muted)", textTransform: "uppercase", fontWeight: 600 }}>
+                                  <span style={{ color: "var(--warning)" }}>⚡ Всплеск трафика</span>
+                                </div>
+                                <div style={{ fontSize: "0.82rem", color: "var(--ink)", fontWeight: 500 }}>
+                                  {item.usage_profile_summary || "Зафиксировано превышение по объёму потребляемого трафика."}
+                                </div>
+                              </div>
+                            );
+                          }
+
+                          const isBytes = burst.source === "traffic_bytes";
+                          const limitVal = isBytes ? (burst.min_bytes || 10737418240) : 100;
+                          const actualVal = isBytes ? (burst.bytes || 0) : (burst.event_count || 0);
+                          const limitText = isBytes ? (burst.min_bytes_text || "10.0 GB") : "100 соб.";
+                          const actualText = isBytes ? (burst.bytes_text || "0 B") : `${burst.event_count} соб.`;
+                          const excessVal = actualVal - limitVal;
+                          
+                          let calculationText = "";
+                          if (isBytes) {
+                            calculationText = excessVal > 0 
+                              ? `Превышение на +${formatBytes(excessVal)} (${Math.round((actualVal / limitVal) * 100)}% от лимита)`
+                              : `В пределах лимита`;
+                          } else {
+                            calculationText = excessVal > 0 
+                              ? `Превышение на +${excessVal} событий (${Math.round((actualVal / limitVal) * 100)}% от лимита)`
+                              : `В пределах лимита`;
+                          }
+
+                          return (
+                            <div style={{ background: "rgba(245, 158, 11, 0.08)", border: "1px solid rgba(245, 158, 11, 0.2)", borderRadius: "12px", padding: "0.75rem 1rem", display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.72rem", color: "var(--muted)", textTransform: "uppercase", fontWeight: 600 }}>
+                                <span style={{ color: "var(--warning)" }}>⚡ Всплеск трафика</span>
+                                <span>Окно: {burst.window_minutes || 60} мин</span>
+                              </div>
+                              
+                              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem", borderBottom: "1px solid rgba(245, 158, 11, 0.15)", paddingBottom: "0.5rem" }}>
+                                <div>
+                                  <span style={{ color: "var(--muted)", display: "block", fontSize: "0.68rem", textTransform: "uppercase", fontWeight: 600 }}>Было (Лимит)</span>
+                                  <span style={{ color: "var(--ink)", fontWeight: 600, fontSize: "0.95rem" }}>{limitText}</span>
+                                </div>
+                                <div>
+                                  <span style={{ color: "var(--muted)", display: "block", fontSize: "0.68rem", textTransform: "uppercase", fontWeight: 600 }}>Стало (Факт)</span>
+                                  <span style={{ color: "var(--warning)", fontWeight: 700, fontSize: "0.95rem" }}>{actualText}</span>
+                                </div>
+                              </div>
+                              
+                              <div style={{ fontSize: "0.75rem", color: "var(--ink)", fontWeight: 500 }}>
+                                <strong>Расчёт:</strong> {calculationText}
+                              </div>
                             </div>
-                            <div style={{ fontSize: "0.82rem", color: "var(--ink)", fontWeight: 500 }}>
-                              {item.usage_profile_summary || "Зафиксировано превышение по объёму потребляемого трафика."}
-                            </div>
-                          </div>
-                        )}
+                          );
+                        })()}
 
                         {hasOngoing && (
                           <div style={{ background: "rgba(59, 130, 246, 0.08)", border: "1px solid rgba(59, 130, 246, 0.2)", borderRadius: "12px", padding: "0.75rem 1rem", display: "flex", flexDirection: "column", gap: "0.4rem" }}>

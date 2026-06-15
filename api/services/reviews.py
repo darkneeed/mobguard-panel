@@ -39,7 +39,10 @@ def _recheck_busy_payload(
 
 def list_reviews(container: Any, filters: dict[str, Any]) -> dict[str, Any]:
     try:
-        return container.store.list_review_cases(filters)
+        res = container.store.list_review_cases(filters)
+        if isinstance(res, dict) and "items" in res:
+            res["items"] = [_enrich_review_usage_profile(container, item) for item in res["items"]]
+        return res
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

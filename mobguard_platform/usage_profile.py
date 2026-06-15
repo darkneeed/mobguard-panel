@@ -521,6 +521,8 @@ def _traffic_series_burst(
         "point_count": int(best["point_count"]),
         "peak_bytes": int(best["peak_bytes"]),
         "peak_bytes_text": _format_bytes(best["peak_bytes"]),
+        "min_bytes": burst_min_bytes,
+        "min_bytes_text": _format_bytes(burst_min_bytes),
     }
 
 
