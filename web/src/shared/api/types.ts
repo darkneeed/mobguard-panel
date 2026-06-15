@@ -143,6 +143,7 @@ export type ReviewItem = {
   opened_at: string;
   updated_at: string;
   review_url: string;
+  usage_profile?: UsageProfile;
 };
 
 export type ReviewListResponse = {
@@ -362,6 +363,21 @@ export type UserCardFlags = {
   active_warning?: boolean;
 };
 
+export type TrafficBurst = {
+  source?: string | null;
+  bytes?: number | null;
+  bytes_text?: string | null;
+  window_minutes?: number | null;
+  started_at?: string | null;
+  ended_at?: string | null;
+  point_count?: number | null;
+  peak_bytes?: number | null;
+  peak_bytes_text?: string | null;
+  min_bytes?: number | null;
+  min_bytes_text?: string | null;
+  event_count?: number | null;
+};
+
 export type UsageProfile = {
   available?: boolean;
   event_count?: number;
@@ -387,7 +403,7 @@ export type UsageProfile = {
   };
   top_ips?: Array<Record<string, unknown>>;
   top_providers?: Array<Record<string, unknown>>;
-  traffic_burst?: Record<string, unknown> | null;
+  traffic_burst?: TrafficBurst | null;
   soft_reasons?: string[];
   signal_counts?: Record<string, unknown>;
   ongoing_duration_seconds?: number | null;
@@ -397,6 +413,8 @@ export type UsageProfile = {
   usage_profile_summary?: string;
   summary_score?: number;
   summary_reason_set?: string[];
+  hwid_device_limit?: number | null;
+  hwid_device_count_exact?: number | null;
 };
 
 export type UserCardResponse = {
