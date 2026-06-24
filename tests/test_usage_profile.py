@@ -144,6 +144,13 @@ class UsageProfileTests(unittest.TestCase):
             app_name="Happ",
             app_version="1.0.0",
         )
+        # Generate 5 additional device switches within 30 minutes to trigger the "more than 5 switches per hour" rule
+        self._record_event("2026-04-11T10:05:00", "1.1.1.1", "Provider RU", "node-a", "Node A", country="RU", region="Moscow", city="Moscow", loc="55.7558,37.6176", device_id="and-1", device_label="Pixel 8", os_family="Android", os_version="15", app_name="Happ", app_version="1.2.3")
+        self._record_event("2026-04-11T10:10:00", "1.1.1.1", "Provider RU", "node-a", "Node A", country="RU", region="Moscow", city="Moscow", loc="55.7558,37.6176", device_id="ios-1", device_label="iPhone 15", os_family="iOS", os_version="17.4", app_name="Happ", app_version="1.0.0")
+        self._record_event("2026-04-11T10:15:00", "1.1.1.1", "Provider RU", "node-a", "Node A", country="RU", region="Moscow", city="Moscow", loc="55.7558,37.6176", device_id="and-1", device_label="Pixel 8", os_family="Android", os_version="15", app_name="Happ", app_version="1.2.3")
+        self._record_event("2026-04-11T10:20:00", "1.1.1.1", "Provider RU", "node-a", "Node A", country="RU", region="Moscow", city="Moscow", loc="55.7558,37.6176", device_id="ios-1", device_label="iPhone 15", os_family="iOS", os_version="17.4", app_name="Happ", app_version="1.0.0")
+        self._record_event("2026-04-11T10:25:00", "1.1.1.1", "Provider RU", "node-a", "Node A", country="RU", region="Moscow", city="Moscow", loc="55.7558,37.6176", device_id="and-1", device_label="Pixel 8", os_family="Android", os_version="15", app_name="Happ", app_version="1.2.3")
+
         self._record_event(
             "2026-04-11T10:30:00",
             "2.2.2.2",

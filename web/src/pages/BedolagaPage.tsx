@@ -3,6 +3,7 @@ import { Loader2 } from "lucide-react";
 
 import { api, BedolagaOverviewResponse, BedolagaUser } from "../api/client";
 import { useI18n } from "../localization";
+import { ManualBanModal } from "../components/ManualBanModal";
 
 function statusColor(status: string): string {
   switch (status?.toLowerCase()) {
@@ -134,6 +135,8 @@ export function BedolagaPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [refreshAt, setRefreshAt] = useState(0);
+  const [banModalOpen, setBanModalOpen] = useState(false);
+  const [selectedUsername, setSelectedUsername] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -251,7 +254,7 @@ export function BedolagaPage() {
             <table className="bedolaga-table">
               <thead>
                 <tr>
-                  {["Пользователь", "Статус", "Подписка", "Группа", "Баланс", "Зарегистрирован"].map((h) => (
+                  {["Пользователь", "Статус", "Подписка", "Группа", "Баланс", "Зарегистрирован", "Действия"].map((h) => (
                     <th key={h} className="bedolaga-th">
                       {h}
                     </th>
@@ -293,6 +296,27 @@ export function BedolagaPage() {
                     <td className="bedolaga-td" style={{ color: "var(--muted)", fontSize: "0.82rem", whiteSpace: "nowrap" }}>
                       {formatDate(u.created_at)}
                     </td>
+                    <td className="bedolaga-td">
+                      {u.username && u.status?.toLowerCase() !== "blocked" && (
+                        <button
+                          className="ghost small-button"
+                          style={{
+                            color: "var(--danger, #ef4444)",
+                            border: "1px solid rgba(239, 68, 68, 0.2)",
+                            padding: "2px 8px",
+                            fontSize: "0.75rem",
+                            borderRadius: "4px",
+                            cursor: "pointer"
+                          }}
+                          onClick={() => {
+                            setSelectedUsername(u.username || "");
+                            setBanModalOpen(true);
+                          }}
+                        >
+                          🚫 Бан
+                        </button>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -310,6 +334,17 @@ export function BedolagaPage() {
             Перейдите в <strong>Настройки → Доступ</strong> и укажите URL и токен Bedolaga API
           </p>
         </div>
+      )}
+      {selectedUsername && (
+        <ManualBanModal
+          open={banModalOpen}
+          username={selectedUsername}
+          onClose={() => {
+            setBanModalOpen(false);
+            setSelectedUsername("");
+          }}
+          onSuccess={() => setRefreshAt(Date.now())}
+        />
       )}
     </div>
   );

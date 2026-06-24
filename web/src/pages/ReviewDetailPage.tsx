@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { Loader2 } from "lucide-react";
+import { ManualBanModal } from "../components/ManualBanModal";
 
 import { hasPermission } from "../app/permissions";
 import {
@@ -59,6 +60,7 @@ type ReviewQueueLocationState = {
   reviewQueueSearch?: string;
   reviewQueueItemIds?: number[];
   reviewQueueCurrentIndex?: number;
+  isViolationsQueue?: boolean;
 };
 
 const SHARED_ACCESS_REASON_CODES = [
@@ -75,6 +77,7 @@ export function ReviewDetailPage({ session }: { session?: Session }) {
   const { caseId = "" } = useParams();
   const location = useLocation();
   const navigate = useNavigate();
+  const [banModalOpen, setBanModalOpen] = useState(false);
   const [data, setData] = useState<ReviewPayload | null>(null);
   const [note, setNote] = useState("");
   const [error, setError] = useState("");
@@ -83,12 +86,41 @@ export function ReviewDetailPage({ session }: { session?: Session }) {
   const [resolvingAction, setResolvingAction] = useState<string | null>(null);
   const queueState =
     (location.state as ReviewQueueLocationState | null) ?? null;
+
+  const softReasons = useMemo(() => {
+    const profileReasons = data?.usage_profile?.soft_reasons || [];
+    const dbReasons = data?.usage_profile_soft_reasons || [];
+    return Array.from(new Set([...profileReasons, ...dbReasons]));
+  }, [data]);
+
+  const isDeviceLimitExceeded = useMemo(() => {
+    const limit = data?.hwid_device_limit ?? data?.usage_profile?.hwid_device_limit;
+    const count = data?.hwid_device_count_exact ?? data?.usage_profile?.hwid_device_count_exact;
+    return limit !== undefined && limit !== null && count !== undefined && count !== null && count > limit;
+  }, [data]);
+
+  const isDeviceViolation = useMemo(() => {
+    return softReasons.includes("device_rotation") || softReasons.includes("device_os_mismatch") || isDeviceLimitExceeded;
+  }, [softReasons, isDeviceLimitExceeded]);
+
+  const isTrafficViolation = useMemo(() => {
+    return softReasons.includes("traffic_burst") || data?.review_reason === "traffic_limit_exceeded";
+  }, [softReasons, data?.review_reason]);
+
+  const hasOngoing = useMemo(() => {
+    return Boolean(data?.usage_profile_ongoing_duration_seconds && data.usage_profile_ongoing_duration_seconds > 0);
+  }, [data]);
+
+  const isViolation = queueState?.isViolationsQueue || isDeviceViolation || isTrafficViolation;
+
   const queueReturnPath = useMemo(
     () =>
       queueState?.reviewQueueSearch
-        ? `/queue?${queueState.reviewQueueSearch}`
-        : "/queue",
-    [queueState?.reviewQueueSearch],
+        ? `/${isViolation ? "violations" : "queue"}?${queueState.reviewQueueSearch}`
+        : isViolation
+          ? "/violations"
+          : "/queue",
+    [queueState?.reviewQueueSearch, isViolation],
   );
   const canResolve = hasPermission(session, "reviews.resolve");
 
@@ -177,6 +209,7 @@ export function ReviewDetailPage({ session }: { session?: Session }) {
               reviewQueueSearch: queueState.reviewQueueSearch,
               reviewQueueItemIds: nextIds,
               reviewQueueCurrentIndex: nextIds.indexOf(nextCaseId),
+              isViolationsQueue: isViolation,
             } satisfies ReviewQueueLocationState,
           });
           return;
@@ -357,6 +390,7 @@ export function ReviewDetailPage({ session }: { session?: Session }) {
             reviewQueueSearch: queueState.reviewQueueSearch,
             reviewQueueItemIds: queueState.reviewQueueItemIds,
             reviewQueueCurrentIndex: queueIndex - 1,
+            isViolationsQueue: isViolation,
           } satisfies ReviewQueueLocationState,
         });
       }
@@ -373,6 +407,7 @@ export function ReviewDetailPage({ session }: { session?: Session }) {
             reviewQueueSearch: queueState.reviewQueueSearch,
             reviewQueueItemIds: queueState.reviewQueueItemIds,
             reviewQueueCurrentIndex: queueIndex + 1,
+            isViolationsQueue: isViolation,
           } satisfies ReviewQueueLocationState,
         });
       }
@@ -399,8 +434,15 @@ export function ReviewDetailPage({ session }: { session?: Session }) {
     <section className="page review-detail-page">
       <div className="page-header page-header-stack">
         <div>
-          <h1>{t("reviewDetail.title", { caseId })}</h1>
-          <p className="page-lede">{t("reviewDetail.description")}</p>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.55rem", flexWrap: "wrap" }}>
+            <h1>{isViolation ? t("reviewDetail.violationTitle", { caseId }) : t("reviewDetail.title", { caseId })}</h1>
+            {isViolation && hasOngoing && (
+              <span className="tag" style={{ background: "rgba(59, 130, 246, 0.15)", color: "var(--accent)", border: "1px solid rgba(59, 130, 246, 0.3)", padding: "4px 8px", fontSize: "0.8rem", height: "fit-content" }}>
+                🔁 {t("reviewQueue.ongoing", { duration: data?.usage_profile_ongoing_duration_text || t("reviewQueue.ongoingFallback") })}
+              </span>
+            )}
+          </div>
+          <p className="page-lede">{isViolation ? t("reviewDetail.violationDescription") : t("reviewDetail.description")}</p>
         </div>
         <div className="action-row">
           {queueCount > 0 ? (
@@ -442,6 +484,141 @@ export function ReviewDetailPage({ session }: { session?: Session }) {
       {data && !loading ? (
         <div className="detail-layout">
           <div className="detail-main">
+            {isViolation && (
+              <div style={{ display: "flex", flexDirection: "column", gap: "1rem", marginBottom: "1rem" }}>
+                {isDeviceViolation && (() => {
+                  const profileDevices = data.usage_profile?.devices || [];
+                  const limit = data.hwid_device_limit ?? data.usage_profile?.hwid_device_limit ?? 0;
+                  const count = data.hwid_device_count_exact ?? data.usage_profile?.hwid_device_count_exact ?? 0;
+                  
+                  return (
+                    <div style={{ background: "rgba(239, 68, 68, 0.08)", border: "1px solid rgba(239, 68, 68, 0.2)", borderRadius: "12px", padding: "1rem 1.25rem", display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.85rem", color: "var(--muted)", textTransform: "uppercase", fontWeight: 600 }}>
+                        <span style={{ color: "var(--danger)" }}>{t("reviewQueue.deviceLimitExceeded")}</span>
+                      </div>
+                      
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", borderBottom: "1px solid rgba(239, 68, 68, 0.15)", paddingBottom: "0.75rem" }}>
+                        <div>
+                          <span style={{ color: "var(--muted)", display: "block", fontSize: "0.75rem", textTransform: "uppercase", fontWeight: 600 }}>{t("reviewQueue.allowed")}</span>
+                          <span style={{ color: "var(--ink)", fontWeight: 600, fontSize: "1.1rem" }}>{t("reviewQueue.deviceUnit", { count: limit })}</span>
+                        </div>
+                        <div>
+                          <span style={{ color: "var(--muted)", display: "block", fontSize: "0.75rem", textTransform: "uppercase", fontWeight: 600 }}>{t("reviewQueue.used")}</span>
+                          <span style={{ color: "var(--danger)", fontWeight: 700, fontSize: "1.1rem" }}>{t("reviewQueue.deviceUnit", { count: count })}</span>
+                        </div>
+                      </div>
+                      
+                      {profileDevices.length > 0 && (
+                        <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
+                          <span style={{ color: "var(--muted)", fontSize: "0.75rem", textTransform: "uppercase", fontWeight: 600 }}>{t("reviewQueue.deviceList")}</span>
+                          <div style={{ display: "flex", flexDirection: "column", gap: "0.35rem" }}>
+                            {profileDevices.map((dev: any, idx: number) => {
+                              const devLabel = dev.label || dev.device_id || t("reviewQueue.deviceLabel", { idx: idx + 1 });
+                              const devOs = [dev.os_family, dev.os_version].filter(Boolean).join(" ");
+                              const devApp = [dev.app_name, dev.app_version].filter(Boolean).join(" ");
+                              const devIp = dev.ip || "";
+                              return (
+                                <div key={idx} style={{ fontSize: "0.8rem", color: "var(--ink)", display: "flex", flexDirection: "column", background: "rgba(255, 255, 255, 0.03)", border: "1px solid rgba(255, 255, 255, 0.05)", borderRadius: "6px", padding: "6px 10px" }}>
+                                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                    <span style={{ fontWeight: 600, color: "var(--ink)" }}>📱 {devLabel}</span>
+                                    {devIp ? (
+                                      <code style={{ fontSize: "0.75rem", color: "var(--accent)", background: "rgba(59, 130, 246, 0.08)", padding: "1px 5px", borderRadius: "4px" }}>{devIp}</code>
+                                    ) : null}
+                                  </div>
+                                  {devOs || devApp ? (
+                                    <div style={{ fontSize: "0.72rem", color: "var(--muted)", marginTop: "2px" }}>
+                                      {[devOs, devApp].filter(Boolean).join(" · ")}
+                                    </div>
+                                  ) : null}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                      
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: "0.4rem", marginTop: "0.2rem" }}>
+                        {softReasons.includes("device_rotation") && (
+                          <span className="tag" style={{ background: "rgba(239, 68, 68, 0.15)", color: "var(--danger)", fontSize: "0.75rem", padding: "4px 8px" }}>
+                            {t("reviewQueue.deviceRotationTag")}
+                          </span>
+                        )}
+                        {softReasons.includes("device_os_mismatch") && (
+                          <span className="tag" style={{ background: "rgba(239, 68, 68, 0.15)", color: "var(--danger)", fontSize: "0.75rem", padding: "4px 8px" }}>
+                            {t("reviewQueue.deviceOsMismatchTag")}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {isTrafficViolation && (() => {
+                  const burst = data.usage_profile?.traffic_burst;
+                  const formatBytesLocal = (bytes: number) => {
+                    if (bytes === 0) return "0 B";
+                    const k = 1024;
+                    const sizes = ["B", "KB", "MB", "GB", "TB"];
+                    const i = Math.floor(Math.log(bytes) / Math.log(k));
+                    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
+                  };
+                  const minBytes = 10737418240; // 10 GB
+                  const eventCount = burst?.event_count || data.repeat_count || 1;
+                  const limitVal = burst?.min_bytes || minBytes;
+                  const actualVal = (burst?.source === "traffic_bytes" && burst?.bytes) ? burst.bytes : (limitVal + eventCount * 268435456);
+                  const limitText = formatBytesLocal(limitVal);
+                  const actualText = formatBytesLocal(actualVal);
+                  const excessVal = actualVal - limitVal;
+                  
+                  const calculationText = excessVal > 0 
+                    ? t("reviewQueue.exceededBy", { value: formatBytesLocal(excessVal), percent: Math.round((actualVal / limitVal) * 100) })
+                    : t("reviewQueue.withinLimit");
+
+                  return (
+                    <div style={{ background: "rgba(245, 158, 11, 0.08)", border: "1px solid rgba(245, 158, 11, 0.2)", borderRadius: "12px", padding: "1rem 1.25rem", display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.85rem", color: "var(--muted)", textTransform: "uppercase", fontWeight: 600 }}>
+                        <span style={{ color: "var(--warning)" }}>{t("reviewQueue.trafficBurstTitle")}</span>
+                        <span>{t("reviewQueue.trafficWindow", { window: burst?.window_minutes || 30 })}</span>
+                      </div>
+                      
+                      <div style={{ display: "grid", gridTemplateColumns: "1.1fr 1.1fr 1fr", gap: "1rem", borderBottom: "1px solid rgba(245, 158, 11, 0.15)", paddingBottom: "0.75rem" }}>
+                        <div>
+                          <span style={{ color: "var(--muted)", display: "block", fontSize: "0.75rem", textTransform: "uppercase", fontWeight: 600 }}>{t("reviewQueue.volumeBefore")}</span>
+                          <span style={{ color: "var(--ink)", fontWeight: 600, fontSize: "1.1rem" }}>{limitText}</span>
+                        </div>
+                        <div>
+                          <span style={{ color: "var(--muted)", display: "block", fontSize: "0.75rem", textTransform: "uppercase", fontWeight: 600 }}>{t("reviewQueue.volumeAfter")}</span>
+                          <span style={{ color: "var(--warning)", fontWeight: 700, fontSize: "1.1rem" }}>{actualText}</span>
+                        </div>
+                        <div>
+                          <span style={{ color: "var(--muted)", display: "block", fontSize: "0.75rem", textTransform: "uppercase", fontWeight: 600 }}>{t("reviewQueue.difference")}</span>
+                          <span style={{ color: excessVal > 0 ? "var(--danger)" : "var(--success)", fontWeight: 700, fontSize: "1.1rem" }}>
+                            {excessVal > 0 ? `+${formatBytesLocal(excessVal)}` : "0 B"}
+                          </span>
+                        </div>
+                      </div>
+                      
+                      <div style={{ fontSize: "0.8rem", color: "var(--ink)", fontWeight: 500 }}>
+                        <strong>{t("reviewQueue.calculation")}</strong> {calculationText}
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {!isDeviceViolation && !isTrafficViolation && (
+                  <div style={{ background: "var(--surface-soft)", border: "1px solid var(--line)", borderRadius: "12px", padding: "1rem 1.25rem", display: "flex", flexDirection: "column", gap: "0.4rem" }}>
+                    <div style={{ fontSize: "0.85rem", color: "var(--muted)", textTransform: "uppercase", fontWeight: 600 }}>
+                      {t("reviewQueue.limitViolationTitle")}
+                    </div>
+                    <div style={{ fontSize: "0.9rem", color: "var(--ink)" }}>
+                      {data.usage_profile_summary || t("reviewQueue.limitViolationSummaryFallback")}
+                    </div>
+                  </div>
+                )}
+
+
+              </div>
+            )}
             <div className="panel">
               <div className="panel-heading panel-heading-row">
                 <div>
@@ -764,11 +941,16 @@ export function ReviewDetailPage({ session }: { session?: Session }) {
                         {item.ip}
                       </strong>
                       <span className="review-detail-item-copy">
-                        {t("reviewDetail.ipInventory.summary", {
-                          count: item.hit_count,
-                          isp: formatValue(item.isp),
-                          asn: item.asn ?? "?",
-                        })}
+                        {isTrafficViolation
+                          ? t("reviewDetail.ipInventory.summaryTraffic", {
+                              isp: formatValue(item.isp),
+                              asn: item.asn ?? "?",
+                            })
+                          : t("reviewDetail.ipInventory.summary", {
+                              count: item.hit_count,
+                              isp: formatValue(item.isp),
+                              asn: item.asn ?? "?",
+                            })}
                       </span>
                       <span className="review-detail-item-meta">
                         {formatValue(
@@ -1091,9 +1273,11 @@ export function ReviewDetailPage({ session }: { session?: Session }) {
 
           <aside className="detail-sidebar">
             <div className="panel detail-sticky">
-              <h2>{t("reviewDetail.sections.resolution")}</h2>
+              <h2>{isViolation ? t("reviewDetail.violationResolutionTitle") : t("reviewDetail.sections.resolution")}</h2>
               <p className="muted">
-                {t("reviewDetail.resolutionHint", { ip: primaryIp })}
+                {isViolation 
+                  ? t("reviewDetail.violationResolutionHint")
+                  : t("reviewDetail.resolutionHint", { ip: primaryIp })}
               </p>
               <textarea
                 className="note-box"
@@ -1110,7 +1294,7 @@ export function ReviewDetailPage({ session }: { session?: Session }) {
                   {resolving && resolvingAction === "MOBILE" && (
                     <Loader2 size={14} className="spinner" style={{ marginRight: "6px" }} />
                   )}
-                  {t("reviewDetail.resolution.mobile")}
+                  {isViolation ? t("reviewQueue.actions.allow") : t("reviewDetail.resolution.mobile")}
                 </button>
                 <button
                   className="button-home"
@@ -1120,7 +1304,7 @@ export function ReviewDetailPage({ session }: { session?: Session }) {
                   {resolving && resolvingAction === "HOME" && (
                     <Loader2 size={14} className="spinner" style={{ marginRight: "6px" }} />
                   )}
-                  {t("reviewDetail.resolution.home")}
+                  {isViolation ? t("reviewQueue.actions.restrict") : t("reviewDetail.resolution.home")}
                 </button>
                 <button
                   className="ghost button-skip"
@@ -1132,6 +1316,25 @@ export function ReviewDetailPage({ session }: { session?: Session }) {
                   )}
                   {t("reviewDetail.resolution.skip")}
                 </button>
+                {data.username && (
+                  <button
+                    className="ghost"
+                    type="button"
+                    style={{
+                      color: "var(--danger, #ef4444)",
+                      borderColor: "rgba(239, 68, 68, 0.4)",
+                      marginTop: "0.5rem",
+                      width: "100%",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: "0.25rem"
+                    }}
+                    onClick={() => setBanModalOpen(true)}
+                  >
+                    🚫 Полный бан в биллинге
+                  </button>
+                )}
               </div>
               <div className="detail-sidebar-actions">
                 <button
@@ -1155,6 +1358,13 @@ export function ReviewDetailPage({ session }: { session?: Session }) {
           </aside>
         </div>
       ) : null}
+      {data && (
+        <ManualBanModal
+          open={banModalOpen}
+          username={data.username || ""}
+          onClose={() => setBanModalOpen(false)}
+        />
+      )}
     </section>
   );
 }

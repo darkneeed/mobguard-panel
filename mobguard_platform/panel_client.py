@@ -299,6 +299,25 @@ class RemnawaveClient:
         self._cache_set(self._devices_cache, normalized_uuid, [], self.DEVICE_CACHE_TTL_SECONDS)
         return []
 
+    def create_hwid_device(self, user_uuid: str, hwid: str) -> bool:
+        normalized_uuid = str(user_uuid or "").strip()
+        normalized_hwid = str(hwid or "").strip()
+        if not self.enabled:
+            self.last_error = "Panel client is disabled"
+            return False
+        if not normalized_uuid or not normalized_hwid:
+            self.last_error = "User UUID or HWID is empty"
+            return False
+
+        self.last_error = None
+        body = {
+            "userUuid": normalized_uuid,
+            "hwid": normalized_hwid,
+        }
+        payload = self._request("POST", "/api/hwid/devices", body=body)
+        self._devices_cache.pop(normalized_uuid, None)
+        return payload is not None
+
     def get_user_traffic_stats(
         self,
         user_uuid: str,
@@ -468,6 +487,23 @@ class RemnawaveClient:
         if not squad_uuid:
             return False
         return self.update_user_active_internal_squads(uuid, [squad_uuid])
+
+    def drop_user_connections(self, user_uuid: str) -> bool:
+        if not self.enabled:
+            self.last_error = "Panel client is disabled"
+            return False
+        self.last_error = None
+        body = {
+            "dropBy": {
+                "by": "userUuids",
+                "userUuids": [str(user_uuid).strip()]
+            },
+            "targetNodes": {
+                "target": "allNodes"
+            }
+        }
+        payload = self._request("POST", "/api/ip-control/drop-connections", body=body)
+        return payload is not None
 
     def update_user_fields(self, **fields: Any) -> Optional[dict[str, Any]]:
         if not self.enabled:

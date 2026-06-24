@@ -49,7 +49,9 @@ def review_reason_for_bundle(bundle: DecisionBundle) -> str | None:
         return "unsure"
     if bundle.confidence_band == "PROBABLE_HOME":
         return "probable_home"
-    if bundle.verdict == "HOME" and bundle.confidence_band == "HIGH_HOME" and not bundle.punitive_eligible:
+    if bundle.verdict == "HOME" and bundle.confidence_band == "HIGH_HOME":
+        if bundle.punitive_eligible:
+            return "home_requires_review"
         if stationary_home_auto_resolved(bundle):
             return None
         return "home_requires_review"

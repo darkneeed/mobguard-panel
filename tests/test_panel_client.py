@@ -45,3 +45,56 @@ class PanelClientBaseUrlTests(unittest.TestCase):
             client.get_nodes_online_usage()
 
         self.assertEqual(seen_urls, ["https://panel.example.com/api/nodes"])
+
+
+class PanelClientIPControlHWIDTests(unittest.TestCase):
+    def test_create_hwid_device_hits_correct_endpoint(self):
+        seen_requests: list[tuple[str, str, dict]] = []
+
+        def fake_urlopen(request, timeout=5):
+            body = None
+            if request.data:
+                body = json.loads(request.data.decode("utf-8"))
+            seen_requests.append((request.method, request.full_url, body))
+            return _FakeResponse({"response": {"ok": True}})
+
+        with patch("mobguard_platform.panel_client.urlopen", side_effect=fake_urlopen):
+            client = PanelClient("https://panel.example.com", "token")
+            success = client.create_hwid_device("user-uuid", "hwid-value")
+
+        self.assertTrue(success)
+        self.assertEqual(len(seen_requests), 1)
+        method, url, body = seen_requests[0]
+        self.assertEqual(method, "POST")
+        self.assertEqual(url, "https://panel.example.com/api/hwid/devices")
+        self.assertEqual(body, {"userUuid": "user-uuid", "hwid": "hwid-value"})
+
+    def test_drop_user_connections_hits_correct_endpoint(self):
+        seen_requests: list[tuple[str, str, dict]] = []
+
+        def fake_urlopen(request, timeout=5):
+            body = None
+            if request.data:
+                body = json.loads(request.data.decode("utf-8"))
+            seen_requests.append((request.method, request.full_url, body))
+            return _FakeResponse({"response": {"ok": True}})
+
+        with patch("mobguard_platform.panel_client.urlopen", side_effect=fake_urlopen):
+            client = PanelClient("https://panel.example.com", "token")
+            success = client.drop_user_connections("user-uuid")
+
+        self.assertTrue(success)
+        self.assertEqual(len(seen_requests), 1)
+        method, url, body = seen_requests[0]
+        self.assertEqual(method, "POST")
+        self.assertEqual(url, "https://panel.example.com/api/ip-control/drop-connections")
+        self.assertEqual(body, {
+            "dropBy": {
+                "by": "userUuids",
+                "userUuids": ["user-uuid"]
+            },
+            "targetNodes": {
+                "target": "allNodes"
+            }
+        })
+

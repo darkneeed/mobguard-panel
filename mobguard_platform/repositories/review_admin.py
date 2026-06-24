@@ -1597,8 +1597,7 @@ class ReviewAdminRepository(SQLiteRepository):
             usage_profile_soft_reasons_json LIKE '%device_os_mismatch%' OR
             usage_profile_soft_reasons_json LIKE '%traffic_burst%' OR
             usage_profile_soft_reasons_json LIKE '%traffic_limit_exceeded%' OR
-            review_reason = 'traffic_limit_exceeded' OR
-            (usage_profile_ongoing_duration_seconds IS NOT NULL AND usage_profile_ongoing_duration_seconds > 0)
+            review_reason = 'traffic_limit_exceeded'
         )"""
 
         if filters.get("queue_type") == "violations":
@@ -1799,6 +1798,11 @@ class ReviewAdminRepository(SQLiteRepository):
                 else None
             )
             if usage_profile is None or self._usage_profile_snapshot_is_stale(conn, case, usage_profile):
+                old_burst = usage_profile.get("traffic_burst") if usage_profile else None
+                old_devices = usage_profile.get("devices") if usage_profile else None
+                old_hwid_limit = usage_profile.get("hwid_device_limit") if usage_profile else None
+                old_hwid_count = usage_profile.get("hwid_device_count_exact") if usage_profile else None
+
                 usage_profile = build_usage_profile_snapshot(
                     _ConnectionBackedStore(self, conn),
                     _review_identity(case),
@@ -1806,6 +1810,16 @@ class ReviewAdminRepository(SQLiteRepository):
                     device_scope_key=clean_text(case.get("device_scope_key")),
                     case_scope_key=clean_text(case.get("case_scope_key")),
                 )
+
+                if old_burst and not usage_profile.get("traffic_burst"):
+                    usage_profile["traffic_burst"] = old_burst
+                if old_devices and not usage_profile.get("devices"):
+                    usage_profile["devices"] = old_devices
+                if old_hwid_limit is not None and usage_profile.get("hwid_device_limit") is None:
+                    usage_profile["hwid_device_limit"] = old_hwid_limit
+                if old_hwid_count is not None and usage_profile.get("hwid_device_count_exact") is None:
+                    usage_profile["hwid_device_count_exact"] = old_hwid_count
+
                 self._persist_usage_profile_snapshot(
                     conn,
                     case_id=case_id,

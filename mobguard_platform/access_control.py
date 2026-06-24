@@ -38,12 +38,15 @@ def apply_remote_access_state(
     *,
     restricted: bool,
 ) -> bool:
-    return bool(
+    res = bool(
         client.apply_access_squad(
             uuid,
             remote_access_squad_name(raw_settings, restricted=restricted),
         )
     )
+    if res and restricted:
+        force_disconnect_user(client, uuid)
+    return res
 
 
 async def apply_remote_access_state_async(
@@ -53,12 +56,15 @@ async def apply_remote_access_state_async(
     *,
     restricted: bool,
 ) -> bool:
-    return bool(
+    res = bool(
         await client.apply_access_squad(
             uuid,
             remote_access_squad_name(raw_settings, restricted=restricted),
         )
     )
+    if res and restricted:
+        await force_disconnect_user_async(client, uuid)
+    return res
 
 
 def traffic_cap_bytes(gigabytes: int) -> int:
@@ -176,6 +182,8 @@ def apply_remote_traffic_cap(
             plan["traffic_limit_strategy"],
         )
     )
+    if remote_updated:
+        force_disconnect_user(client, uuid)
     return {
         **plan,
         "remote_updated": remote_updated,
@@ -199,6 +207,8 @@ async def apply_remote_traffic_cap_async(
             plan["traffic_limit_strategy"],
         )
     )
+    if remote_updated:
+        await force_disconnect_user_async(client, uuid)
     return {
         **plan,
         "remote_updated": remote_updated,
@@ -284,3 +294,25 @@ async def restore_remote_restriction_state_async(
         return {"remote_updated": remote_updated, "remote_changed": remote_updated}
     remote_updated = await apply_remote_access_state_async(client, uuid, raw_settings, restricted=False)
     return {"remote_updated": remote_updated, "remote_changed": remote_updated}
+
+
+def force_disconnect_user(client: Any, uuid: str) -> None:
+    try:
+        if hasattr(client, "drop_user_connections"):
+            client.drop_user_connections(uuid)
+    except Exception:
+        pass
+
+
+async def force_disconnect_user_async(client: Any, uuid: str) -> None:
+    try:
+        if hasattr(client, "drop_user_connections"):
+            func = client.drop_user_connections
+            import inspect
+            if inspect.iscoroutinefunction(func):
+                await func(uuid)
+            else:
+                import asyncio
+                await asyncio.to_thread(func, uuid)
+    except Exception:
+        pass

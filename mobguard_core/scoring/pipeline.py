@@ -387,28 +387,6 @@ async def evaluate_mobile_network(
 
     state.log.append(f"[ANALYSIS] Starting analysis for IP {context.ip}")
 
-    manual_decision = await deps.get_manual_override(context.ip)
-    if manual_decision:
-        state.bundle.source = "manual_override"
-        state.log.append(f"[ANALYSIS] Manual override: {manual_decision}")
-        direction = manual_decision if manual_decision in ("MOBILE", "HOME") else "NEUTRAL"
-        state.bundle.add_reason(
-            code="manual_override",
-            source="manual_override",
-            weight=0,
-            kind="hard",
-            direction=direction,
-            message=f"Manual override forces {manual_decision}",
-            metadata={"decision": manual_decision},
-        )
-        if manual_decision == "MOBILE":
-            return _finalize_bundle(state, rules, "MOBILE", "HIGH_MOBILE", "Manual MOBILE")
-        if manual_decision == "HOME":
-            state.bundle.punitive_eligible = True
-            return _finalize_bundle(state, rules, "HOME", "HIGH_HOME", "Manual HOME")
-        return _finalize_bundle(state, rules, "SKIP", "SKIP", "Manual SKIP")
-    state.log.append("[ANALYSIS] No manual override found")
-
     state.log.append(" Querying IPInfo API")
     ipinfo_data = await deps.get_ip_info(context.ip)
     state.org = ipinfo_data.get("org", "")
@@ -446,6 +424,29 @@ async def evaluate_mobile_network(
     )
     if state.hostname:
         state.log.append(f" Hostname: {state.hostname}")
+
+    manual_decision = await deps.get_manual_override(context.ip)
+    if manual_decision:
+        state.bundle.source = "manual_override"
+        state.log.append(f"[ANALYSIS] Manual override: {manual_decision}")
+        direction = manual_decision if manual_decision in ("MOBILE", "HOME") else "NEUTRAL"
+        state.bundle.add_reason(
+            code="manual_override",
+            source="manual_override",
+            weight=0,
+            kind="hard",
+            direction=direction,
+            message=f"Manual override forces {manual_decision}",
+            metadata={"decision": manual_decision},
+        )
+        if manual_decision == "MOBILE":
+            return _finalize_bundle(state, rules, "MOBILE", "HIGH_MOBILE", state.isp_name or "Manual MOBILE")
+        if manual_decision == "HOME":
+            bundle = _finalize_bundle(state, rules, "HOME", "HIGH_HOME", state.isp_name or "Manual HOME")
+            bundle.punitive_eligible = True
+            return bundle
+        return _finalize_bundle(state, rules, "SKIP", "SKIP", state.isp_name or "Manual SKIP")
+    state.log.append("[ANALYSIS] No manual override found")
 
     searchable = f"{state.isp_name} {state.hostname}".lower()
     _apply_provider_profile_signal(state, rules, searchable)

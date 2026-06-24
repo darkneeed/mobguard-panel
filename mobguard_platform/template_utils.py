@@ -21,4 +21,12 @@ def render_optional_template(
         for key, value in context.items():
             rendered = rendered.replace(f"{{{{{key}}}}}", formatter(value) if value is not None else "")
         rendered_lines.append(rendered)
-    return "\n".join(rendered_lines)
+
+    cleaned_lines: list[str] = []
+    for line in rendered_lines:
+        if not line.strip():
+            if cleaned_lines and not cleaned_lines[-1].strip():
+                continue
+        cleaned_lines.append(line)
+
+    return "\n".join(cleaned_lines).strip()

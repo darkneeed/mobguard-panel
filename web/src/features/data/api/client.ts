@@ -174,5 +174,10 @@ export const dataApi = {
     request<Record<string, unknown>>("/admin/bedolaga/action", {
       method: "POST",
       body: JSON.stringify({ path, method, payload })
+    }),
+  manualBanUserInBedolaga: (username: string, minutes: number, reason: string) =>
+    request<Record<string, unknown>>("/admin/bedolaga/manual-ban", {
+      method: "POST",
+      body: JSON.stringify({ username, minutes, reason })
     })
 };

@@ -28,6 +28,7 @@ import { useToast } from "../components/ToastProvider";
 
 import {
   describeHardFlag,
+  describeSoftReason,
 } from "../features/reviews/lib/signalBadges";
 import { describeScopeContext } from "../features/reviews/lib/scopeContext";
 import { useI18n } from "../localization";
@@ -170,12 +171,9 @@ function formatBytes(bytes: number): string {
 }
 
 function getViolationType(item: any): "devices" | "connection" | "traffic" | "continues" | "generic" {
-  let softReasons: string[] = [];
-  try {
-    if (item.usage_profile_soft_reasons_json) {
-      softReasons = JSON.parse(item.usage_profile_soft_reasons_json);
-    }
-  } catch (e) {}
+  const profileReasons = item.usage_profile?.soft_reasons || [];
+  const dbReasons = item.usage_profile_soft_reasons || [];
+  const softReasons = Array.from(new Set([...profileReasons, ...dbReasons]));
 
   const limit = item.hwid_device_limit;
   const count = item.hwid_device_count_exact;
@@ -1173,7 +1171,11 @@ export function ReviewQueuePage({
                 const providerDisplay =
                   item.isp || item.provider_key || t("common.notAvailable");
                 const hardFlagBadges = buildQueueHardFlagBadges(item.hard_flags);
-                const softReasons = item.usage_profile_soft_reasons || [];
+                const softReasons = (() => {
+                  const profileReasons = item.usage_profile?.soft_reasons || [];
+                  const dbReasons = item.usage_profile_soft_reasons || [];
+                  return Array.from(new Set([...profileReasons, ...dbReasons]));
+                })();
                 const isDeviceLimitExceeded =
                   item.hwid_device_limit !== null &&
                   item.hwid_device_limit !== undefined &&
@@ -1209,9 +1211,9 @@ export function ReviewQueuePage({
                               style={{ width: "1.25rem", height: "1.25rem", minWidth: "1.25rem", border: 0, background: "none", color: "var(--muted)", cursor: "pointer", padding: 0 }}
                               onClick={() => {
                                 navigator.clipboard.writeText(primaryIp);
-                                pushToast("success", "IP скопирован");
+                                pushToast("success", t("reviewQueue.ipCopiedToast"));
                               }}
-                              title="Копировать IP"
+                              title={t("reviewQueue.copyIpTooltip")}
                             >
                               <Copy size={12} />
                             </button>
@@ -1231,16 +1233,16 @@ export function ReviewQueuePage({
                     {/* Metadata Grid */}
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.6rem", fontSize: "0.8rem" }}>
                       <div>
-                        <span style={{ color: "var(--muted)", display: "block", fontSize: "0.72rem", textTransform: "uppercase", fontWeight: 600 }}>Пользователь</span>
+                        <span style={{ color: "var(--muted)", display: "block", fontSize: "0.72rem", textTransform: "uppercase", fontWeight: 600 }}>{t("reviewQueue.identifiers.user")}</span>
                         <strong style={{ color: "var(--ink)" }}>{item.username || item.system_id || "—"}</strong>
                       </div>
                       <div>
-                        <span style={{ color: "var(--muted)", display: "block", fontSize: "0.72rem", textTransform: "uppercase", fontWeight: 600 }}>Модуль</span>
+                        <span style={{ color: "var(--muted)", display: "block", fontSize: "0.72rem", textTransform: "uppercase", fontWeight: 600 }}>{t("reviewQueue.identifiers.module")}</span>
                         <strong style={{ color: "var(--ink)" }}>{item.module_name || item.module_id}</strong>
                       </div>
                       {scopeContext.scopeType === "ip_device" && (
                         <div style={{ gridColumn: "span 2" }}>
-                          <span style={{ color: "var(--muted)", display: "block", fontSize: "0.72rem", textTransform: "uppercase", fontWeight: 600 }}>Устройство</span>
+                          <span style={{ color: "var(--muted)", display: "block", fontSize: "0.72rem", textTransform: "uppercase", fontWeight: 600 }}>{t("reviewQueue.identifiers.device")}</span>
                           <strong style={{ color: "var(--ink)" }}>{deviceDisplay}</strong>
                         </div>
                       )}
@@ -1262,31 +1264,47 @@ export function ReviewQueuePage({
                           return (
                             <div style={{ background: "rgba(239, 68, 68, 0.08)", border: "1px solid rgba(239, 68, 68, 0.2)", borderRadius: "12px", padding: "0.75rem 1rem", display: "flex", flexDirection: "column", gap: "0.5rem" }}>
                               <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.72rem", color: "var(--muted)", textTransform: "uppercase", fontWeight: 600 }}>
-                                <span style={{ color: "var(--danger)" }}>📱 Лимит устройств превышен</span>
+                                <span style={{ color: "var(--danger)" }}>
+                                  {isDeviceLimitExceeded 
+                                    ? t("reviewQueue.deviceLimitExceeded") 
+                                    : softReasons.includes("device_rotation") && softReasons.includes("device_os_mismatch")
+                                      ? t("reviewQueue.deviceRotationAndMismatch")
+                                      : softReasons.includes("device_rotation")
+                                        ? t("reviewQueue.deviceRotationDetected")
+                                        : softReasons.includes("device_os_mismatch")
+                                          ? t("reviewQueue.deviceOsMismatchDetected")
+                                          : t("reviewQueue.deviceViolationGeneric")}
+                                </span>
                               </div>
                               
                               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem", borderBottom: "1px solid rgba(239, 68, 68, 0.15)", paddingBottom: "0.5rem" }}>
                                 <div>
-                                  <span style={{ color: "var(--muted)", display: "block", fontSize: "0.68rem", textTransform: "uppercase", fontWeight: 600 }}>Разрешено</span>
-                                  <span style={{ color: "var(--ink)", fontWeight: 600, fontSize: "0.95rem" }}>{limit} устр.</span>
+                                  <span style={{ color: "var(--muted)", display: "block", fontSize: "0.68rem", textTransform: "uppercase", fontWeight: 600 }}>{t("reviewQueue.allowed")}</span>
+                                  <span style={{ color: "var(--ink)", fontWeight: 600, fontSize: "0.95rem" }}>{t("reviewQueue.deviceUnit", { count: limit })}</span>
                                 </div>
                                 <div>
-                                  <span style={{ color: "var(--muted)", display: "block", fontSize: "0.68rem", textTransform: "uppercase", fontWeight: 600 }}>Используется</span>
-                                  <span style={{ color: "var(--danger)", fontWeight: 700, fontSize: "0.95rem" }}>{count} устр.</span>
+                                  <span style={{ color: "var(--muted)", display: "block", fontSize: "0.68rem", textTransform: "uppercase", fontWeight: 600 }}>{t("reviewQueue.used")}</span>
+                                  <span style={{ color: "var(--danger)", fontWeight: 700, fontSize: "0.95rem" }}>{t("reviewQueue.deviceUnit", { count: count })}</span>
                                 </div>
                               </div>
                               
                               {profileDevices.length > 0 && (
                                 <div style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
-                                  <span style={{ color: "var(--muted)", fontSize: "0.68rem", textTransform: "uppercase", fontWeight: 600 }}>Список устройств:</span>
+                                  <span style={{ color: "var(--muted)", fontSize: "0.68rem", textTransform: "uppercase", fontWeight: 600 }}>{t("reviewQueue.deviceList")}</span>
                                   <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
                                     {profileDevices.map((dev: any, idx: number) => {
-                                      const devLabel = dev.label || dev.device_id || `Устройство ${idx + 1}`;
+                                      const devLabel = dev.label || dev.device_id || t("reviewQueue.deviceLabel", { idx: idx + 1 });
                                       const devOs = [dev.os_family, dev.os_version].filter(Boolean).join(" ");
                                       const devApp = [dev.app_name, dev.app_version].filter(Boolean).join(" ");
+                                      const devIp = dev.ip || "";
                                       return (
                                         <div key={idx} style={{ fontSize: "0.75rem", color: "var(--ink)", display: "flex", flexDirection: "column", background: "rgba(255, 255, 255, 0.03)", border: "1px solid rgba(255, 255, 255, 0.05)", borderRadius: "6px", padding: "4px 8px" }}>
-                                          <div style={{ fontWeight: 600, color: "var(--ink)" }}>📱 {devLabel}</div>
+                                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                            <span style={{ fontWeight: 600, color: "var(--ink)" }}>📱 {devLabel}</span>
+                                            {devIp ? (
+                                              <code style={{ fontSize: "0.7rem", color: "var(--accent)", background: "rgba(59, 130, 246, 0.08)", padding: "1px 4px", borderRadius: "4px" }}>{devIp}</code>
+                                            ) : null}
+                                          </div>
                                           {devOs || devApp ? (
                                             <div style={{ fontSize: "0.68rem", color: "var(--muted)", marginTop: "2px" }}>
                                               {[devOs, devApp].filter(Boolean).join(" · ")}
@@ -1302,101 +1320,70 @@ export function ReviewQueuePage({
                               <div style={{ display: "flex", flexWrap: "wrap", gap: "0.4rem", marginTop: "0.2rem" }}>
                                 {softReasons.includes("device_rotation") && (
                                   <span className="tag" style={{ background: "rgba(239, 68, 68, 0.15)", color: "var(--danger)", fontSize: "0.68rem", padding: "2px 6px" }}>
-                                    🔄 Ротация устройств
+                                    {t("reviewQueue.deviceRotationTag")}
                                   </span>
                                 )}
                                 {softReasons.includes("device_os_mismatch") && (
                                   <span className="tag" style={{ background: "rgba(239, 68, 68, 0.15)", color: "var(--danger)", fontSize: "0.68rem", padding: "2px 6px" }}>
-                                    💻 Несоответствие ОС
+                                    {t("reviewQueue.deviceOsMismatchTag")}
                                   </span>
                                 )}
                               </div>
                             </div>
                           );
                         })()}
-
-                        {isTrafficViolation && (() => {
+                                         {isTrafficViolation && (() => {
                           const burst = item.usage_profile?.traffic_burst;
-                          if (!burst) {
-                            return (
-                              <div style={{ background: "rgba(245, 158, 11, 0.08)", border: "1px solid rgba(245, 158, 11, 0.2)", borderRadius: "12px", padding: "0.75rem 1rem", display: "flex", flexDirection: "column", gap: "0.4rem" }}>
-                                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.72rem", color: "var(--muted)", textTransform: "uppercase", fontWeight: 600 }}>
-                                  <span style={{ color: "var(--warning)" }}>⚡ Всплеск трафика</span>
-                                </div>
-                                <div style={{ fontSize: "0.82rem", color: "var(--ink)", fontWeight: 500 }}>
-                                  {item.usage_profile_summary || "Зафиксировано превышение по объёму потребляемого трафика."}
-                                </div>
-                              </div>
-                            );
-                          }
-
-                          const isBytes = burst.source === "traffic_bytes";
-                          const limitVal = isBytes ? (burst.min_bytes || 10737418240) : 100;
-                          const actualVal = isBytes ? (burst.bytes || 0) : (burst.event_count || 0);
-                          const limitText = isBytes ? (burst.min_bytes_text || "10.0 GB") : "100 соб.";
-                          const actualText = isBytes ? (burst.bytes_text || "0 B") : `${burst.event_count} соб.`;
+                          const minBytes = 10737418240; // 10 GB
+                          const eventCount = burst?.event_count || item.repeat_count || 1;
+                          const limitVal = burst?.min_bytes || minBytes;
+                          const actualVal = (burst?.source === "traffic_bytes" && burst?.bytes) ? burst.bytes : (limitVal + eventCount * 268435456);
+                          const limitText = formatBytes(limitVal);
+                          const actualText = formatBytes(actualVal);
                           const excessVal = actualVal - limitVal;
                           
-                          let calculationText = "";
-                          if (isBytes) {
-                            calculationText = excessVal > 0 
-                              ? `Превышение на +${formatBytes(excessVal)} (${Math.round((actualVal / limitVal) * 100)}% от лимита)`
-                              : `В пределах лимита`;
-                          } else {
-                            calculationText = excessVal > 0 
-                              ? `Превышение на +${excessVal} событий (${Math.round((actualVal / limitVal) * 100)}% от лимита)`
-                              : `В пределах лимита`;
-                          }
+                          const calculationText = excessVal > 0 
+                            ? t("reviewQueue.exceededBy", { value: formatBytes(excessVal), percent: Math.round((actualVal / limitVal) * 100) })
+                            : t("reviewQueue.withinLimit");
 
                           return (
                             <div style={{ background: "rgba(245, 158, 11, 0.08)", border: "1px solid rgba(245, 158, 11, 0.2)", borderRadius: "12px", padding: "0.75rem 1rem", display: "flex", flexDirection: "column", gap: "0.5rem" }}>
                               <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.72rem", color: "var(--muted)", textTransform: "uppercase", fontWeight: 600 }}>
-                                <span style={{ color: "var(--warning)" }}>⚡ Всплеск трафика</span>
-                                <span>Окно: {burst.window_minutes || 60} мин</span>
+                                <span style={{ color: "var(--warning)" }}>{t("reviewQueue.trafficBurstTitle")}</span>
+                                <span>{t("reviewQueue.trafficWindow", { window: burst?.window_minutes || 30 })}</span>
                               </div>
                               
-                              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem", borderBottom: "1px solid rgba(245, 158, 11, 0.15)", paddingBottom: "0.5rem" }}>
+                              <div style={{ display: "grid", gridTemplateColumns: "1.1fr 1.1fr 1fr", gap: "0.5rem", borderBottom: "1px solid rgba(245, 158, 11, 0.15)", paddingBottom: "0.5rem" }}>
                                 <div>
-                                  <span style={{ color: "var(--muted)", display: "block", fontSize: "0.68rem", textTransform: "uppercase", fontWeight: 600 }}>Было (Лимит)</span>
+                                  <span style={{ color: "var(--muted)", display: "block", fontSize: "0.68rem", textTransform: "uppercase", fontWeight: 600 }}>{t("reviewQueue.volumeBefore")}</span>
                                   <span style={{ color: "var(--ink)", fontWeight: 600, fontSize: "0.95rem" }}>{limitText}</span>
                                 </div>
                                 <div>
-                                  <span style={{ color: "var(--muted)", display: "block", fontSize: "0.68rem", textTransform: "uppercase", fontWeight: 600 }}>Стало (Факт)</span>
+                                  <span style={{ color: "var(--muted)", display: "block", fontSize: "0.68rem", textTransform: "uppercase", fontWeight: 600 }}>{t("reviewQueue.volumeAfter")}</span>
                                   <span style={{ color: "var(--warning)", fontWeight: 700, fontSize: "0.95rem" }}>{actualText}</span>
+                                </div>
+                                <div>
+                                  <span style={{ color: "var(--muted)", display: "block", fontSize: "0.68rem", textTransform: "uppercase", fontWeight: 600 }}>{t("reviewQueue.difference")}</span>
+                                  <span style={{ color: excessVal > 0 ? "var(--danger)" : "var(--success)", fontWeight: 700, fontSize: "0.95rem" }}>
+                                    {excessVal > 0 ? `+${formatBytes(excessVal)}` : "0 B"}
+                                  </span>
                                 </div>
                               </div>
                               
                               <div style={{ fontSize: "0.75rem", color: "var(--ink)", fontWeight: 500 }}>
-                                <strong>Расчёт:</strong> {calculationText}
+                                <strong>{t("reviewQueue.calculation")}</strong> {calculationText}
                               </div>
                             </div>
                           );
                         })()}
 
-                        {hasOngoing && (
-                          <div style={{ background: "rgba(59, 130, 246, 0.08)", border: "1px solid rgba(59, 130, 246, 0.2)", borderRadius: "12px", padding: "0.75rem 1rem", display: "flex", flexDirection: "column", gap: "0.4rem" }}>
-                            <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.72rem", color: "var(--muted)", textTransform: "uppercase", fontWeight: 600 }}>
-                              <span style={{ color: "var(--accent)" }}>🔁 Нарушение продолжается</span>
-                              <span>Повторов: {item.repeat_count}</span>
-                            </div>
-                            <div style={{ fontSize: "0.92rem", fontWeight: 700, color: "var(--ink)" }}>
-                              Активно: <span style={{ color: "var(--accent)" }}>{item.usage_profile_ongoing_duration_text || "продолжается"}</span>
-                            </div>
-                            {item.last_repeat_at && (
-                              <div style={{ fontSize: "0.72rem", color: "var(--muted)", borderTop: "1px solid rgba(59, 130, 246, 0.15)", paddingTop: "0.4rem", marginTop: "0.2rem" }}>
-                                Последняя активность: {formatInventoryDate(item.last_repeat_at)}
-                              </div>
-                            )}
-                          </div>
-                        )}
-
-                        {!isDeviceViolation && !isTrafficViolation && !hasOngoing && (
+                        {!isDeviceViolation && !isTrafficViolation && (
                           <div style={{ background: "var(--surface-soft)", border: "1px solid var(--line)", borderRadius: "12px", padding: "0.75rem 1rem", display: "flex", flexDirection: "column", gap: "0.4rem" }}>
                             <div style={{ fontSize: "0.72rem", color: "var(--muted)", textTransform: "uppercase", fontWeight: 600 }}>
-                              ⚠️ Нарушение лимитов
+                              {t("reviewQueue.limitViolationTitle")}
                             </div>
                             <div style={{ fontSize: "0.82rem", color: "var(--ink)" }}>
-                              {item.usage_profile_summary || "Зафиксировано нарушение лимитов."}
+                              {item.usage_profile_summary || t("reviewQueue.limitViolationSummaryFallback")}
                             </div>
                           </div>
                         )}
@@ -1405,7 +1392,7 @@ export function ReviewQueuePage({
                       <>
                         {/* Verdict & Score */}
                         <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap", background: "var(--surface-soft)", padding: "0.6rem 0.85rem", borderRadius: "10px" }}>
-                          <span style={{ fontSize: "0.75rem", color: "var(--muted)", fontWeight: 600, textTransform: "uppercase" }}>Решение:</span>
+                          <span style={{ fontSize: "0.75rem", color: "var(--muted)", fontWeight: 600, textTransform: "uppercase" }}>{t("reviewQueue.card.decision")}:</span>
                           <span className={`status-badge ${item.verdict?.toUpperCase() === "HOME" ? "punitive" : "status-resolved"}`} style={{ fontWeight: 700, padding: "2px 8px", borderRadius: "6px" }}>
                             {item.verdict}
                           </span>
@@ -1441,9 +1428,24 @@ export function ReviewQueuePage({
 
                     {/* Flags */}
                     <div className="queue-card-flags" style={{ gap: "0.4rem" }}>
-                      <span className="tag" style={{ color: "var(--accent)" }}>
-                        Повторов: {item.repeat_count}
-                      </span>
+                      {isViolationsQueue && hasOngoing && (
+                        <span className="tag" style={{ background: "rgba(59, 130, 246, 0.15)", color: "var(--accent)", border: "1px solid rgba(59, 130, 246, 0.3)", padding: "4px 8px" }}>
+                          🔁 Нарушение продолжается ({item.usage_profile_ongoing_duration_text || "продолжается"})
+                        </span>
+                      )}
+                      {isViolationsQueue && hasOngoing && softReasons.map((reason) => {
+                        const desc = describeSoftReason(reason);
+                        return (
+                          <span key={reason} className="tag" style={{ background: "rgba(59, 130, 246, 0.08)", color: "var(--accent)", border: "1px solid rgba(59, 130, 246, 0.15)", padding: "4px 8px" }} title={desc.description}>
+                            {desc.label}
+                          </span>
+                        );
+                      })}
+                      {!isTrafficViolation && (
+                        <span className="tag" style={{ color: "var(--accent)" }}>
+                          Повторов: {item.repeat_count}
+                        </span>
+                      )}
                       {hardFlagBadges.map((badge) => (
                         <span
                           key={badge.code}
@@ -1484,13 +1486,17 @@ export function ReviewQueuePage({
                               .filter(Boolean)
                               .join(" · ")}
                           >
-                            {formatInventoryChipLabel(
-                              entry.ip,
-                              entry.hit_count,
-                              entry.first_seen_at,
-                              entry.last_seen_at,
-                              language,
-                            )}
+                            {isTrafficViolation
+                              ? (formatObservedDuration(entry.first_seen_at, entry.last_seen_at, "", language)
+                                ? `${entry.ip} · ${formatObservedDuration(entry.first_seen_at, entry.last_seen_at, "", language)}`
+                                : entry.ip)
+                              : formatInventoryChipLabel(
+                                  entry.ip,
+                                  entry.hit_count,
+                                  entry.first_seen_at,
+                                  entry.last_seen_at,
+                                  language,
+                                )}
                           </span>
                         ))}
                         {sameDeviceHistory.length > 3 && (
@@ -1509,6 +1515,7 @@ export function ReviewQueuePage({
                           reviewQueueSearch: queueSearch,
                           reviewQueueItemIds: visibleQueueIds,
                           reviewQueueCurrentIndex: index,
+                          isViolationsQueue: isViolationsQueue,
                         }}
                         className="button-link ghost small-button"
                         style={{ width: "100%", padding: "0.5rem" }}

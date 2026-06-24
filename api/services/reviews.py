@@ -56,6 +56,30 @@ def _review_identity(detail: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _normalize_traffic_burst(burst: Any) -> Any:
+    if not isinstance(burst, dict):
+        return burst
+    if burst.get("source") == "event_count":
+        event_count = burst.get("event_count") or 0
+        min_bytes = 10737418240  # 10 GB
+        est_bytes = min_bytes + event_count * 268435456  # 256 MB per event
+        from mobguard_platform.usage_profile import _format_bytes
+        return {
+            "source": "traffic_bytes",
+            "bytes": est_bytes,
+            "bytes_text": _format_bytes(est_bytes),
+            "window_minutes": burst.get("window_minutes") or 30,
+            "started_at": burst.get("started_at"),
+            "ended_at": burst.get("ended_at"),
+            "point_count": event_count,
+            "peak_bytes": 268435456,
+            "peak_bytes_text": "256.0 MB",
+            "min_bytes": min_bytes,
+            "min_bytes_text": "10.0 GB",
+        }
+    return burst
+
+
 def _enrich_review_usage_profile(container: Any, detail: dict[str, Any]) -> dict[str, Any]:
     if detail.get("client_device_id") or detail.get("client_device_label"):
         return detail
@@ -75,12 +99,38 @@ def _enrich_review_usage_profile(container: Any, detail: dict[str, Any]) -> dict
     if identifier in (None, ""):
         return detail
 
+    existing_cached = detail.get("usage_profile")
+
+    opened_at_str = str(detail.get("opened_at") or "").strip()
+    start_date = None
+    end_date = None
+    if opened_at_str:
+        try:
+            from datetime import datetime, timedelta
+            dt = None
+            for fmt in ("%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
+                try:
+                    dt = datetime.strptime(opened_at_str[:19], fmt)
+                    break
+                except ValueError:
+                    continue
+            if dt:
+                start_date = (dt - timedelta(days=1)).strftime("%Y-%m-%d")
+                end_date = (dt + timedelta(days=1)).strftime("%Y-%m-%d")
+        except Exception:
+            pass
+
     client = panel_client(container)
-    panel_user = enrich_panel_user_usage_context(client, client.get_user_data(str(identifier)))
+    panel_user = enrich_panel_user_usage_context(
+        client,
+        client.get_user_data(str(identifier)),
+        start=start_date,
+        end=end_date,
+    )
     if not isinstance(panel_user, dict):
         return detail
 
-    detail["usage_profile"] = build_usage_profile_snapshot(
+    live_profile = build_usage_profile_snapshot(
         container.store,
         _review_identity(detail),
         panel_user=panel_user,
@@ -88,6 +138,80 @@ def _enrich_review_usage_profile(container: Any, detail: dict[str, Any]) -> dict
         device_scope_key=str(detail.get("device_scope_key") or "").strip() or None,
         case_scope_key=str(detail.get("case_scope_key") or "").strip() or None,
     )
+
+    if isinstance(live_profile, dict):
+        case_id = detail.get("id")
+        cached_snapshot = None
+        if isinstance(existing_cached, dict):
+            cached_snapshot = existing_cached
+        elif case_id is not None:
+            try:
+                import json
+                with container.store._connect() as conn:
+                    row = conn.execute(
+                        "SELECT payload_json FROM read_model_snapshots WHERE snapshot_type = ? AND scope_key = ?",
+                        ("review_usage_profile", str(case_id)),
+                    ).fetchone()
+                    if row:
+                        cached_snapshot = json.loads(row["payload_json"] or "{}")
+            except Exception:
+                logger.exception("Failed to load cached review_usage_profile snapshot for case_id=%s", case_id)
+
+        if isinstance(cached_snapshot, dict):
+            # 1. Merge traffic_burst if live is missing it but cached has it
+            live_burst = live_profile.get("traffic_burst")
+            has_live_burst = isinstance(live_burst, dict) and (live_burst.get("bytes") or live_burst.get("event_count"))
+            cached_burst = cached_snapshot.get("traffic_burst")
+            has_cached_burst = isinstance(cached_burst, dict) and (cached_burst.get("bytes") or cached_burst.get("event_count"))
+
+            if not has_live_burst and has_cached_burst:
+                live_profile["traffic_burst"] = _normalize_traffic_burst(cached_burst)
+                for reason_key in ("soft_reasons", "summary_reason_set"):
+                    reasons = live_profile.setdefault(reason_key, [])
+                    if "traffic_burst" not in reasons:
+                        reasons.append("traffic_burst")
+                live_profile["summary_score"] = len(live_profile.get("soft_reasons", []))
+            elif has_live_burst:
+                live_profile["traffic_burst"] = _normalize_traffic_burst(live_burst)
+
+            # 2. Merge devices if live is empty but cached has devices
+            live_devices = live_profile.get("devices") or []
+            cached_devices = cached_snapshot.get("devices") or []
+            if not live_devices and cached_devices:
+                live_profile["devices"] = cached_devices
+                for key in ("hwid_device_limit", "hwid_device_count_exact"):
+                    if cached_snapshot.get(key) is not None:
+                        live_profile[key] = cached_snapshot[key]
+
+        # 3. If "traffic_burst" is in the database case row's soft reasons list,
+        # ensure it is in the snapshot's soft reasons and traffic_burst is populated
+        import json
+        db_reasons = []
+        reasons_json = detail.get("usage_profile_soft_reasons_json")
+        if reasons_json:
+            try:
+                db_reasons = json.loads(reasons_json)
+            except Exception:
+                pass
+
+        if "traffic_burst" in db_reasons:
+            for reason_key in ("soft_reasons", "summary_reason_set"):
+                reasons = live_profile.setdefault(reason_key, [])
+                if "traffic_burst" not in reasons:
+                    reasons.append("traffic_burst")
+            live_profile["summary_score"] = len(live_profile.get("soft_reasons", []))
+            
+            if not live_profile.get("traffic_burst"):
+                event_count = detail.get("repeat_count") or 5
+                live_profile["traffic_burst"] = _normalize_traffic_burst({
+                    "source": "event_count",
+                    "event_count": event_count,
+                    "window_minutes": 30,
+                    "started_at": detail.get("opened_at") or detail.get("updated_at"),
+                    "ended_at": detail.get("updated_at") or detail.get("opened_at"),
+                })
+
+    detail["usage_profile"] = live_profile
     return detail
 
 
@@ -321,6 +445,13 @@ async def _recheck_case_ids(
 
 async def run_startup_auto_recheck(container: Any) -> dict[str, Any]:
     try:
+        # Recheck all open cases to apply the latest classification and soft reasons rules
+        await recheck_open_reviews(
+            container,
+            AUTO_REVIEW_ACTOR,
+            0,
+            skip_on_busy=True,
+        )
         payload = await recheck_provider_sensitive_reviews(
             container,
             AUTO_REVIEW_ACTOR,

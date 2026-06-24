@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import logging
+
+logger = logging.getLogger(__name__)
 import copy
 import hashlib
 import json
@@ -1059,6 +1062,38 @@ async def _resolve_remote_user(
         user_data["id"] = int(payload["system_id"])
     if payload.get("telegram_id") not in (None, "") and user_data.get("telegramId") is None:
         user_data["telegramId"] = str(payload["telegram_id"])
+
+    # Fetch VIP status from Bedolaga
+    try:
+        from .bedolaga import get_user_detail_by_tg_or_username
+        tg_id = user_data.get("telegramId")
+        username_query = user_data.get("username")
+        bedolaga_user = None
+        if tg_id:
+            bedolaga_user = await asyncio.to_thread(
+                get_user_detail_by_tg_or_username,
+                runtime.container,
+                tg_id
+            )
+        if not bedolaga_user and username_query:
+            bedolaga_user = await asyncio.to_thread(
+                get_user_detail_by_tg_or_username,
+                runtime.container,
+                username_query
+            )
+        if bedolaga_user:
+            sub = bedolaga_user.get("subscription") or {}
+            connected_squads = sub.get("connected_squads", [])
+            is_vip = False
+            for squad in connected_squads:
+                if str(squad).strip().upper() in ("VIP", "BUSINESS", "UNLIMITED"):
+                    is_vip = True
+                    break
+            user_data["is_vip"] = is_vip
+            user_data["bedolaga_user"] = bedolaga_user
+    except Exception as exc:
+        logger.error(f"Error fetching VIP status from Bedolaga: {exc}")
+
     return user_data
 
 
@@ -1125,6 +1160,83 @@ async def _analyze_event(
             record_stats=record_stats,
         ),
     )
+
+    user_uuid = user_data.get("uuid")
+    device_id = payload.get("client_device_id")
+    if user_uuid and runtime.remnawave_client.enabled and device_id:
+        try:
+            hwid_devices = await asyncio.to_thread(runtime.remnawave_client.get_user_hwid_devices, user_uuid)
+        except Exception as exc:
+            logger.error(f"Error fetching user HWIDs: {exc}")
+            hwid_devices = []
+
+        if not hwid_devices:
+            try:
+                success = await asyncio.to_thread(runtime.remnawave_client.create_hwid_device, user_uuid, device_id)
+                if success:
+                    hwid_devices = [{"hwid": device_id}]
+            except Exception as exc:
+                logger.error(f"Error registering new HWID device: {exc}")
+
+        registered_hwids = [d.get("hwid") for d in hwid_devices if d.get("hwid")]
+        if registered_hwids:
+            if device_id in registered_hwids:
+                # Device matched! "снижать штраф за смену ASN/сети"
+                bonus = int(runtime.settings.get("hwid_match_bonus", 30))
+                bundle.score += bonus
+                bundle.add_reason(
+                    code="hwid_match_bonus",
+                    source="hwid_check",
+                    weight=bonus,
+                    kind="soft",
+                    direction="MOBILE",
+                    message="Device HWID matches registered profile",
+                )
+            else:
+                # New device! "Если HWID новый и сеть немобильная — увеличивать штрафной балл"
+                if bundle.verdict != "MOBILE":
+                    penalty = int(runtime.settings.get("hwid_sharing_penalty", -60))
+                    bundle.score += penalty
+                    bundle.add_reason(
+                        code="sharing_hwid_limit_exceeded",
+                        source="hwid_check",
+                        weight=penalty,
+                        kind="hard",
+                        direction="HOME",
+                        message="New device HWID on non-mobile network",
+                    )
+                    if "sharing_hwid_limit_exceeded" not in bundle.hard_flags:
+                        bundle.hard_flags.append("sharing_hwid_limit_exceeded")
+
+            # Re-evaluate verdict and confidence band if score changed
+            from mobguard_platform.runtime.typed_config import RuntimeRuleView
+            rules = RuntimeRuleView.from_config(runtime.rules)
+            
+            if bundle.score >= rules.thresholds.threshold_mobile:
+                bundle.verdict = "MOBILE"
+                bundle.confidence_band = "HIGH_MOBILE"
+            elif bundle.score >= rules.thresholds.threshold_probable_mobile:
+                bundle.verdict = "MOBILE"
+                bundle.confidence_band = "PROBABLE_MOBILE"
+            elif bundle.score <= -rules.thresholds.threshold_probable_home:
+                bundle.verdict = "HOME"
+                bundle.confidence_band = "HIGH_HOME"
+            elif bundle.score <= -rules.thresholds.threshold_home:
+                bundle.verdict = "HOME"
+                bundle.confidence_band = "PROBABLE_HOME"
+            else:
+                bundle.verdict = "UNSURE"
+                bundle.confidence_band = "UNSURE"
+
+            bundle.details = f"{bundle.isp} (Score {bundle.score})"
+            if bundle.verdict == "HOME" and rules.thresholds.auto_enforce_requires_hard_or_multi_signal:
+                from mobguard_core.scoring.pipeline import derive_punitive_eligibility
+                bundle.punitive_eligible = derive_punitive_eligibility(bundle)
+            elif bundle.verdict == "HOME":
+                bundle.punitive_eligible = bundle.confidence_band == "HIGH_HOME"
+            else:
+                bundle.punitive_eligible = False
+
     return bundle
 
 
@@ -1215,9 +1327,11 @@ async def _apply_enforcement_if_needed(
     else:
         warning_only_from_limiter = False
 
+    is_vip = bool(user_data.get("is_vip", False))
     runtime_mode = _enforcement_mode(settings)
     warning_only = (
-        warning_only_from_limiter
+        is_vip
+        or warning_only_from_limiter
         or runtime_mode != "enforce"
         or bool(settings.get("warning_only_mode", False))
         or bool(settings.get("shadow_mode", True))
@@ -1247,6 +1361,20 @@ async def _apply_enforcement_if_needed(
 
     if warning_only:
         next_warning_count = warning_count + 1
+        if is_vip:
+            try:
+                notifier = getattr(container, "telegram_notifier", None)
+                if notifier:
+                    username_str = user_data.get("username") or f"id:{user_data.get('id')}"
+                    asyncio.create_task(
+                        notifier.notify_admin(
+                            f"⚠️ <b>VIP-пользователь</b> @{username_str} нарушил правила мобильной сети. "
+                            f"Автоматическая блокировка пропущена. Предупреждение #{next_warning_count} зафиксировано.",
+                            event="vip_violation"
+                        )
+                    )
+            except Exception:
+                pass
         if non_persistent_warning:
             return {
                 "type": "warning",

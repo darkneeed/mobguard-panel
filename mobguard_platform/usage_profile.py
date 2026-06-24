@@ -316,7 +316,8 @@ def _panel_device_entry(device: Mapping[str, Any]) -> Optional[dict[str, Any]]:
     os_version = _clean_text(device.get("osVersion") or device.get("os_version"))
     app_name = _clean_text(device.get("appName") or device.get("app_name") or device.get("client"))
     app_version = _clean_text(device.get("appVersion") or device.get("app_version"))
-    if not any((device_id, label, os_family, os_version, app_name, app_version)):
+    ip = _clean_text(device.get("ip") or device.get("lastIp") or device.get("last_ip") or device.get("ipAddress") or device.get("ip_address"))
+    if not any((device_id, label, os_family, os_version, app_name, app_version, ip)):
         return None
     return {
         "device_id": device_id,
@@ -325,8 +326,10 @@ def _panel_device_entry(device: Mapping[str, Any]) -> Optional[dict[str, Any]]:
         "os_version": os_version,
         "app_name": app_name,
         "app_version": app_version,
+        "ip": ip,
         "source": "panel_user",
     }
+
 
 
 def _extract_panel_devices(panel_user: Mapping[str, Any] | None) -> list[dict[str, Any]]:
@@ -442,6 +445,7 @@ def _traffic_series_burst(
     payload: Mapping[str, Any] | None,
     burst_min_bytes: int = TRAFFIC_BURST_MIN_BYTES,
     burst_window_minutes: int = BURST_WINDOW_MINUTES,
+    ignore_threshold: bool = False,
 ) -> Optional[dict[str, Any]]:
     if not isinstance(payload, Mapping):
         return None
@@ -508,8 +512,12 @@ def _traffic_series_burst(
                 "peak_bytes": max(bytes_value for _, bytes_value in points[left : right + 1]),
             }
 
-    if best["bytes"] < burst_min_bytes or best["point_count"] < TRAFFIC_BURST_MIN_POINTS:
-        return None
+    if ignore_threshold:
+        if best["bytes"] <= 0 or best["point_count"] < 1:
+            return None
+    else:
+        if best["bytes"] < burst_min_bytes or best["point_count"] < TRAFFIC_BURST_MIN_POINTS:
+            return None
 
     return {
         "source": "traffic_bytes",
@@ -771,7 +779,15 @@ def build_usage_profile_snapshot(
     panel_devices = _extract_panel_devices(panel_user)
     hwid_device_limit = _panel_hwid_limit(panel_user)
     hwid_device_count_exact = _panel_hwid_count(panel_user, panel_devices)
-    event_devices = [item["device"] for item in observations if item.get("device")]
+    event_devices = []
+    for item in observations:
+        dev = item.get("device")
+        if dev:
+            dev_copy = dict(dev)
+            if item.get("ip"):
+                dev_copy["ip"] = item["ip"]
+            event_devices.append(dev_copy)
+
     device_map: dict[str, dict[str, Any]] = {}
     for device in [*event_devices, *panel_devices]:
         key = _device_key(device)
@@ -781,7 +797,7 @@ def build_usage_profile_snapshot(
             device_map[key] = dict(device)
             continue
         current = device_map[key]
-        for field in ("device_id", "label", "os_family", "os_version", "app_name", "app_version"):
+        for field in ("device_id", "label", "os_family", "os_version", "app_name", "app_version", "ip"):
             if not current.get(field) and device.get(field):
                 current[field] = device[field]
 
@@ -928,6 +944,7 @@ def build_usage_profile_snapshot(
         traffic_stats_payload,
         burst_min_bytes=burst_min_bytes,
         burst_window_minutes=burst_window_minutes,
+        ignore_threshold=(anchor_started_at is not None),
     )
 
     soft_reasons: list[str] = []
@@ -935,7 +952,35 @@ def build_usage_profile_snapshot(
         soft_reasons.append("geo_country_jump")
     if impossible_travel:
         soft_reasons.append("geo_impossible_travel")
-    if len(device_map) >= DEVICE_ROTATION_THRESHOLD:
+    # Detect device rotation: more than 5 device changes (switches) within any 1-hour window
+    device_timeline = []
+    for item in observations:
+        dev = item.get("device")
+        if dev:
+            key = _device_key(dev)
+            if key:
+                device_timeline.append((item["created_at"], key))
+                
+    switch_times = []
+    for i in range(len(device_timeline) - 1):
+        t1, k1 = device_timeline[i]
+        t2, k2 = device_timeline[i+1]
+        if k1 != k2:
+            switch_times.append(t2)
+            
+    is_rotation_detected = False
+    for i, t in enumerate(switch_times):
+        count = 1
+        for t_next in switch_times[i+1:]:
+            if t_next - t <= timedelta(hours=1):
+                count += 1
+            else:
+                break
+        if count > 5:
+            is_rotation_detected = True
+            break
+
+    if is_rotation_detected:
         soft_reasons.append("device_rotation")
     if any(len(os_values) > 1 for os_values in device_groups.values()):
         soft_reasons.append("device_os_mismatch")

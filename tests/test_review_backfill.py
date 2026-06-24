@@ -232,6 +232,74 @@ class ReviewBackfillTests(unittest.TestCase):
         self.assertNotEqual(detail["usage_profile_summary"], "stale summary")
         self.assertEqual(snapshot_count, 0)
 
+    def test_enrich_usage_profile_merges_cached_snapshot(self):
+        from unittest.mock import patch
+
+        # 1. Setup a cached snapshot in the DB for case 1
+        cached_burst = {
+            "source": "traffic_bytes",
+            "bytes": 20000000000,
+            "min_bytes": 10000000000,
+            "bytes_text": "20.0 GB",
+            "min_bytes_text": "10.0 GB",
+            "window_minutes": 60,
+        }
+        cached_devices = [
+            {"device_id": "dev-1", "label": "Device 1", "os_family": "iOS", "ip": "1.1.1.1"}
+        ]
+
+        with self.store._connect() as conn:
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO read_model_snapshots (snapshot_type, scope_key, payload_json, updated_at)
+                VALUES (?, ?, ?, ?)
+                """,
+                (
+                    "review_usage_profile",
+                    "1",
+                    json.dumps({
+                        "traffic_burst": cached_burst,
+                        "devices": cached_devices,
+                        "hwid_device_limit": 1,
+                        "hwid_device_count_exact": 2,
+                    }, ensure_ascii=False),
+                    "2026-04-12T10:00:00",
+                ),
+            )
+            conn.commit()
+
+        # 2. Mock panel_client to return a mock client with dummy user data
+        mock_user_data = {
+            "uuid": "user-uuid",
+            "username": "user-name",
+            "telegramId": 123456,
+            "trafficLimitBytes": 10000000000,
+        }
+
+        with patch("api.services.reviews.panel_client") as mock_panel_client:
+            mock_client = mock_panel_client.return_value
+            mock_client.get_user_data.return_value = mock_user_data
+
+            # Call list_reviews which in turn calls _enrich_review_usage_profile
+            listing = review_service.list_reviews(self.container, {"page": 1, "page_size": 25, "status": "OPEN"})
+
+            # Verify that the usage_profile has the merged traffic burst and device list
+            item = next(it for it in listing["items"] if it["id"] == 1)
+            self.assertIn("usage_profile", item)
+            up = item["usage_profile"]
+            self.assertIsNotNone(up)
+
+            # Check traffic burst is merged
+            self.assertEqual(up["traffic_burst"]["bytes"], 20000000000)
+            self.assertIn("traffic_burst", up["soft_reasons"])
+
+            # Check devices list is merged
+            self.assertEqual(len(up["devices"]), 1)
+            self.assertEqual(up["devices"][0]["device_id"], "dev-1")
+            self.assertEqual(up["devices"][0]["ip"], "1.1.1.1")
+            self.assertEqual(up["hwid_device_limit"], 1)
+            self.assertEqual(up["hwid_device_count_exact"], 2)
+
 
 if __name__ == "__main__":
     unittest.main()

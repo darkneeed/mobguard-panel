@@ -123,6 +123,7 @@ export type ReviewItem = {
   severity: "critical" | "high" | "medium" | "low";
   repeat_count: number;
   reason_codes: string[];
+  usage_profile_soft_reasons_json?: string | null;
   ip_inventory?: ReviewIpInventoryItem[];
   same_device_ip_history?: ReviewSameDeviceIpItem[];
   distinct_ip_count?: number;

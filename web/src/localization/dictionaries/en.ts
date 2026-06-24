@@ -306,6 +306,42 @@ export const enDictionary: TranslationDictionary = {
     toggleFiltersTitle: "Toggle filters",
     filtersButton: "Filters",
     filterCount: "Filters ({count})",
+    emptyState: "Queue is empty",
+    emptyStateHint: "No cases match the selected filters or all cases have been processed.",
+    ongoing: "Violation ongoing ({duration})",
+    ongoingFallback: "ongoing",
+    deviceRotationTag: "🔄 Device rotation",
+    deviceOsMismatchTag: "💻 OS mismatch",
+    deviceLimitExceeded: "📱 Device limit exceeded",
+    deviceRotationAndMismatch: "📱 Device rotation and OS mismatch",
+    deviceRotationDetected: "🔄 Device rotation detected",
+    deviceOsMismatchDetected: "💻 OS mismatch detected",
+    deviceViolationGeneric: "📱 Device violation",
+    allowed: "Allowed",
+    used: "Used",
+    deviceList: "Device list:",
+    deviceLabel: "Device {idx}",
+    deviceUnit: "{count} dev.",
+    trafficBurstTitle: "⚡ Traffic burst",
+    trafficBurstSummaryFallback: "Sudden surge in traffic volume detected.",
+    trafficWindow: "Window: {window} min",
+    volumeBefore: "Threshold",
+    volumeAfter: "Usage",
+    difference: "Burst volume",
+    calculation: "Calculation:",
+    exceededBy: "Burst of +{value} ({percent}% of threshold)",
+    excessEvents: "Burst of +{value} events ({percent}% of threshold)",
+    withinLimit: "Within threshold",
+    limitViolationTitle: "⚠️ Activity Analysis",
+    limitViolationSummaryFallback: "Suspicious activity detected.",
+    repeats: "Repeats: {count}",
+    moreItems: "+{count} more",
+    selectedCases: "Selected cases: {count}",
+    clearSelectionTooltip: "Clear selection",
+    copyIpTooltip: "Copy IP",
+    ipCopiedToast: "IP copied to clipboard",
+    openedAt: "Opened: {value}",
+    activityAt: "Activity: {value}",
     errors: {
       loadFailed: "Failed to load reviews",
       resolveFailed: "Resolve failed"
@@ -357,7 +393,11 @@ export const enDictionary: TranslationDictionary = {
       recheckDone: "Rechecked {count} queue cases",
       processing: "Processing…",
       saved: "Review decision saved",
-      bulkSaved: "{count} selected cases resolved"
+      bulkSaved: "{count} selected cases resolved",
+      allow: "Allow",
+      restrict: "Restrict",
+      allowSelected: "Allow selected",
+      restrictSelected: "Restrict selected"
     },
     presets: {
       open: "Open only",
@@ -593,7 +633,11 @@ export const enDictionary: TranslationDictionary = {
   reviewDetail: {
     eyebrow: "Case Detail",
     title: "Review case #{caseId}",
+    violationTitle: "Violation case #{caseId}",
     description: "Evidence, linked history, and a sticky resolution rail for fast moderation.",
+    violationDescription: "Summary of limit violations, associated behavior, and verdict area.",
+    violationResolutionTitle: "Violation action",
+    violationResolutionHint: "This action will determine the account access status.",
     loading: "Loading…",
     backToQueue: "Back to queue",
     queuePosition: "Queue {current}/{total}",
@@ -696,6 +740,7 @@ export const enDictionary: TranslationDictionary = {
     },
     ipInventory: {
       summary: "{count} hits · {isp} · AS{asn}",
+      summaryTraffic: "{isp} · AS{asn}",
       observedInterval: "Observed interval {value}",
       firstSeen: "First seen {value}",
       lastSeen: "Last seen {value}"
@@ -1899,47 +1944,47 @@ export const enDictionary: TranslationDictionary = {
       user_warning_only_template: {
         label: "Warning-only message",
         description:
-          "User message when the case is warning-only and does not escalate.\n\nAvailable tags:\n• {{username}} — username\n• {{uuid}} — subscription UUID\n• {{system_id}} — system Email/ID\n• {{telegram_id}} — Telegram ID\n• {{ip}} — IP address\n• {{isp}} — provider\n• {{tag}} — config/inbound",
+          "User message when the case is warning-only and does not escalate.\n\nAvailable tags:\n• {{username}} — username\n• {{uuid}} — subscription UUID\n• {{system_id}} — system Email/ID\n• {{telegram_id}} — Telegram ID\n• {{case_id}} — case ID\n• {{ip}} — IP address\n• {{isp}} — provider\n• {{tag}} — config/inbound",
       },
       user_warning_template: {
         label: "Warning message",
         description:
-          "User message for standard warnings before an access restriction.\n\nAvailable tags:\n• {{username}}, {{uuid}}, {{system_id}}, {{telegram_id}}\n• {{ip}}, {{isp}}, {{tag}}\n• {{warning_count}} — warning number\n• {{warnings_before_ban}} — total warnings before block\n• {{warnings_left}} — warnings left",
+          "User message for standard warnings before an access restriction.\n\nAvailable tags:\n• {{username}}, {{uuid}}, {{system_id}}, {{telegram_id}}, {{case_id}}\n• {{ip}}, {{isp}}, {{tag}}\n• {{warning_count}} — warning number\n• {{warnings_before_ban}} — total warnings before block\n• {{warnings_left}} — warnings left",
       },
       user_ban_template: {
         label: "Access restriction message",
         description:
-          "User message sent when access restriction is applied.\n\nAvailable tags:\n• {{username}}, {{uuid}}, {{system_id}}, {{telegram_id}}\n• {{ip}}, {{isp}}, {{tag}}\n• {{ban_minutes}} — duration in minutes\n• {{ban_text}} — text description (e.g. '1 hour')",
+          "User message sent when access restriction is applied.\n\nAvailable tags:\n• {{username}}, {{uuid}}, {{system_id}}, {{telegram_id}}, {{case_id}}\n• {{ip}}, {{isp}}, {{tag}}\n• {{ban_minutes}} — duration in minutes\n• {{ban_text}} — text description (e.g. '1 hour')",
       },
       user_warning_only_devices_template: {
         label: "Warning-only message (Device limit exceeded)",
         description:
-          "User message when device limit is exceeded, the case is warning-only and does not escalate.\n\nAvailable tags:\n• {{username}}, {{uuid}}, {{system_id}}, {{telegram_id}}\n• {{ip}}, {{isp}}, {{tag}}\n• {{usage_profile_hwid_device_limit}} — device limit\n• {{usage_profile_hwid_device_count_exact}} — connected devices",
+          "User message when device limit is exceeded, the case is warning-only and does not escalate.\n\nAvailable tags:\n• {{username}}, {{uuid}}, {{system_id}}, {{telegram_id}}, {{case_id}}\n• {{ip}}, {{isp}}, {{tag}}\n• {{usage_profile_hwid_device_limit}} — device limit\n• {{usage_profile_hwid_device_count_exact}} — connected devices",
       },
       user_warning_only_traffic_template: {
         label: "Warning-only message (Traffic limit exceeded)",
         description:
-          "User message when traffic limit is exceeded, the case is warning-only and does not escalate.\n\nAvailable tags:\n• {{username}}, {{uuid}}, {{system_id}}, {{telegram_id}}\n• {{ip}}, {{isp}}, {{tag}}\n• {{usage_profile_traffic_burst_bytes}} — traffic volume\n• {{usage_profile_traffic_burst_window}} — window (min)",
+          "User message when traffic limit is exceeded, the case is warning-only and does not escalate.\n\nAvailable tags:\n• {{username}}, {{uuid}}, {{system_id}}, {{telegram_id}}, {{case_id}}\n• {{ip}}, {{isp}}, {{tag}}\n• {{usage_profile_traffic_burst_bytes}} — traffic volume\n• {{usage_profile_traffic_burst_window}} — window (min)",
       },
       user_warning_devices_template: {
         label: "Warning message (Device limit exceeded)",
         description:
-          "User message for warnings before restriction when device limit is exceeded.\n\nAvailable tags:\n• {{username}}, {{uuid}}, {{system_id}}, {{telegram_id}}\n• {{ip}}, {{isp}}, {{tag}}\n• {{warning_count}}, {{warnings_before_ban}}, {{warnings_left}}\n• {{usage_profile_hwid_device_limit}} — device limit\n• {{usage_profile_hwid_device_count_exact}} — connected devices",
+          "User message for warnings before restriction when device limit is exceeded.\n\nAvailable tags:\n• {{username}}, {{uuid}}, {{system_id}}, {{telegram_id}}, {{case_id}}\n• {{ip}}, {{isp}}, {{tag}}\n• {{warning_count}}, {{warnings_before_ban}}, {{warnings_left}}\n• {{usage_profile_hwid_device_limit}} — device limit\n• {{usage_profile_hwid_device_count_exact}} — connected devices",
       },
       user_warning_traffic_template: {
         label: "Warning message (Traffic limit exceeded)",
         description:
-          "User message for warnings before restriction when traffic limit is exceeded.\n\nAvailable tags:\n• {{username}}, {{uuid}}, {{system_id}}, {{telegram_id}}\n• {{ip}}, {{isp}}, {{tag}}\n• {{warning_count}}, {{warnings_before_ban}}, {{warnings_left}}\n• {{usage_profile_traffic_burst_bytes}} — traffic volume\n• {{usage_profile_traffic_burst_window}} — window (min)",
+          "User message for warnings before restriction when traffic limit is exceeded.\n\nAvailable tags:\n• {{username}}, {{uuid}}, {{system_id}}, {{telegram_id}}, {{case_id}}\n• {{ip}}, {{isp}}, {{tag}}\n• {{warning_count}}, {{warnings_before_ban}}, {{warnings_left}}\n• {{usage_profile_traffic_burst_bytes}} — traffic volume\n• {{usage_profile_traffic_burst_window}} — window (min)",
       },
       user_ban_devices_template: {
         label: "Access restriction message (Device limit exceeded)",
         description:
-          "User message when access restriction is applied for device limit exceed.\n\nAvailable tags:\n• {{username}}, {{uuid}}, {{system_id}}, {{telegram_id}}\n• {{ip}}, {{isp}}, {{tag}}\n• {{ban_minutes}}, {{ban_text}}\n• {{usage_profile_hwid_device_limit}} — device limit\n• {{usage_profile_hwid_device_count_exact}} — connected devices",
+          "User message when access restriction is applied for device limit exceed.\n\nAvailable tags:\n• {{username}}, {{uuid}}, {{system_id}}, {{telegram_id}}, {{case_id}}\n• {{ip}}, {{isp}}, {{tag}}\n• {{ban_minutes}}, {{ban_text}}\n• {{usage_profile_hwid_device_limit}} — device limit\n• {{usage_profile_hwid_device_count_exact}} — connected devices",
       },
       user_ban_traffic_template: {
         label: "Access restriction message (Traffic limit exceeded)",
         description:
-          "User message when access restriction is applied for traffic limit exceed.\n\nAvailable tags:\n• {{username}}, {{uuid}}, {{system_id}}, {{telegram_id}}\n• {{ip}}, {{isp}}, {{tag}}\n• {{ban_minutes}}, {{ban_text}}\n• {{usage_profile_traffic_burst_bytes}} — traffic volume\n• {{usage_profile_traffic_burst_window}} — window (min)",
+          "User message when access restriction is applied for traffic limit exceed.\n\nAvailable tags:\n• {{username}}, {{uuid}}, {{system_id}}, {{telegram_id}}, {{case_id}}\n• {{ip}}, {{isp}}, {{tag}}\n• {{ban_minutes}}, {{ban_text}}\n• {{usage_profile_traffic_burst_bytes}} — traffic volume\n• {{usage_profile_traffic_burst_window}} — window (min)",
       },
       admin_warning_only_template: {
         label: "Warning-only message",

@@ -125,9 +125,16 @@ def serialize_env_fields(
     field_map: dict[str, bool],
     env_values: Optional[dict[str, str]] = None,
 ) -> dict[str, Any]:
+    runtime = getattr(container, "runtime", None)
+    runtime_env = getattr(runtime, "env", {}) or {}
     values = env_values or load_env_values(container)
     return {
-        key: env_field_payload(key, values, masked=masked, restart_required=True)
+        key: env_field_payload(
+            key,
+            values,
+            masked=masked,
+            restart_required=(values.get(key, "") != runtime_env.get(key, "")),
+        )
         for key, masked in field_map.items()
     }
 
@@ -218,18 +225,24 @@ def enrich_panel_user_devices(client: PanelClient, panel_user: Optional[dict[str
     return enriched
 
 
-def enrich_panel_user_usage_context(client: PanelClient, panel_user: Optional[dict[str, Any]]) -> Optional[dict[str, Any]]:
+def enrich_panel_user_usage_context(
+    client: PanelClient,
+    panel_user: Optional[dict[str, Any]],
+    *,
+    start: str | None = None,
+    end: str | None = None,
+) -> Optional[dict[str, Any]]:
     enriched = enrich_panel_user_devices(client, panel_user)
     if not isinstance(enriched, dict):
         return enriched
-    if isinstance(enriched.get("usageProfileTrafficStats"), dict):
+    if isinstance(enriched.get("usageProfileTrafficStats"), dict) and start is None and end is None:
         return enriched
 
     user_uuid = str(enriched.get("uuid") or "").strip()
     if not user_uuid:
         return enriched
 
-    traffic_stats = client.get_user_traffic_stats(user_uuid)
+    traffic_stats = client.get_user_traffic_stats(user_uuid, start=start, end=end)
     if not traffic_stats:
         return enriched
 

@@ -39,3 +39,24 @@ def post_bedolaga_action(
         method=body.method,
         payload=body.payload,
     )
+
+
+class ManualBanRequest(BaseModel):
+    username: str = Field(min_length=1)
+    minutes: int = Field(default=30, ge=1)
+    reason: str = Field(default="")
+
+
+@router.post("/manual-ban")
+def post_bedolaga_manual_ban(
+    body: ManualBanRequest,
+    _: dict[str, Any] = Depends(require_permission(PERMISSION_DATA_WRITE)),
+    container=Depends(get_container),
+) -> dict[str, Any]:
+    return bedolaga_service.ban_user_in_bedolaga(
+        container,
+        username=body.username,
+        minutes=body.minutes,
+        reason=body.reason,
+    )
+
